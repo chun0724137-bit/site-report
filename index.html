@@ -106,6 +106,10 @@ td.w{white-space:normal;min-width:180px} td.r,th.r{text-align:right;font-family:
 .cal td:first-child,.cal th:first-child{position:sticky;left:0;background:var(--card)}
 .cal tbody tr{cursor:pointer}
 .cal tr.on td{background:var(--soft)}
+.pgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.ph{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mute);text-decoration:none}
+.ph img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;background:var(--line)}
+@media (min-width:600px){.pgrid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .bar{height:10px;border-radius:99px;background:var(--line);overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent)}
 .pct{font-family:var(--num);font-size:28px;font-weight:700}
@@ -229,13 +233,13 @@ function aoaTable(a){return h("table",{},h("thead",{},h("tr",{},a[0].map((x,i)=>
 function rowsFor(pid,month){return S.reports.filter(r=>(!pid||r.pid===pid)&&(!month||String(r.date).startsWith(month))).sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(a.at<b.at?1:-1));}
 function viewLog(){const p=proj(),out=[];if(S.boss)out.push(h("button",{type:"button",class:"btn",onclick:()=>{S.view="all";render();window.scrollTo(0,0)}},"← 回到總覽"));const m=h("input",{id:"f_month",type:"month"});m.value=S.month;m.addEventListener("change",()=>{S.month=m.value||today().slice(0,7);render()});
   const rs=rowsFor(p.id,S.month);
-  out.push(seg(["每日紀錄","數量表"],S.logTab||"每日紀錄",v=>{S.logTab=v;render()}));if(S.logTab==="數量表")return out.concat(viewQty(p,m,rs));
+  out.push(seg(["每日紀錄","數量表","照片"],S.logTab||"每日紀錄",v=>{S.logTab=v;render()}));if(S.logTab==="數量表")return out.concat(viewQty(p,m,rs));if(S.logTab==="照片")return out.concat(viewPhotos(p,m,rs));
   out.push(h("section",{class:"card"},h("h2",{},p.short||p.name),h("div",{class:"row"},h("label",{class:"f"},"月份",m),
     h("button",{type:"button",class:"btn primary",disabled:!S.dl||!rs.length,onclick:()=>exportXlsx(p,rs)},"下載 Excel")),
     null));
   if(!rs.length){out.push(h("section",{class:"card"},h("p",{class:"note"},"這個月還沒有回報。現場在「回報」頁送出後,會出現在這裡。")));return out;}
   rs.forEach(r=>{const t=h("table",{},h("thead",{},h("tr",{},h("th",{},"項次"),h("th",{},"項目"),h("th",{class:"r"},"數量"),h("th",{},"位置"),h("th",{},"量測"),h("th",{},"照片"))));const tb=h("tbody",{});
-    (r.entries||[]).forEach(e=>tb.append(h("tr",{},h("td",{},e.code==="-"?"不計量":e.code),h("td",{class:"w"},e.name),h("td",{class:"r"},e.qty!==""?fmt(e.qty)+" "+(e.unit||""):""),h("td",{},e.loc||""),h("td",{},e.method||""),h("td",{},e.photo?h("img",{class:"th",src:photoUrl(e.photo),alt:"現場照片"}):""))));
+    (r.entries||[]).forEach(e=>tb.append(h("tr",{},h("td",{},e.code==="-"?"不計量":e.code),h("td",{class:"w"},e.name),h("td",{class:"r"},e.qty!==""?fmt(e.qty)+" "+(e.unit||""):""),h("td",{},e.loc||""),h("td",{},e.method||""),h("td",{},e.photo?h("a",{href:e.photo,target:"_blank",rel:"noopener"},h("img",{class:"th",src:photoUrl(e.photo),alt:"現場照片"})):""))));
     t.append(tb);
     out.push(h("section",{class:"card"},h("div",{class:"row"},h("b",{},r.date+(r.site?"｜"+r.site:"")+"　"+r.am+"/"+r.pm),h("span",{class:"note"},(r.by||"未填姓名")+" 回報"+(r.edited?"(已修改 "+r.edited+")":""))),
       h("p",{class:"note"},"人員 "+(r.tech+r.gen+r.lab)+"(技術 "+r.tech+"、普通 "+r.gen+"、體力 "+r.lab+")"+(machText(r)?"｜機具:"+machText(r):"")),soilText(r)?h("p",{class:"note"},"出土:"+soilText(r)):null,
@@ -317,6 +321,10 @@ function viewQty(p,m,rs){const q=qtyAoA(p,rs,S.month);const t=[["項次","項目
   return [h("section",{class:"card"},h("h2",{},(p.short||p.name)+"｜數量表"),h("div",{class:"row"},h("label",{class:"f"},"月份",m),h("button",{type:"button",class:"btn primary",onclick:()=>exportXlsx(p,rs)},"下載 Excel(含附件格式)")),
     h("p",{class:"note"},"下面只列出有數量的項目;完整的契約項目、每日數量、金額都在下載的 Excel「附件」分頁。累計為截至目前的數字。"),
     q.act.length?h("div",{class:"tbl"},(()=>{const tb=aoaTable(t);tb.querySelectorAll("tbody td:nth-child(2)").forEach(td=>{td.className="w"});return tb})()):h("p",{class:"note"},"這個工程目前沒有任何數量。"))]}
+function viewPhotos(p,m,rs){const sec=h("section",{class:"card"},h("h2",{},(p.short||p.name)+"｜照片"),h("label",{class:"f"},"月份",m));let n=0;
+  rs.forEach(r=>{const ph=(r.entries||[]).filter(e=>e.photo);if(!ph.length)return;sec.append(h("div",{class:"cat"},r.date+(r.site?"｜"+r.site:"")));const g=h("div",{class:"pgrid"});
+    ph.forEach(e=>{n++;g.append(h("a",{href:e.photo,target:"_blank",rel:"noopener",class:"ph"},h("img",{src:photoUrl(e.photo),alt:e.name,loading:"lazy"}),h("span",{},e.name+(e.qty!==""?" "+fmt(e.qty)+(e.unit||""):""))))});sec.append(g)});
+  sec.append(h("p",{class:"note"},n?"點照片可開啟原圖。全部照片也存在雲端硬碟「現場回報照片」資料夾,依工程、日期分類。":"這個月沒有照片。現場在施工項目的輸入區附上照片後,會出現在這裡。"));return [sec]}
 function daysAgo(d){return Math.round((new Date(today()+"T00:00:00")-new Date(String(d)+"T00:00:00"))/86400000)}
 function canEditReport(r){return !!S.g&&(S.admin||daysAgo(r.date)<=(S.editDays||3))}
 function startEdit(r){const c=x=>JSON.parse(JSON.stringify(x||{}));S.editId=r.id;S.pid=r.pid;ls.set("pid",r.pid);S.boss=false;S.view="report";S.pick=null;
@@ -403,7 +411,9 @@ const gdb={collection:()=>({add:async d=>{const data=Object.assign({},d);const i
     delete:async()=>{await api("deleteReport",{id,by:ls.get("by","")});G.rep.delete(id);await reload(true)}}}};
 function photoUrl(v){const m=String(v||"").match(/\/d\/([^/]+)/);return m?"https://drive.google.com/thumbnail?id="+m[1]+"&sz=w400":String(v||"")}
 const gassets={upload:file=>new Promise((res,rej)=>{const fr=new FileReader();fr.onerror=()=>rej(new Error("讀不到照片"));fr.onload=()=>{const img=new Image();img.onerror=()=>rej(new Error("照片格式不支援"));img.onload=()=>{const k=Math.min(1,1600/Math.max(img.width,img.height));const cv=document.createElement("canvas");cv.width=Math.round(img.width*k);cv.height=Math.round(img.height*k);cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);
-  const data=cv.toDataURL("image/jpeg",0.8).split(",")[1];api("upload",{name:today()+"_"+Date.now()+".jpg",mime:"image/jpeg",data}).then(j=>res({id:j.url,url:j.url})).catch(rej)};img.src=fr.result};fr.readAsDataURL(file)})};
+  const data=cv.toDataURL("image/jpeg",0.8).split(",")[1];api("upload",photoMeta(data)).then(j=>res({id:j.url,url:j.url})).catch(rej)};img.src=fr.result};fr.readAsDataURL(file)})};
+function photoMeta(data){const p=proj()||{},d=S.draft||{},k=S.pick||{};const t=new Date();const hh=[t.getHours(),t.getMinutes(),t.getSeconds()].map(x=>String(x).padStart(2,"0")).join("");
+  return{data,mime:"image/jpeg",project:p.short||p.name||"",date:d.date||today(),name:[d.date||today(),d.site||"",(k.name||"").slice(0,24),hh].filter(Boolean).join("_")+".jpg"}}
 const gdl={save:async({filename,data})=>{const type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";const b=data instanceof Blob?data:new Blob([data],{type});
   if(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)&&navigator.canShare){try{const f=new File([b],filename,{type});if(navigator.canShare({files:[f]})){await navigator.share({files:[f]});return{status:"saved"}}}catch(e){if(e&&e.name==="AbortError")throw{code:"declined"}}}
   const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000);return{status:"saved"}}};

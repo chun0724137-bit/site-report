@@ -320,12 +320,20 @@ var ACTIONS = {
     return { id: id };
   },
   upload: function (q) {
-    var it = DriveApp.getFoldersByName('現場回報照片'), folder = it.hasNext() ? it.next() : DriveApp.createFolder('現場回報照片');
-    var blob = Utilities.newBlob(Utilities.base64Decode(str_(q.data)), str_(q.mime) || 'image/jpeg', str_(q.name) || ('photo_' + Date.now() + '.jpg'));
+    var folder = folder_('現場回報照片', null);
+    if (str_(q.project)) folder = folder_(safe_(q.project), folder);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str_(q.date))) folder = folder_(str_(q.date), folder);
+    var blob = Utilities.newBlob(Utilities.base64Decode(str_(q.data)), str_(q.mime) || 'image/jpeg', safe_(q.name) || ('photo_' + Date.now() + '.jpg'));
     var f = folder.createFile(blob); f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     return { id: f.getId(), url: 'https://drive.google.com/file/d/' + f.getId() + '/view' };
   }
 };
+/** 取得或建立資料夾;照片依「現場回報照片 / 工程 / 日期」分類 */
+function folder_(name, parent) {
+  var it = parent ? parent.getFoldersByName(name) : DriveApp.getFoldersByName(name);
+  return it.hasNext() ? it.next() : (parent ? parent.createFolder(name) : DriveApp.createFolder(name));
+}
+function safe_(v) { return str_(v).replace(/[\\\/:*?"<>|]/g, '_').slice(0, 80); }
 var WRITES = { report: 1, deleteReport: 1, addSite: 1, setActive: 1, saveConfig: 1, saveProject: 1 };
 
 function handle_(q) {
