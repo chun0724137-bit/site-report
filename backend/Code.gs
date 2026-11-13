@@ -353,13 +353,14 @@ function config_() {
   read_('設定').rows.forEach(function (r) {
     var k = str_(r['類別']), v = str_(r['值']), a = str_(r['屬性']); if (!v) return;
     if (k === '工人') { c.workers.push(v); if (a === '小工班' && v !== '菲吉') c.crews.push(v); }
-    else if (k === '機具') c.machines.push(v);
-    else if (k === '土質') c.soilTypes.push(v);
+    else if (k === '機具') c.machines.push(v.replace(/^怪手/, '挖土機'));
+    else if (k === '土質') c.soilTypes.push(v === '垃圾' ? '廢棄物' : v);
     else if (k === '出土去處') c.dests.push(v);
     else if (k === '常用工作') c.works.push(v);
     else if (k === '通行碼') c.key = v;
     else if (k === '管理者通行碼') c.adminKey = v;
   });
+  if (c.machines.length && c.machines.indexOf('鏟裝機') < 0) c.machines.push('鏟裝機');
   return c;
 }
 
@@ -1054,7 +1055,7 @@ function onEdit(e) {
 }
 
 /* ===== 土方月報:工程類型「土方暫置」(例:新店土尾)一張「土方月報_簡稱」,第 1 列選年、月 ===== */
-var SOIL_PREFIX = '土方月報_', SOIL_KINDS = ['B5', 'B2-3', '垃圾'], SOIL_NOTE = { 'B5': '無鋼筋或含鋼筋混凝土塊', 'B2-3': '土壤與礫石及砂', '垃圾': '' };
+var SOIL_PREFIX = '土方月報_', SOIL_KINDS = ['B5', 'B2-3', '廢棄物'], SOIL_NOTE = { 'B5': '無鋼筋或含鋼筋混凝土塊', 'B2-3': '土壤與礫石及砂', '廢棄物': '' };
 function soilProjects_() { return projects_().filter(function (p) { return p.type === '土方暫置' && p.status !== '完工'; }); }
 function soilTarget_(dest, sps) {
   if (!/暫置/.test(dest || '')) return null;

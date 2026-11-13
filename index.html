@@ -144,14 +144,14 @@ const $=(s,r=document)=>r.querySelector(s), h=(t,a={},...c)=>{const e=document.c
 const ls={get(k,d){try{return localStorage.getItem(k)??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
 const WX=["晴","陰","雨"], METHODS=["測距儀","捲尺"], NOWORK_REASONS=["週日休假","雨天停工","國定假日","待料/停工"];
-const S={db:null,user:null,dl:null,assets:null,uid:"",projects:[],reports:[],roster:[],crews:[],machines:["怪手:80型/120型","破碎機","傾卸貨車","泵浦車"],machOpen:"",soilTypes:["B5","B2-3"],dests:["新店暫置","台北港"],machOther:false,boss:false,works:[],soil:{type:"",trucks:"",per:"",dest:""},pid:ls.get("pid",""),view:"report",loaded:false,err:"",
+const S={db:null,user:null,dl:null,assets:null,uid:"",projects:[],reports:[],roster:[],crews:[],machines:["挖土機:80型/120型","破碎機","傾卸貨車","鏟裝機","泵浦車"],machOpen:"",soilTypes:["B5","B2-3"],dests:["新店暫置","台北港"],machOther:false,boss:false,works:[],soil:{type:"",trucks:"",per:"",dest:""},pid:ls.get("pid",""),view:"report",loaded:false,err:"",
   draft:null,pick:null,search:"",flash:"",month:today().slice(0,7),busy:false,openRepId:"",woOpen:"",lb:null};
 function newDraft(){return{date:today(),am:"",pm:"",nowork:"",tech:0,gen:0,lab:0,mach:{},machOther:"",soil:[],entries:[],materials:"",sample:"",notes:"",tomorrow:"",crew:{},crewOt:{},traffic:0,ot:"",photos:[],mats:[],place:"",by:ls.get("by","")}}
 S.draft=newDraft();
 const liveProjects=()=>S.projects.filter(p=>p.status!=="完工");
 const proj=()=>S.projects.find(p=>p.id===S.pid)||liveProjects()[0]||S.projects[0]||null;
 const isHour=u=>/^(時|小時|工時|hr)$/i.test(String(u||"").trim()), whoOf=n=>/工|人員|交通|指揮/.test(n||"")?"人":"台";
-const SOIL_KINDS=["B5","B2-3","垃圾"],SOIL_NOTE={"B5":"混凝土塊","B2-3":"土壤砂石","垃圾":""};
+const SOIL_KINDS=["B5","B2-3","廢棄物"],SOIL_NOTE={"B5":"混凝土塊","B2-3":"土壤砂石","廢棄物":""};
 const ptype=p=>p&&p.type||(p&&p.multi?"開口契約":"一般");
 const siteOpen=s=>s.status!=="完工"&&s.status!=="結案";
 const fmt=n=>{const x=Number(n);return Number.isFinite(x)?(Math.round(x*100)/100).toString():""};
@@ -224,9 +224,9 @@ function projName(r){const p=S.projects.find(x=>x.id===r.pid);return (p?(p.short
 function siteNodes(p,d){const tags=h("div",{class:"sug"});(p.sites||[]).forEach(s=>tags.append(h("button",{type:"button",class:"tag"+(d.site===s?" on":""),onclick:()=>{d.site=s;render()}},s)));
   const i=h("input",{id:"f_newsite",type:"text",placeholder:"新增派工地點,例:實踐國小"});
   return [h("div",{class:"f"},"派工地點(必選)",(p.sites||[]).length?tags:h("span",{class:"note"},"還沒有地點,請在下面新增。")),h("div",{class:"row"},i,h("button",{type:"button",class:"btn",onclick:async()=>{const v=i.value.trim();if(!v)return;const next=[...new Set([...(p.sites||[]),v])];d.site=v;try{await S.db.doc("projects/"+p.id).update({sites:next})}catch(e){S.err="地點沒有存成功。"}render()}},"新增地點"))]}
-const MACH_BUILTIN=["水車","工程車","吊車:?噸","廢棄物清運=米"];
-// 機具清單寫法:「怪手:80型/120型」點開選型號;「吊車:?噸」點了填噸數(記成 25噸吊車);「廢棄物清運=米」填的是米數不是台數(支援各工程專屬機具)
-function machList(){const base=n=>n.split(/[:：=]/)[0].trim();const p=proj();const src=(p&&p.machines&&p.machines.length)?p.machines:S.machines;const l=[...src];MACH_BUILTIN.forEach(b=>{if(!l.some(m=>base(m)===base(b)))l.push(b)});return l.map(m=>{const q=m.split("=");if(q.length>1)return{name:q[0].trim(),qtyUnit:q[1].trim()};const pr=m.split(/[:：]/),name=pr[0].trim(),v=(pr[1]||"").trim();
+const MACH_BUILTIN=["鏟裝機","水車","工程車","吊車:?噸","廢棄物清運=米"];
+// 機具清單寫法:「挖土機:80型/120型」點開選型號;「吊車:?噸」點了填噸數(記成 25噸吊車);「廢棄物清運=米」填的是米數不是台數(支援各工程專屬機具)
+function machList(){const base=n=>n.split(/[:：=]/)[0].trim();const p=proj();const src=((p&&p.machines&&p.machines.length)?p.machines:S.machines).map(m=>String(m).replace(/^怪手/,"挖土機"));const l=[...src];MACH_BUILTIN.forEach(b=>{if(!l.some(m=>base(m)===base(b)))l.push(b)});return l.map(m=>{const q=m.split("=");if(q.length>1)return{name:q[0].trim(),qtyUnit:q[1].trim()};const pr=m.split(/[:：]/),name=pr[0].trim(),v=(pr[1]||"").trim();
   if(v.startsWith("?"))return{name,spec:v.slice(1).trim()||"噸"};return{name,vars:v?v.split("/").map(s=>s.trim()).filter(Boolean):[]}})}
 const machUnitOf=n=>{const m=/^(.+)\((.+)\)$/.exec(n);return m&&machList().some(x=>x.qtyUnit===m[2]&&x.name===m[1])?{name:m[1],unit:m[2]}:null};
 function machNodes(d){const tags=h("div",{class:"sug"});const add=(n,k)=>{d.mach[n]=(d.mach[n]||0)+(k||1);S.machOpen="";render()};const L=machList();
@@ -245,14 +245,14 @@ function machNodes(d){const tags=h("div",{class:"sug"});const add=(n,k)=>{d.mach
       :h("div",{class:"mr"},h("button",{type:"button","aria-label":n+"減一",onclick:()=>{d.mach[n]--;if(d.mach[n]<=0)delete d.mach[n];render()}},"−"),h("b",{},d.mach[n]+" 台"),h("button",{type:"button","aria-label":n+"加一",onclick:()=>{d.mach[n]++;render()}},"+"))))});out.push(h("div",{class:"f"},"今天已加入",g))}
   if(d.machOther)out.push(txt("其他機具(舊資料)","machOther",""));return out}
 function needSoil(d){return !d.soil.length&&(d.entries.some(e=>/出土/.test((e.name||"")+(e.loc||"")))||/出土/.test(d.notes||""))}
-function soilSection(p){const d=S.draft,k=S.soil,isSoil=ptype(p)==="土方暫置";const kinds=[...S.soilTypes];SOIL_KINDS.forEach(x=>{if(!kinds.includes(x))kinds.push(x)});
-  const dests=isSoil?["台北港","廢清處理"]:S.dests;if(isSoil&&k.type==="垃圾")k.dest="廢清處理";if(isSoil&&k.dest&&!dests.includes(k.dest))k.dest="";
+function soilSection(p){const d=S.draft,k=S.soil,isSoil=ptype(p)==="土方暫置";const kinds=[...S.soilTypes.map(x=>x==="垃圾"?"廢棄物":x)];SOIL_KINDS.forEach(x=>{if(!kinds.includes(x))kinds.push(x)});
+  const dests=isSoil?["台北港","廢清處理"]:S.dests;if(isSoil&&k.type==="廢棄物")k.dest="廢清處理";if(isSoil&&k.dest&&!dests.includes(k.dest))k.dest="";
   const sec=h("section",{class:"card",id:"soil"},h("h2",{},isSoil?"出土(從這裡運出去)":"出土"));
   if(isSoil){const srcs=S.projects.filter(x=>x.id!==p.id&&ptype(x)!=="土方暫置").map(x=>x.short||x.name);const sel=h("select",{id:"s_src","aria-label":"來源工地"},h("option",{value:""},"請選來源工地"),srcs.map(n=>h("option",{value:n},n)));sel.value=k.src||"";sel.addEventListener("change",()=>{k.src=sel.value});
-    sec.append(h("label",{class:"f"},"來源工地(這批是哪個工地的)",sel),h("p",{class:"note"},"B5=無鋼筋或含鋼筋混凝土塊、B2-3=土壤與礫石及砂。B5、B2-3 運台北港,垃圾送廢清處理。"))}if(needSoil(d))sec.append(h("div",{class:"msg warn"},"施工項目有寫到出土,請在這裡填出土車次。"));
+    sec.append(h("label",{class:"f"},"來源工地(這批是哪個工地的)",sel),h("p",{class:"note"},"B5=無鋼筋或含鋼筋混凝土塊、B2-3=土壤與礫石及砂。B5、B2-3 運台北港,廢棄物送廢清處理。"))}if(needSoil(d))sec.append(h("div",{class:"msg warn"},"施工項目有寫到出土,請在這裡填出土車次。"));
   const sum=()=>{const t=Number(k.trucks)*Number(k.per);return t>0?"合計 "+fmt(t)+" 米":"合計 –"};const tot=h("b",{},sum());
   const inp=(id,label,key,ph,num)=>{const i=h("input",{id,type:num?"number":"text",inputmode:num?"decimal":null,step:num?"any":null,placeholder:ph});i.value=k[key];i.addEventListener("input",()=>{k[key]=i.value;if(num)tot.textContent=sum()});return h("label",{class:"f"},label,i)};
-  sec.append(h("div",{class:"row"},h("div",{class:"f"},isSoil?"種類":"土質",seg(kinds,k.type,v=>{k.type=v;if(isSoil){k.dest=v==="垃圾"?"廢清處理":"台北港";render()}})),h("div",{class:"f"},"去處",seg(dests,k.dest,v=>k.dest=v))),h("div",{class:"row"},stepper("車次(台)","trucks",k,()=>tot.textContent=sum()),inp("s_per","每台(米)","per","0",true)),
+  sec.append(h("div",{class:"row"},h("div",{class:"f"},isSoil?"種類":"土質",seg(kinds,k.type,v=>{k.type=v;if(isSoil){k.dest=v==="廢棄物"?"廢清處理":"台北港";render()}})),h("div",{class:"f"},"去處",seg(dests,k.dest,v=>k.dest=v))),h("div",{class:"row"},stepper("車次(台)","trucks",k,()=>tot.textContent=sum()),inp("s_per","每台(米)","per","0",true)),
     h("div",{class:"row"},tot,h("button",{type:"button",class:"btn",onclick:()=>{const n=Number(k.trucks);if(!k.type||!k.dest){tot.textContent="請先點選土質和去處";return}if(isSoil&&!k.src){tot.textContent="請先選來源工地";return}if(!(n>0)){tot.textContent="請按 + 填車次";return}d.soil.push({type:k.type.trim(),dest:k.dest.trim(),src:isSoil?k.src:"",trucks:n,per:Number(k.per)||0,total:Math.round(n*(Number(k.per)||0)*100)/100});S.soil={src:k.src,type:k.type,trucks:"",per:k.per,dest:k.dest};render()}},"加入出土")));
   d.soil.forEach((e,i)=>sec.append(h("div",{class:"entry"},h("span",{},(e.src?e.src+"｜":"")+(e.type||"未填土質")+(e.dest?"→"+e.dest:"")),h("b",{},fmt(e.trucks)+" 台"+(e.total?" / "+fmt(e.total)+" 米":"")),h("button",{type:"button","aria-label":"刪除這一筆出土",onclick:()=>{d.soil.splice(i,1);render()}},"×"))));
   return sec}
@@ -690,7 +690,7 @@ function pushReports(){S.real=[...G.rep.values()];if(!S.demo)S.reports=S.real}
 function applyLoad(j){if(j.items)G.items=j.items;const sites={},info={};(j.sites||[]).forEach(s=>{const o=Object.assign({name:s[1],status:s[2]||"施工中"},s[3]||{});(info[s[0]]=info[s[0]]||[]).push(o);if(siteOpen(o))(sites[s[0]]=sites[s[0]]||[]).push(s[1])});
   S.projects=j.projects.map(a=>{const its=(G.items[a.id]||[]).map(x=>({code:x[0],name:x[1],unit:x[2],price:x[3],qty:x[4],cat:x[5]||"未分類",mode:x[6],basis:x[7],prog:x[8],base:x[9],on:x[10]}));const cats=[];its.forEach(i=>{if(!cats.some(c=>c.code===i.cat))cats.push({code:i.cat,name:i.cat})});
     return Object.assign({},a,{items:its,cats,active:its.filter(i=>i.on).map(i=>i.code),sites:sites[a.id]||[],siteInfo:info[a.id]||[],dispatch:(j.dispatch||{})[a.id]||{},sums:(j.sums||{})[a.id]||{},note:a.status==="未開工"?(a.note||"尚未開工"):""})});
-  const c=j.config||{};S.roster=c.workers||[];S.crews=(c.crews||[]).filter(x=>x!=="菲吉");if((c.machines||[]).length)S.machines=c.machines;S.works=c.works||[];if((c.dests||[]).length)S.dests=c.dests;if((c.soilTypes||[]).length)S.soilTypes=c.soilTypes;
+  const c=j.config||{};S.roster=c.workers||[];S.crews=(c.crews||[]).filter(x=>x!=="菲吉");if((c.machines||[]).length){S.machines=c.machines.map(x=>String(x).replace(/^怪手/,"挖土機"));if(!S.machines.some(x=>x.startsWith("鏟裝機")))S.machines.push("鏟裝機")}S.works=c.works||[];if((c.dests||[]).length)S.dests=c.dests;if((c.soilTypes||[]).length)S.soilTypes=c.soilTypes.map(x=>x==="垃圾"?"廢棄物":x);
   S.admin=j.role==="admin";S.canWrite=S.admin;S.canEdit=S.admin;S.editDays=j.editDays||3;
   const keep=new Map();G.rep.forEach((r,id)=>{if(r.date.slice(0,7)<j._from)keep.set(id,r)});j.reports.forEach(r=>keep.set(r.id,r));G.rep=keep;pushReports()}
 async function reload(lite){const from=G.from||prevMonth(today().slice(0,7));const j=await api("load",{from,to:"9999-12",lite:!!lite});j._from=from;G.from=from;applyLoad(j);S.loaded=true;render()}
