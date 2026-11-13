@@ -144,9 +144,9 @@ const $=(s,r=document)=>r.querySelector(s), h=(t,a={},...c)=>{const e=document.c
 const ls={get(k,d){try{return localStorage.getItem(k)??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
 const WX=["晴","陰","雨"], METHODS=["測距儀","捲尺"], NOWORK_REASONS=["週日休假","雨天停工","國定假日","待料/停工"];
-const S={db:null,user:null,dl:null,assets:null,uid:"",projects:[],reports:[],roster:[],crews:[],machines:["挖土機:80型/120型","破碎機","傾卸貨車","鏟裝機","泵浦車"],machOpen:"",soilTypes:["B5","B2-3"],dests:["新店暫置","台北港"],machOther:false,boss:false,works:[],soil:{type:"",trucks:"",per:"",dest:""},pid:ls.get("pid",""),view:"report",loaded:false,err:"",
+const S={db:null,user:null,dl:null,assets:null,uid:"",projects:[],reports:[],roster:[],crews:[],machines:["挖土機:80型/120型","破碎機","傾卸貨車","鏟裝機","泵浦車"],machOpen:"",soilTypes:["B5","B2-3"],dests:["新店暫置","台北港"],machOther:false,boss:false,works:[],soil:{type:"",trucks:"",per:"",dest:""},pid:ls.get("pid",""),view:"report",repMode:"daily",wkRepId:"",wkPick:null,loaded:false,err:"",
   draft:null,pick:null,search:"",flash:"",month:today().slice(0,7),busy:false,openRepId:"",woOpen:"",lb:null};
-function newDraft(){return{date:today(),am:"",pm:"",nowork:"",tech:0,gen:0,lab:0,mach:{},machOther:"",soil:[],entries:[],materials:"",sample:"",notes:"",tomorrow:"",crew:{},crewOt:{},traffic:0,ot:"",photos:[],mats:[],place:"",by:ls.get("by","")}}
+function newDraft(){return{date:today(),am:"",pm:"",nowork:"",work:"",tech:0,gen:0,lab:0,mach:{},machOther:"",soil:[],entries:[],materials:"",sample:"",notes:"",tomorrow:"",crew:{},crewOt:{},traffic:0,ot:"",photos:[],mats:[],place:"",by:ls.get("by","")}}
 S.draft=newDraft();
 const liveProjects=()=>S.projects.filter(p=>p.status!=="完工");
 const proj=()=>S.projects.find(p=>p.id===S.pid)||liveProjects()[0]||S.projects[0]||null;
@@ -166,6 +166,10 @@ function viewReport(){const p=proj(),d=S.draft,out=[];const T=ptype(p),isSoil=T=
   if(p.status==="完工")return [h("section",{class:"card"},h("p",{class:"note"},"「"+(p.short||p.name)+"」已完工,不再接受回報。請從上方選單選擇其他工程。"))];
   if(S.editId)out.push(h("div",{class:"msg warn"},"正在修改 "+d.date+" 的回報,改完請按最下面的「送出修改」。 ",h("button",{type:"button",class:"btn",onclick:()=>{S.editId="";S.draft=newDraft();S.pick=null;render()}},"取消修改")));
   if(S.flash){out.push(h("div",{class:"msg ok"},S.flash));}
+  if(!isSoil&&!isRepair&&!S.editId){
+    out.push(seg(["📝 每日現場回報","📊 看每日回報填數量(週填/補填)"],S.repMode==="weekly"?"📊 看每日回報填數量(週填/補填)":"📝 每日現場回報",v=>{S.repMode=v.startsWith("📊")?"weekly":"daily";S.wkPick=null;render()}));
+    if(S.repMode==="weekly")return out.concat(viewWeeklyQty(p));
+  }
   const nwBox=[];
   if(!isSoil&&!isRepair){
     nwBox.push(h("div",{class:"f"},"今日施工狀態",seg(["正常施工","今日未施工(休假/停工)"],d.nowork?"今日未施工(休假/停工)":"正常施工",v=>{
@@ -196,14 +200,22 @@ function viewReport(){const p=proj(),d=S.draft,out=[];const T=ptype(p),isSoil=T=
     else otBox.append(h("span",{class:"note"},"先點選上方出工人員，這裡會自動浮出今日出工名單供點選加班時數（免打字）。"));
     out.push(h("section",{class:"card"},h("h2",{},"工人出工(點一下 1 天,再點半天,再點取消)"),S.roster.length?cg:h("p",{class:"note"},"還沒有工人名單,請到「設定」頁新增。"),S.roster.length?otBox:null,h("div",{class:"steps"},stepper("義交(人)","traffic")),txt("其他出工備註(選填)","ot","例:調派支援其他工區")));
     // work items
+    const wIn=h("input",{id:"f_work",type:"text",placeholder:"例:警衛亭樓板澆置、步道北側路緣石施工"});wIn.value=d.work||"";wIn.addEventListener("input",()=>d.work=wIn.value);
+    const wSug=h("div",{class:"sug"});
+    const usedWorks=[...new Set([...S.works,...S.reports.filter(r=>r.pid===p.id).flatMap(r=>[r.work,...(r.entries||[]).filter(e=>e.code==="-").map(e=>e.name)]).filter(Boolean)])];
+    usedWorks.slice(0,12).forEach(w=>wSug.append(h("button",{type:"button",class:"tag",onclick:()=>{const cur=(d.work||"").trim();d.work=cur?(cur.includes(w)?cur:cur+"、"+w):w;wIn.value=d.work}}, "＋"+w)));
     const disp=p.multi&&d.site?((p.dispatch||{})[d.site]||[]):[],dq={};disp.forEach(x=>dq[x[0]]=x[1]);
     const act=(disp.length?disp.map(x=>p.items.find(i=>i.code===x[0])):(p.active||[]).map(c=>p.items.find(i=>i.code===c))).filter(i=>i&&i.mode!=="依大項百分比");
     const grid=h("div",{class:"items"});
     act.forEach(it=>grid.append(h("button",{type:"button",class:"item"+(S.pick&&S.pick.code===it.code?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,qty:"",loc:"",method:"測距儀",photo:null};render()}},
       h("span",{class:"n"},it.name),h("span",{class:"q"},disp.length?it.code+"｜派工 "+fmt(dq[it.code])+" "+it.unit:itemStat(p,it)))));
     if(p.items.length)grid.append(h("button",{type:"button",class:"item"+(S.pick&&S.pick.code==="other"?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code==="other"?null:{code:"other",name:"",unit:"",qty:"",loc:"",method:"測距儀",photo:null};S.search="";render()}},h("span",{class:"n"},"其他契約項目",h("span",{class:"pm"},S.pick&&S.pick.code==="other"?"－":"＋")),h("span",{class:"q"},"搜尋全部 "+p.items.length+" 項")));
-    grid.append(h("button",{type:"button",class:"item"+(S.pick&&S.pick.code==="-"?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code==="-"?null:{code:"-",name:"",unit:"",qty:"",loc:"",method:"捲尺",photo:null};render()}},h("span",{class:"n"},"不單獨計量的工作",h("span",{class:"pm"},S.pick&&S.pick.code==="-"?"－":"＋")),h("span",{class:"q"},"例:210 混凝土、PC 澆置、土方整理")));
-    const sec=h("section",{class:"card"},h("h2",{},disp.length?"施工項目(「"+d.site+"」派工單的項目)":"施工項目(本週施工中)"),grid);
+    const sec=h("section",{class:"card"},
+      h("h2",{},"🛠 今日工作項目(顯示於施工日誌「工作項目」欄)"),
+      h("label",{class:"f"},"今日施作部位與工作說明(可直接打字或點下方常用詞)",wIn),
+      usedWorks.length?wSug:null,
+      h("h2",{style:"margin-top:8px"},"📊 本日契約項目數量(可每日填寫，或留到週日/週一再集中填寫)"),
+      grid);
     if(S.pick)sec.append(pickSheet(p));
     d.entries.forEach((e,i)=>sec.append(h("div",{class:"entry"},h("span",{},(e.code==="-"?"":e.code+" ")+e.name+(e.loc?"｜"+e.loc:"")),h("b",{},(e.cnt&&e.hrs?fmt(e.cnt)+whoOf(e.name)+"×"+fmt(e.hrs)+"時＝":"")+(e.qty!==""?fmt(e.qty)+" "+e.unit:"")),h("button",{type:"button","aria-label":"刪除這一筆",onclick:()=>{d.entries.splice(i,1);render()}},"×"))));
     out.push(sec);
@@ -306,10 +318,122 @@ async function submit(){const d=S.draft,p=proj();if(!S.db||!p)return;
   if(S.upN>0){S.err="照片還在上傳,請等上傳完再送出。";render();return}
   if(!d.nowork&&needSoil(d)&&!d.soilAck){d.soilAck=true;S.err="施工項目有寫到出土,但還沒填出土車次。請到「出土」區填寫;若確定不用填,再按一次送出。";render();const el=document.getElementById("soil");if(el)el.scrollIntoView({block:"center"});return}
   S.busy=true;render();
-  try{await S.db.collection("reports").add({_id:S.editId||"",pid:p.id,site:p.multi?(d.site||""):"",date:d.date,by:d.by.trim(),byId:S.uid,am:needWx?d.am:"",pm:needWx?d.pm:"",nowork:(d.nowork||"").trim(),tech:d.nowork?0:d.tech,gen:d.nowork?0:d.gen,lab:d.nowork?0:d.lab,mach:d.nowork?{}:Object.fromEntries(Object.entries(d.mach).filter(e=>e[1]>0)),machOther:d.nowork?"":d.machOther.trim(),soil:d.nowork?[]:d.soil,entries:d.nowork?[]:d.entries,materials:d.nowork?"":d.materials.trim(),sample:d.nowork?"":d.sample.trim(),notes:d.notes.trim(),tomorrow:d.tomorrow.trim(),crew:d.nowork?{}:d.crew,crewOt:d.nowork?{}:Object.fromEntries(Object.entries(d.crewOt||{}).filter(e=>Number(e[1])>0&&Number(d.crew[e[0]])>0)),traffic:d.nowork?0:d.traffic,ot:d.nowork?"":d.ot.trim(),photos:(d.photos||[]).map(x=>({url:x.url,cap:(x.cap||"").trim()})),mats:d.nowork?[]:(d.mats||[]),place:(d.place||"").trim(),at:new Date().toISOString()});
+  try{await S.db.collection("reports").add({_id:S.editId||"",pid:p.id,site:p.multi?(d.site||""):"",date:d.date,by:d.by.trim(),byId:S.uid,am:needWx?d.am:"",pm:needWx?d.pm:"",nowork:(d.nowork||"").trim(),work:d.nowork?"":(d.work||"").trim(),tech:d.nowork?0:d.tech,gen:d.nowork?0:d.gen,lab:d.nowork?0:d.lab,mach:d.nowork?{}:Object.fromEntries(Object.entries(d.mach).filter(e=>e[1]>0)),machOther:d.nowork?"":d.machOther.trim(),soil:d.nowork?[]:d.soil,entries:d.nowork?[]:d.entries,materials:d.nowork?"":d.materials.trim(),sample:d.nowork?"":d.sample.trim(),notes:d.notes.trim(),tomorrow:d.tomorrow.trim(),crew:d.nowork?{}:d.crew,crewOt:d.nowork?{}:Object.fromEntries(Object.entries(d.crewOt||{}).filter(e=>Number(e[1])>0&&Number(d.crew[e[0]])>0)),traffic:d.nowork?0:d.traffic,ot:d.nowork?"":d.ot.trim(),photos:(d.photos||[]).map(x=>({url:x.url,cap:(x.cap||"").trim()})),mats:d.nowork?[]:(d.mats||[]),place:(d.place||"").trim(),at:new Date().toISOString()});
     S.flash=d.date+(S.editId?" 的回報已更新。":(d.nowork?" 的「未施工("+d.nowork+")」回報已送出。":" 的回報已送出。"));S.editId="";const ks=d.site;S.draft=newDraft();S.draft.site=ks;S.pick=null;}
   catch(e){S.flash="";S.err="送出失敗:"+(e&&e.message||"請稍後再試")+"。內容還在畫面上,可以再按一次送出。";}
   S.busy=false;render();window.scrollTo(0,0);}
+
+async function saveReportPatch(r,patch,msg){
+  if(!S.db||S.busy)return;
+  S.busy=true;render();
+  try{
+    const next=Object.assign({},r,patch,{_id:r.id,by:ls.get("by",r.by||"")||r.by||""});
+    await S.db.collection("reports").add(next);
+    S.flash=msg||("已儲存 "+r.date+" 的資料。");
+  }catch(e){S.err="儲存失敗:"+(e&&e.message||"請稍後再試");}
+  S.busy=false;render();
+}
+function viewWeeklyQty(p){
+  const out=[];
+  const m=h("input",{id:"f_wmonth",type:"month"});m.value=S.month;m.addEventListener("change",()=>{S.month=m.value||today().slice(0,7);render()});
+  const allMonth=rowsFor(p.id,S.month);
+  const allSites=[...new Set([...(p.siteInfo||[]).map(s=>s.name),...(p.sites||[]),...allMonth.map(r=>r.site).filter(Boolean)])];
+  const hdr=h("section",{class:"card"},
+    h("h2",{},"📊 看每日工作項目與機具 → 填契約數量｜"+(p.short||p.name)),
+    h("p",{class:"note"},"工程師可每日或於週日/週一看著下方每天回報的「工作項目」與「機具」，直接點「＋填入這天的契約數量」或修改「日誌工作項目」，存檔後會自動寫入試算表施工日誌對應日期！"),
+    h("label",{class:"f"},"選擇月份",m));
+  if(p.multi&&allSites.length){
+    const stags=h("div",{class:"sug"});
+    stags.append(h("button",{type:"button",class:"tag"+(!S.logSite?" on":""),onclick:()=>{S.logSite="";render()}},"全部派工單"));
+    allSites.forEach(s=>stags.append(h("button",{type:"button",class:"tag"+(S.logSite===s?" on":""),onclick:()=>{S.logSite=s;render()}},"📍 "+s)));
+    hdr.append(h("div",{class:"f"},"篩選派工單",stags));
+  }
+  out.push(hdr);
+  const rs=allMonth.filter(r=>!S.logSite||r.site===S.logSite);
+  if(!rs.length){out.push(h("section",{class:"card"},h("p",{class:"note"},"這個月份還沒有現場回報紀錄。")));return out;}
+  rs.forEach(r=>{
+    const card=h("section",{class:"card"});
+    const hc=rHeadcount(r),mc=machText(r),ct=crewText(r),st=soilText(r);
+    card.append(h("div",{class:"row",style:"justify-content:space-between"},
+      h("b",{style:"font-size:18px"},"📅 "+r.date+" "+wkOf(r.date)+(r.site?"｜📍 "+r.site:"")),
+      h("span",{class:"pill "+(r.nowork?"warn":"ok")},r.nowork?"未施工:"+r.nowork:"☀️ "+(r.am||"-")+"/"+(r.pm||"-")+"｜👷 "+fmt(hc)+" 工")));
+    if(r.nowork){out.push(card);return;}
+    // 1. 顯示當日回報的機具、出工、備註(讓工程師對照)
+    const infoBox=h("div",{class:"sheet",style:"background:var(--accent-lt);border-color:var(--accent)"});
+    infoBox.append(
+      h("div",{style:"font-weight:700;color:var(--accent)"},"🚜 當日現場回報內容（供對照填數量）"),
+      h("div",{style:"font-size:15px"},"• 機具：",h("b",{},mc||"無填寫機具")),
+      h("div",{style:"font-size:15px"},"• 出工：技術工 "+r.tech+"、普通工 "+r.gen+"、體力工 "+r.lab+(ct?"（"+ct+"）":"")),
+      st?h("div",{style:"font-size:15px"},"• 出土："+st):null,
+      r.materials?h("div",{style:"font-size:15px"},"• 材料進場："+r.materials):null,
+      r.notes?h("div",{style:"font-size:15px"},"• 備註："+r.notes):null
+    );
+    card.append(infoBox);
+    // 2. 日誌工作項目(可直接修改存檔,例如把契約名稱改成「警衛亭樓板澆置」)
+    const wInput=h("input",{type:"text",placeholder:"例:警衛亭樓板澆置(顯示在施工日誌「工作項目」欄)"});
+    wInput.value=r.work||"";
+    card.append(h("div",{class:"f"},"🛠 日誌工作項目(顯示於施工日誌重要事項「工作項目」欄)",
+      h("div",{class:"row"},wInput,h("button",{type:"button",class:"btn",style:"flex:0 0 auto",disabled:S.busy,onclick:()=>saveReportPatch(r,{work:wInput.value.trim()},"已更新 "+r.date+" 的日誌工作項目。")},"儲存工作說明"))));
+    // 3. 已填的契約項目數量列表 + 新增按鈕
+    const entries=r.entries||[];
+    const eBox=h("div",{class:"f"},"📊 當日契約項目數量("+(entries.length?entries.length+" 筆":"尚未填寫")+")");
+    entries.forEach((e,idx)=>{
+      eBox.append(h("div",{class:"entry"},
+        h("span",{},(e.code==="-"?"":e.code+" ")+e.name+(e.loc?"｜"+e.loc:"")),
+        h("b",{},(e.cnt&&e.hrs?fmt(e.cnt)+whoOf(e.name)+"×"+fmt(e.hrs)+"時＝":"")+(e.qty!==""?fmt(e.qty)+" "+(e.unit||""):"")),
+        h("button",{type:"button","aria-label":"刪除這一筆",disabled:S.busy,onclick:()=>{const nx=entries.slice();nx.splice(idx,1);saveReportPatch(r,{entries:nx},"已刪除 "+r.date+" 的一筆數量。")}},"×")));
+    });
+    const isAdding=S.wkRepId===r.id;
+    eBox.append(h("button",{type:"button",class:"btn "+(isAdding?"":"primary"),onclick:()=>{S.wkRepId=isAdding?"":r.id;S.wkPick=null;S.search="";render()}},isAdding?"收起契約項目選單":"＋ 依這天回報填入契約數量"));
+    if(isAdding){
+      const act=(p.active||[]).map(c=>p.items.find(i=>i.code===c)).filter(i=>i&&i.mode!=="依大項百分比");
+      const grid=h("div",{class:"items"});
+      act.forEach(it=>grid.append(h("button",{type:"button",class:"item"+(S.wkPick&&S.wkPick.code===it.code?" sel":""),onclick:()=>{S.wkPick=S.wkPick&&S.wkPick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,qty:"",loc:"",method:"測距儀"};render()}},
+        h("span",{class:"n"},it.name),h("span",{class:"q"},itemStat(p,it)))));
+      if(p.items.length)grid.append(h("button",{type:"button",class:"item"+(S.wkPick&&S.wkPick.code==="other"?" sel":""),onclick:()=>{S.wkPick=S.wkPick&&S.wkPick.code==="other"?null:{code:"other",name:"",unit:"",qty:"",loc:"",method:"測距儀"};S.search="";render()}},
+        h("span",{class:"n"},"搜尋全部契約項目",h("span",{class:"pm"},S.wkPick&&S.wkPick.code==="other"?"－":"＋")),h("span",{class:"q"},"全部 "+p.items.length+" 項")));
+      eBox.append(grid);
+      if(S.wkPick){
+        const k=S.wkPick,sbox=h("div",{class:"sheet"});
+        if(k.code==="other"&&!k.name){
+          const s=h("input",{type:"text",placeholder:"輸入關鍵字,例:混凝土、模板、路緣石"});s.value=S.search;
+          const list=h("div",{});
+          const fill=()=>{list.replaceChildren();const q=S.search.trim();let n=0;p.items.forEach(it=>{if(it.mode==="依大項百分比")return;if(q&&!(it.name.includes(q)||it.code.includes(q)))return;if(n++>=30)return;
+            list.append(h("button",{type:"button",class:"chk",style:"width:100%;background:none;border:0;border-bottom:1px solid var(--line);text-align:left",onclick:()=>{Object.assign(k,{code:it.code,name:it.name,unit:it.unit,mode:it.mode});render()}},h("span",{},it.code+" "+it.name+"("+it.unit+")")))});if(!n)list.append(h("p",{class:"note"},"找不到符合的項目。"))};
+          s.addEventListener("input",()=>{S.search=s.value;fill()});fill();
+          sbox.append(h("div",{class:"t"},"選擇契約項目"),s,list);
+        }else{
+          sbox.append(h("div",{class:"t"},k.code+" "+k.name));
+          const hourly=p.multi&&k.code!=="-"&&isHour(k.unit);
+          if(hourly){
+            if(k.cnt===undefined)k.cnt=1;if(k.hrs===undefined)k.hrs=8;
+            const tot=h("b",{});const upd=()=>{const t=Number(k.cnt)*Number(k.hrs);tot.textContent=t>0?"合計 "+fmt(t)+" 時("+fmt(k.cnt)+"*"+fmt(k.hrs)+")":"請填台數/人數與時數"};
+            const c=h("input",{type:"number",inputmode:"decimal",step:"any",class:"big",placeholder:"1"});c.value=k.cnt;c.addEventListener("input",()=>{k.cnt=c.value;upd()});
+            const hr=h("input",{type:"number",inputmode:"decimal",step:"any",class:"big",placeholder:"8"});hr.value=k.hrs;hr.addEventListener("input",()=>{k.hrs=hr.value;upd()});
+            sbox.append(h("div",{class:"row"},h("label",{class:"f"},whoOf(k.name)==="人"?"人數":"台數",c),h("label",{class:"f"},"每"+whoOf(k.name)+"時數",hr)),tot);upd();
+          }else{
+            const q=h("input",{type:"number",inputmode:"decimal",step:"any",class:"big",placeholder:"0"});q.value=k.qty;q.addEventListener("input",()=>k.qty=q.value);
+            sbox.append(h("label",{class:"f"},(k.mode==="現場填百分比"?"累計完成百分比(%)":"當日完成數量("+(k.unit||"")+")"),q));
+          }
+          const l=h("input",{type:"text",placeholder:"例:警衛亭樓板、步道北側(選填)"});l.value=k.loc;l.addEventListener("input",()=>k.loc=l.value);
+          sbox.append(h("label",{class:"f"},"位置或構件(選填)",l),
+            h("div",{class:"row"},
+              h("button",{type:"button",class:"btn",onclick:()=>{S.wkPick=null;render()}},"取消"),
+              h("button",{type:"button",class:"btn primary",disabled:S.busy,onclick:async()=>{
+                const newEntry=Object.assign({code:k.code,name:k.name.trim(),unit:k.mode==="現場填百分比"?"%(累計)":k.unit,mode:k.mode||"數量",qty:hourly?Math.round(Number(k.cnt)*Number(k.hrs)*1000)/1000:(k.qty===""?"":Number(k.qty)),loc:(k.loc||"").trim(),method:k.method||"測距儀",photo:""},hourly?{cnt:Number(k.cnt),hrs:Number(k.hrs)}:{});
+                const nx=[...entries,newEntry];
+                S.wkPick=null;
+                await saveReportPatch(r,{entries:nx},"已將「"+k.code+" "+k.name+"」數量寫入 "+r.date+"。");
+              }},"儲存到 "+r.date)));
+        }
+        eBox.append(sbox);
+      }
+    }
+    card.append(eBox);
+    out.push(card);
+  });
+  return out;
+}
 
 const WEEKDAYS=["日","一","二","三","四","五","六"];
 function wkOf(d){const dt=new Date(String(d)+"T00:00:00");return Number.isNaN(dt.getTime())?"":"("+WEEKDAYS[dt.getDay()]+")"}
@@ -321,8 +445,11 @@ function photosOf(r){
 }
 function workBrief(r){
   if(r.nowork)return "⏸ 今日未施工（"+r.nowork+"）";
-  const es=(r.entries||[]).map(e=>e.name+(e.loc?"("+e.loc+")":"")+(e.qty!==""?" "+fmt(e.qty)+(e.unit||""):"")).filter(Boolean);
-  if(es.length)return es.join("、");
+  const parts=[];
+  if(r.work)parts.push(r.work);
+  const es=(r.entries||[]).filter(e=>!r.work||e.code!=="-").map(e=>e.name+(e.loc?"("+e.loc+")":"")+(e.qty!==""?" "+fmt(e.qty)+(e.unit||""):"")).filter(Boolean);
+  if(es.length)parts.push(es.join("、"));
+  if(parts.length)return parts.join("｜");
   if((r.mats||[]).length)return (r.place?r.place+"｜":"")+"物料："+r.mats.map(x=>x.name+(x.qty!==""&&x.qty!==null?" "+fmt(x.qty):"")+(x.unit||"")).join("、");
   if((r.soil||[]).length)return "出土："+soilText(r);
   if(r.notes)return r.notes;
@@ -581,9 +708,9 @@ function viewPhotos(p,m,rs){const sec=h("section",{class:"card"},h("h2",{},(p.sh
     sec.append(h("div",{class:"cat"},"📅 "+r.date+" "+wkOf(r.date)+(r.site?"｜"+r.site:"")+"　🛠 "+workBrief(r)),photoGrid(ph,(p.short||p.name)+" "+r.date))});
   sec.append(h("p",{class:"note"},n?"點照片可放大檢視或開啟雲端原圖。全部照片皆存於 Google 雲端硬碟「現場回報照片」資料夾,依工程、日期分類。":"這個月沒有照片。現場在回報頁的「現場照片」或施工項目附上照片後,會出現在這裡。"));return [sec]}
 function daysAgo(d){return Math.round((new Date(today()+"T00:00:00")-new Date(String(d)+"T00:00:00"))/86400000)}
-function canEditReport(r){return !!S.g&&(S.admin||daysAgo(r.date)<=(S.editDays||3))}
-function startEdit(r){const c=x=>JSON.parse(JSON.stringify(x||{}));S.editId=r.id;S.pid=r.pid;ls.set("pid",r.pid);S.boss=false;S.view="report";S.pick=null;
-  S.draft={date:r.date,am:r.am||"",pm:r.pm||"",nowork:r.nowork||"",tech:r.tech||0,gen:r.gen||0,lab:r.lab||0,mach:c(r.mach),machOther:r.machOther||"",soil:JSON.parse(JSON.stringify(r.soil||[])),entries:JSON.parse(JSON.stringify(r.entries||[])),materials:r.materials||"",sample:r.sample||"",notes:r.notes||"",tomorrow:r.tomorrow||"",crew:c(r.crew),crewOt:c(r.crewOt),traffic:r.traffic||0,ot:r.ot||"",photos:JSON.parse(JSON.stringify(r.photos||[])),mats:JSON.parse(JSON.stringify(r.mats||[])),place:r.place||"",by:r.by||ls.get("by",""),site:r.site||""};
+function canEditReport(r){return !!S.g&&(S.admin||daysAgo(r.date)<=(S.editDays||14))}
+function startEdit(r){const c=x=>JSON.parse(JSON.stringify(x||{}));S.editId=r.id;S.pid=r.pid;ls.set("pid",r.pid);S.boss=false;S.view="report";S.repMode="daily";S.pick=null;
+  S.draft={date:r.date,am:r.am||"",pm:r.pm||"",nowork:r.nowork||"",work:r.work||"",tech:r.tech||0,gen:r.gen||0,lab:r.lab||0,mach:c(r.mach),machOther:r.machOther||"",soil:JSON.parse(JSON.stringify(r.soil||[])),entries:JSON.parse(JSON.stringify(r.entries||[])),materials:r.materials||"",sample:r.sample||"",notes:r.notes||"",tomorrow:r.tomorrow||"",crew:c(r.crew),crewOt:c(r.crewOt),traffic:r.traffic||0,ot:r.ot||"",photos:JSON.parse(JSON.stringify(r.photos||[])),mats:JSON.parse(JSON.stringify(r.mats||[])),place:r.place||"",by:r.by||ls.get("by",""),site:r.site||""};
   try{location.hash="report"}catch(e){}render();window.scrollTo(0,0)}
 function siteAdmin(p){const sec=h("section",{class:"card"},h("h2",{},"派工地點(分案)｜"+(p.short||p.name)),h("p",{class:"note"},"分案做完按「分案完工」:現場的地點選單和老闆版就不再出現這個地點,資料都保留。派工單的項目和數量請填在試算表「派工數量」分頁。"));
   const list=(p.siteInfo||[]).filter(s=>s.status!=="結案");

@@ -7,13 +7,13 @@ var HEAD = {
   '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型', '常用機具'],
   '派工地點': ['工程代號', '地點', '狀態', '區域', '工作性質', '開工日', '預定完工日', '實際完工日'],
   '設定': ['類別', '值', '屬性'],
-  '每日回報': ['回報編號', '日期', '工程代號', '工程', '派工地點', '上午天氣', '下午天氣', '回報人', '技術工', '普通工', '體力工', '義交', '人員出工與加班', '機具', '施工項目', '出土', '材料與物料', '取樣', '備註', '明日預定', '現場照片', '修繕地點', '未施工原因', '送出時間', '最後修改人', '修改時間', '修改前內容', '原始資料JSON']
+  '每日回報': ['回報編號', '日期', '工程代號', '工程', '派工地點', '上午天氣', '下午天氣', '回報人', '技術工', '普通工', '體力工', '義交', '工作項目', '人員出工與加班', '機具', '施工項目', '出土', '材料與物料', '取樣', '備註', '明日預定', '現場照片', '修繕地點', '未施工原因', '送出時間', '最後修改人', '修改時間', '修改前內容', '原始資料JSON']
 };
 var ITEM_HEAD = ['項次', '項目', '單位', '單價', '原契約數量', '第一次變更數量', '第二次變更數量', '分類', '計量方式', '依據分類', '計入進度', '起算累計', '大按鈕'];
 var ITEM_PREFIX = '契約-';
 var DIARY_PREFIX = '日誌_';
 var OBSOLETE_SHEETS = ['契約-新店土尾', '契約-機動修繕類', '日誌_新店土尾', '日誌_機動修繕類', '派工數量', '照片', '物料', '修改紀錄', '施工項目', '機具'];
-var EDIT_DAYS = 3;
+var EDIT_DAYS = 14;
 var SITE_CLOSED = { '完工': 1, '結案': 1 };
 
 function ss_() { return SpreadsheetApp.getActiveSpreadsheet(); }
@@ -465,6 +465,7 @@ function reports_(from, to, wantSums) {
     list[id] = {
       id: id, date: d, pid: pid, site: site, am: str_(r['上午天氣']), pm: str_(r['下午天氣']), by: str_(r['回報人']),
       tech: num_(r['技術工']) || 0, gen: num_(r['普通工']) || 0, lab: num_(r['體力工']) || 0, traffic: num_(r['義交']) || 0,
+      work: str_(r['工作項目'] || raw.work || ''),
       ot: str_(raw.ot !== undefined ? raw.ot : r['加班或其他']),
       materials: str_(r['材料進場'] || raw.materials || ''), sample: str_(r['取樣']), notes: str_(r['備註']), tomorrow: str_(r['明日預定']),
       at: dt_(r['送出時間']), edited: dt_(r['修改時間']), place: str_(r['修繕地點']), nowork: str_(r['未施工原因']),
@@ -669,9 +670,16 @@ function diaryData_(p, ym, site, ctx) {
   var byDay = {};
   reps.forEach(function (r) {
     if (r.date.slice(0, 7) !== ym) return;
-    var di = Number(r.date.slice(8, 10)), b = byDay[di] = byDay[di] || { work: [], notes: [], sample: [], mat: [], t: 0, g: 0, l: 0, m0: 0, m1: 0, m2: 0 };
-    r.entries.forEach(function (e) { if (e.name && b.work.indexOf(e.name) < 0) b.work.push(e.name); });
-    if (r.nowork && !b.work.length) b.work.push('未施工(' + r.nowork + ')');
+    var di = Number(r.date.slice(8, 10)), b = byDay[di] = byDay[di] || { work: [], fbWork: [], notes: [], sample: [], mat: [], t: 0, g: 0, l: 0, m0: 0, m1: 0, m2: 0 };
+    if (r.work) {
+      r.work.split(/[、,，；;\n]/).map(str_).filter(Boolean).forEach(function (w) { if (b.work.indexOf(w) < 0) b.work.push(w); });
+    }
+    r.entries.forEach(function (e) {
+      if (e.code === '-' && e.name) { if (b.work.indexOf(e.name) < 0) b.work.push(e.name); }
+      else if (e.loc) { if (b.work.indexOf(e.loc) < 0) b.work.push(e.loc); }
+      else if (e.name) { if (b.fbWork.indexOf(e.name) < 0) b.fbWork.push(e.name); }
+    });
+    if (r.nowork && !b.work.length && !b.fbWork.length) b.work.push('未施工(' + r.nowork + ')');
     if (r.notes) b.notes.push(r.notes);
     if (r.sample) b.sample.push(r.sample);
     if (r.materials) b.mat.push(r.materials);
@@ -693,7 +701,7 @@ function diaryData_(p, ym, site, ctx) {
     var b3 = byDay[d3], row3 = blank_();
     row3[0] = ym + '-' + ('0' + d3).slice(-2); row3[1] = '星期' + WD_[new Date(y, mo - 1, d3).getDay()];
     if (b3) {
-      row3[2] = b3.work.join('、');
+      row3[2] = (b3.work.length ? b3.work : b3.fbWork).join('、');
       row3[3] = b3.notes.join(';');
       row3[4] = b3.sample.join(';');
       row3[5] = b3.mat.join('、');
@@ -1034,6 +1042,24 @@ function autoDiary_(pid, date, site) {
   } catch (err) { }
 }
 
+/** 在日誌「重要事項」直接修改第 3 欄「工作項目」時,自動寫回「每日回報」對應日期的「工作項目」欄與 JSON */
+function saveDiaryWorkEdit_(pid, editDate, site, newWork) {
+  var sh = ensureDailySheet_(), t = read_('每日回報');
+  var wCol = t.head.indexOf('工作項目') + 1, jCol = t.head.indexOf('原始資料JSON') + 1;
+  if (wCol < 1) return;
+  t.rows.forEach(function (r) {
+    if (str_(r['工程代號']) === pid && date_(r['日期']) === editDate && (!site || str_(r['派工地點']) === site)) {
+      sh.getRange(r._row, wCol).setValue(newWork);
+      if (jCol > 0) {
+        var raw = {};
+        try { raw = JSON.parse(str_(r['原始資料JSON']) || '{}'); } catch (e) { raw = {}; }
+        raw.work = newWork;
+        sh.getRange(r._row, jCol).setValue(JSON.stringify(raw));
+      }
+    }
+  });
+}
+
 /** 在日誌、土方月報、出土、人力、每日回報改了下拉選單(或修改了日誌的重要事項機具欄標題),就自動重算 */
 function onEdit(e) {
   try {
@@ -1044,6 +1070,15 @@ function onEdit(e) {
     if (n.indexOf(SOIL_PREFIX) === 0 && r === 1) { var sp = projById_(n.slice(SOIL_PREFIX.length)); if (sp) writeSoil_(sp, soilSel_(sh)); return; }
     if (n.indexOf(DIARY_PREFIX) === 0) {
       var p = projById_(n.slice(DIARY_PREFIX.length)); if (!p) return;
+      // 支援直接在日誌「重要事項」修改第 3 欄「工作項目」(例如把契約名稱改成「警衛亭樓板澆置」)並存回每日回報
+      if (e.range.getColumn() === 3 && r > 15) {
+        var rowVals = sh.getRange(r, 1, 1, 3).getValues()[0];
+        var editDate = date_(rowVals[0]), newWork = str_(rowVals[2]);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(editDate)) {
+          saveDiaryWorkEdit_(p.id, editDate, diarySel_(sh, p).site, newWork);
+          return;
+        }
+      }
       // 支援直接在日誌「重要事項」標題列修改機具名稱(如把破碎機改成壓路機)或第 1 列選年月地點
       if (r === 1 || (e.range.getColumn() >= 10 && e.range.getColumn() <= 12)) {
         syncDiaryMachHeaderFromSheet_(sh, p);
@@ -1300,7 +1335,7 @@ var ACTIONS = {
     Object.keys(d.mach || {}).forEach(function (n) { if (Number(d.mach[n]) > 0) mach[n] = Number(d.mach[n]); });
 
     var rawPayload = {
-      crew: crew, crewOt: crewOt, soil: normSoil, entries: normEntries,
+      work: str_(d.work), crew: crew, crewOt: crewOt, soil: normSoil, entries: normEntries,
       mach: mach, machOther: str_(d.machOther), photos: normPhotos, mats: normMats,
       ot: str_(d.ot), materials: str_(d.materials)
     };
@@ -1310,6 +1345,7 @@ var ACTIONS = {
       '回報編號': id, '日期': d.date, '工程代號': p.id, '工程': p.short, '派工地點': site,
       '上午天氣': str_(d.am), '下午天氣': str_(d.pm), '回報人': str_(d.by),
       '技術工': num_(d.tech) || 0, '普通工': num_(d.gen) || 0, '體力工': num_(d.lab) || 0, '義交': num_(d.traffic) || 0,
+      '工作項目': str_(d.work),
       '人員出工與加班': sumCols.crewText, '機具': sumCols.machText, '施工項目': sumCols.entryText,
       '出土': sumCols.soilText, '材料與物料': sumCols.matText, '取樣': str_(d.sample),
       '備註': str_(d.notes), '明日預定': str_(d.tomorrow), '現場照片': sumCols.photoText,

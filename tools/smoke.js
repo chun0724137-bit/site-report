@@ -66,14 +66,14 @@ ok(c32&&/2台×8時/.test(c32[2])&&c32[3]==='2*8'&&c32[4]==='=2*8','數量計算
 ok(bk.getSheetByName('明細').d[4][6]==='=數量計算表!E5'&&bk.getSheetByName('派工單').d[4][2]==='實踐國小','明細與派工單串到計算表');
 ok(m.call({key:'admin123',action:'siteStatus',pid:'yanggong1',site:'實踐國小',status:'施工中'}).ok,'恢復施工');
 
-// 8. 土方暫置與物料寫入日誌重要事項
-r=m.call({key:'field123',action:'report',data:{pid:'ntpu',date:today,by:'t',am:'晴',pm:'晴',tech:2,gen:1,mach:{'80型怪手':1,'壓路機':2},notes:'安衛督導',sample:'280 圓柱試體 2 組',mats:[{name:'AC 冷料',qty:5,unit:'包'}],soil:[{type:'B2-3',dest:'新店暫置',trucks:2,per:12,total:24},{type:'B5',dest:'新店暫置',trucks:1,per:10,total:10}],entries:[{code:'-',name:'土方整理',unit:'',mode:'數量',qty:''}]}});ok(r.ok,'北大出土到新店暫置+壓路機2台+物料');
+// 8. 土方暫置與物料寫入日誌重要事項 + 獨立「工作項目(警衛亭樓板澆置)」顯示於日誌
+r=m.call({key:'field123',action:'report',data:{pid:'ntpu',date:today,by:'t',am:'晴',pm:'晴',work:'警衛亭樓板澆置',tech:2,gen:1,mach:{'80型怪手':1,'壓路機':2},notes:'安衛督導',sample:'280 圓柱試體 2 組',mats:[{name:'AC 冷料',qty:5,unit:'包'}],soil:[{type:'B2-3',dest:'新店暫置',trucks:2,per:12,total:24},{type:'B5',dest:'新店暫置',trucks:1,per:10,total:10}],entries:[{code:'3.2',name:'結構用混凝土，預拌，280kgf/cm2，第2型水泥',unit:'M3',mode:'數量',qty:25}]}});ok(r.ok,'北大回報:工作項目寫「警衛亭樓板澆置」+契約項目填25M3');
 r=m.call({key:'field123',action:'report',data:{pid:'xindian',date:today,by:'t',crew:{[w]:1},soil:[{type:'B5',dest:'台北港',trucks:1,per:6,total:6,src:'三峽北大'}],entries:[{code:'-',name:'土方整理',unit:'',mode:'數量',qty:''}]}});ok(r.ok,'新店出土(選來源工地)');
 ok(m.sheets['土方月報_新店土尾'],'新店土方月報分頁已產生');
 const sd=m.sheets['土方月報_新店土尾'].d,bi=sd.findIndex(x=>x[0]==='三峽北大');ok(bi>0&&sd[bi][1]===4&&sd[bi][2]===24,'結存:三峽北大 B5 10-6=4、B2-3 24');
 const nd2=m.sheets['日誌_三峽北大'].d;
 const trow=nd2.find(x=>x[0] instanceof Date&&x[0].getTime()===new Date(today+'T00:00:00').getTime());
-ok(trow&&/土方整理/.test(trow[2])&&trow[3]==='安衛督導'&&trow[4]==='280 圓柱試體 2 組'&&/AC 冷料 5包/.test(trow[5])&&trow[6]===2&&trow[7]===1&&trow[9]===1&&trow[10]===2,'重要事項區:工作項目、督導、取樣、物料(AC 冷料 5包)、人數、挖土機1、壓路機2');
+ok(trow&&trow[2]==='警衛亭樓板澆置'&&trow[3]==='安衛督導'&&trow[4]==='280 圓柱試體 2 組'&&/AC 冷料 5包/.test(trow[5])&&trow[6]===2&&trow[7]===1&&trow[9]===1&&trow[10]===2,'重要事項區:工作項目顯示「警衛亭樓板澆置」(而非契約長名稱)、督導、取樣、物料、人數、挖土機1、壓路機2');
 
 // 9. 今日未施工(週日休假/雨天停工)與刪除權限
 r=m.call({key:'field123',action:'report',data:{pid:'ntpu',date:'2026-11-08',by:'t',am:'雨',pm:'雨',nowork:'週日休假'}});ok(r.ok&&r.id,'未施工回報送出');
