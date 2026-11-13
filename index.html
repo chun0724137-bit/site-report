@@ -10,7 +10,7 @@
 </head>
 <body>
 <title>松青現場回報</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 /* Layout: one-column phone app. Sticky project bar on top, four views switched by a bottom tab bar, big thumb-sized buttons. */
 :root{
@@ -1220,7 +1220,7 @@ function applyLoad(j){if(j.items)G.items=j.items;const sites={},info={};(j.sites
   const c=j.config||{};S.roster=c.workers||[];S.crews=(c.crews||[]).filter(x=>x!=="菲吉");if((c.machines||[]).length){S.machines=c.machines.map(x=>String(x).replace(/^怪手/,"挖土機"));if(!S.machines.some(x=>x.startsWith("鏟裝機")))S.machines.push("鏟裝機")}S.works=(c.works||[]).filter(w=>!REMOVED_WORKS.includes(w));if((c.dests||[]).length)S.dests=c.dests;if((c.soilTypes||[]).length)S.soilTypes=c.soilTypes.map(x=>x==="垃圾"?"廢棄物":x);S.samples=(c.samples&&c.samples.length)?c.samples.filter(s=>!/^混凝土\s*(140|210|280)/.test(s)):DEFAULT_SAMPLES.slice();
   S.admin=j.role==="admin";S.canWrite=S.admin;S.canEdit=S.admin;S.editDays=j.editDays||7;
   const keep=new Map();G.rep.forEach((r,id)=>{if(r.date.slice(0,7)<j._from)keep.set(id,r)});j.reports.forEach(r=>keep.set(r.id,r));G.rep=keep;pushReports()}
-async function reload(lite){const from=G.from||prevMonth(today().slice(0,7));const j=await api("load",{from,to:"9999-12",lite:!!lite});j._from=from;G.from=from;applyLoad(j);S.loaded=true;render()}
+async function reload(lite){const from=G.from||prevMonth(today().slice(0,7));const j=await api("load",{from,to:"9999-12",lite:!!lite});j._from=from;G.from=from;applyLoad(j);try{const snap=Object.assign({},j,{items:G.items});ls.set("agy_cache_v2",JSON.stringify(snap))}catch(e){}S.loaded=true;render()}
 function setActiveLocal(pid,codes){(G.items[pid]||[]).forEach(x=>{x[10]=codes.includes(x[0])?1:0})}
 const gdb={collection:()=>({add:async d=>{const data=Object.assign({},d);const id=data._id||"";delete data._id;const j=await api("report",{id,data});await reload(true);return{id:j.id}}}),
   doc:path=>{const parts=path.split("/"),c=parts[0],id=parts[1];return{
@@ -1245,7 +1245,9 @@ function gate(msg){const main=$("#main");const needUrl=!(GAS_URL&&GAS_URL.indexO
   main.replaceChildren(h("section",{class:"card"},h("h2",{},"第一次使用"),msg?h("div",{class:"msg warn"},msg):null,needUrl?h("label",{class:"f"},"後台網址",u):null,h("label",{class:"f"},"通行碼",k),h("button",{type:"button",class:"btn primary block",onclick:go},"進入")))}
 (async function boot(){S.g=G;S.db=gdb;S.dl=gdl;S.assets=gassets;S.user={};
   if(!G.url||!G.key){gate("");return}
-  try{await reload(false)}catch(e){gate(e.message==="auth"?"通行碼已變更,請重新輸入。":e.message)}
+  const rawCache=ls.get("agy_cache_v2","");
+  if(rawCache){try{const cj=JSON.parse(rawCache);if(cj&&cj.projects){G.from=cj._from||prevMonth(today().slice(0,7));applyLoad(cj);S.loaded=true;render()}}catch(e){}}
+  try{await reload(false)}catch(e){if(!S.loaded)gate(e.message==="auth"?"通行碼已變更,請重新輸入。":e.message);else if(e.message==="auth"){ls.set("agy_cache_v2","");S.loaded=false;gate("通行碼已變更,請重新輸入。")}}
 })();
 </script>
 
