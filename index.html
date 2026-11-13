@@ -40,7 +40,10 @@ section.card{background:var(--card);border:1px solid var(--line);border-radius:1
 h2{font-size:14px;margin:0;color:var(--mute);font-weight:600;letter-spacing:.04em}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .row>*{flex:1 1 130px;min-width:0}
-.date-by-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
+.date-by-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:start}
+.date-by-row>.f{min-width:0;width:100%;overflow:hidden}
+.date-by-row input,.date-by-row input[type=date]{-webkit-appearance:none;appearance:none;display:block;min-width:0;width:100%;max-width:100%;box-sizing:border-box;height:40px;margin:0}
+.date-by-row input[type=date]::-webkit-date-and-time-value{text-align:left;min-width:0}
 .date-by-row>.f-date{min-width:0}
 .date-by-row>.f-by{min-width:0}
 .date-by-row input{padding:7px 8px;font-size:14px;height:38px;width:100%;max-width:100%;box-sizing:border-box}
