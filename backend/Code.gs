@@ -9,7 +9,7 @@ var HEAD = {
   '派工數量': ['工程代號', '派工地點', '項次', '派工數量'],
   '設定': ['類別', '值', '屬性'],
   '每日回報': ['回報編號', '日期', '工程代號', '工程', '派工地點', '上午天氣', '下午天氣', '回報人', '技術工', '普通工', '體力工', '義交', '加班或其他', '材料進場', '取樣', '備註', '明日預定', '送出時間', '修改時間', '修繕地點', '未施工原因'],
-  '人力': ['回報編號', '日期', '工程', '派工地點', '姓名', '工數'],
+  '人力': ['回報編號', '日期', '工程', '派工地點', '姓名', '工數', '加班時數'],
   '出土': ['回報編號', '日期', '工程', '派工地點', '土質', '去處', '車次', '每台米數', '合計米數', '來源工程'],
   '施工項目': ['回報編號', '日期', '工程', '派工地點', '項次', '項目', '單位', '計量', '數量', '位置', '量測方式', '照片', '台數', '時數'],
   '機具': ['回報編號', '日期', '工程', '派工地點', '機具', '台數'],
@@ -100,7 +100,7 @@ function config_() {
   var c = { workers: [], crews: [], machines: [], soilTypes: [], dests: [], works: [], key: '', adminKey: '' };
   read_('設定').rows.forEach(function (r) {
     var k = str_(r['類別']), v = str_(r['值']), a = str_(r['屬性']); if (!v) return;
-    if (k === '工人') { c.workers.push(v); if (a === '小工班') c.crews.push(v); }
+    if (k === '工人') { c.workers.push(v); if (a === '小工班' && v !== '菲吉') c.crews.push(v); }
     else if (k === '機具') c.machines.push(v);
     else if (k === '土質') c.soilTypes.push(v);
     else if (k === '出土去處') c.dests.push(v);
@@ -182,10 +182,10 @@ function reports_(from, to, wantSums) {
     list[id] = { id: id, date: d, pid: pidOf[id], site: siteOf[id], am: str_(r['上午天氣']), pm: str_(r['下午天氣']), by: str_(r['回報人']),
       tech: num_(r['技術工']) || 0, gen: num_(r['普通工']) || 0, lab: num_(r['體力工']) || 0, traffic: num_(r['義交']) || 0, ot: str_(r['加班或其他']),
       materials: str_(r['材料進場']), sample: str_(r['取樣']), notes: str_(r['備註']), tomorrow: str_(r['明日預定']), at: dt_(r['送出時間']), edited: dt_(r['修改時間']), place: str_(r['修繕地點']), nowork: str_(r['未施工原因']), mats: [],
-      crew: {}, soil: [], entries: [], mach: {}, machOther: '', photos: [] };
+      crew: {}, crewOt: {}, soil: [], entries: [], mach: {}, machOther: '', photos: [] };
     order.push(id);
   });
-  read_('人力').rows.forEach(function (r) { var x = list[str_(r['回報編號'])]; if (x) x.crew[str_(r['姓名'])] = num_(r['工數']) || 0; });
+  read_('人力').rows.forEach(function (r) { var x = list[str_(r['回報編號'])], n = str_(r['姓名']); if (!x || !n) return; if (num_(r['工數'])) x.crew[n] = num_(r['工數']) || 0; if (num_(r['加班時數'])) x.crewOt[n] = num_(r['加班時數']) || 0; });
   read_('出土').rows.forEach(function (r) { var x = list[str_(r['回報編號'])]; if (x) x.soil.push({ type: str_(r['土質']), dest: str_(r['去處']), trucks: num_(r['車次']) || 0, per: num_(r['每台米數']) || 0, total: num_(r['合計米數']) || 0, src: str_(r['來源工程']) }); });
   read_('物料').rows.forEach(function (r) { var x = list[str_(r['回報編號'])]; if (x && str_(r['物料'])) x.mats.push({ name: str_(r['物料']), qty: num_(r['數量']), unit: str_(r['單位']) }); });
   read_('機具').rows.forEach(function (r) { var x = list[str_(r['回報編號'])]; if (!x) return; var n = num_(r['台數']); if (n === null) x.machOther = str_(r['機具']); else x.mach[str_(r['機具'])] = n; });
@@ -675,7 +675,10 @@ var ACTIONS = {
     function row(extra) { var o = {}; for (var k in base) o[k] = base[k]; for (var k2 in extra) o[k2] = extra[k2]; return o; }
     append_('每日回報', [row({ '工程代號': p.id, '上午天氣': str_(d.am), '下午天氣': str_(d.pm), '回報人': str_(d.by), '技術工': num_(d.tech) || 0, '普通工': num_(d.gen) || 0, '體力工': num_(d.lab) || 0,
       '義交': num_(d.traffic) || 0, '加班或其他': str_(d.ot), '材料進場': str_(d.materials), '取樣': str_(d.sample), '備註': str_(d.notes), '明日預定': str_(d.tomorrow), '送出時間': sent, '修改時間': edited, '修繕地點': str_(d.place), '未施工原因': str_(d.nowork) })]);
-    var crew = d.crew || {}; append_('人力', Object.keys(crew).filter(function (n) { return Number(crew[n]) > 0; }).map(function (n) { return row({ '姓名': n, '工數': Number(crew[n]) }); }));
+    var crew = d.crew || {}, crewOt = d.crewOt || {}, cNames = {};
+    Object.keys(crew).forEach(function (n) { if (Number(crew[n]) > 0) cNames[n] = 1; });
+    Object.keys(crewOt).forEach(function (n) { if (Number(crewOt[n]) > 0) cNames[n] = 1; });
+    append_('人力', Object.keys(cNames).map(function (n) { return row({ '姓名': n, '工數': Number(crew[n]) || 0, '加班時數': Number(crewOt[n]) || '' }); }));
     append_('出土', (d.soil || []).map(function (e) { return row({ '土質': str_(e.type), '去處': str_(e.dest), '車次': num_(e.trucks) || 0, '每台米數': num_(e.per) || 0, '合計米數': num_(e.total) || 0, '來源工程': str_(e.src) }); }));
     append_('物料', (d.mats || []).filter(function (x) { return x && str_(x.name); }).map(function (x) { return row({ '物料': str_(x.name), '數量': num_(x.qty) === null ? '' : num_(x.qty), '單位': str_(x.unit) }); }));
     append_('施工項目', (d.entries || []).map(function (e) {

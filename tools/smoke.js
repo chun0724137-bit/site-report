@@ -8,8 +8,8 @@ let r=m.call({key:'x',action:'load'});ok(r.error==='auth','錯誤通行碼被擋
 r=m.call({key:'field123',action:'load'});ok(r.ok&&r.role==='field'&&r.items.ntpu.length>0,'現場通行碼可載入');
 ok(r.dispatch.yanggong1['實踐國小'].length===3,'派工數量可讀回');
 const w=r.config.workers[0];
-r=m.call({key:'field123',action:'report',data:{pid:'ntpu',date:today,by:'t',am:'晴',pm:'雨',crew:{[w]:1},mach:{'80型怪手':1},soil:[{type:'B5',dest:'台北港',trucks:2,per:12,total:24}],entries:[{code:'4.5',name:'路緣石',unit:'M',mode:'數量',qty:20}],photos:[{cap:'施工前',url:'https://drive.google.com/file/d/A/view'}]}});ok(r.ok&&r.id,'送出回報(含現場照片)');const id=r.id;
-r=m.call({key:'field123',action:'load',lite:true,from:ym,to:'9999-12'});ok(r.reports.length===1&&r.sums.ntpu['4.5'].q===20&&r.reports[0].photos[0].cap==='施工前','回報、累計、照片可讀回');
+r=m.call({key:'field123',action:'report',data:{pid:'ntpu',date:today,by:'t',am:'晴',pm:'雨',crew:{[w]:1},crewOt:{[w]:2},mach:{'80型怪手':1},soil:[{type:'B5',dest:'台北港',trucks:2,per:12,total:24}],entries:[{code:'4.5',name:'路緣石',unit:'M',mode:'數量',qty:20}],photos:[{cap:'施工前',url:'https://drive.google.com/file/d/A/view'}]}});ok(r.ok&&r.id,'送出回報(含現場照片與加班時數)');const id=r.id;
+r=m.call({key:'field123',action:'load',lite:true,from:ym,to:'9999-12'});ok(r.reports.length===1&&r.sums.ntpu['4.5'].q===20&&r.reports[0].photos[0].cap==='施工前'&&r.reports[0].crewOt[w]===2,'回報、累計、照片、加班時數可讀回');
 r=m.call({key:'field123',action:'report',id,data:{pid:'ntpu',date:today,by:'t',crew:{[w]:0.5},entries:[{code:'4.5',name:'路緣石',unit:'M',mode:'數量',qty:30}]}});ok(r.ok,'修改回報');
 r=m.call({key:'field123',action:'load',lite:true,from:ym,to:'9999-12'});ok(r.reports.length===1&&r.sums.ntpu['4.5'].q===30&&r.reports[0].edited&&!r.reports[0].photos.length,'修改後取代原資料');
 // 日誌分頁
