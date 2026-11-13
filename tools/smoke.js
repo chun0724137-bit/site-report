@@ -75,6 +75,14 @@ const nd2=m.sheets['日誌_三峽北大'].d;
 const trow=nd2.find(x=>x[0] instanceof Date&&x[0].getTime()===new Date(today+'T00:00:00').getTime());
 ok(trow&&trow[2]==='警衛亭樓板澆置'&&trow[3]==='安衛督導'&&trow[4]==='280 圓柱試體 2 組'&&/AC 冷料 5包/.test(trow[5])&&trow[6]===2&&trow[7]===1&&trow[9]===1&&trow[10]===2,'重要事項區:工作項目顯示「警衛亭樓板澆置」(而非契約長名稱)、督導、取樣、物料、人數、挖土機1、壓路機2');
 
+// 8b. 另一位工程師 B 同日回報(免重複填天氣/出工，只填工作項目「圍牆基礎開挖」與取樣「鋼筋」)，日誌自動合併且天氣不消失
+r=m.call({key:'field123',action:'report',data:{pid:'ntpu',date:today,by:'工程師B',am:'',pm:'',work:'圍牆基礎開挖',sample:'鋼筋',entries:[]}});ok(r.ok,'第二位工程師同日補充回報(不填天氣與出工)');
+const nd2b=m.sheets['日誌_三峽北大'].d;
+const trowB=nd2b.find(x=>x[0] instanceof Date&&x[0].getTime()===new Date(today+'T00:00:00').getTime());
+ok(trowB&&trowB[2]==='警衛亭樓板澆置、圍牆基礎開挖'&&trowB[4]==='280 圓柱試體 2 組、鋼筋'&&trowB[6]===2&&trowB[7]===1,'多工程師同日回報自動合併工作項目與取樣、不重複加總或清空人數');
+r=m.call({key:'field123',action:'load',lite:false});
+ok(Array.isArray(r.config.samples)&&r.config.samples.includes('CLSM')&&r.config.samples.includes('格柵'),'設定分頁讀取預設取樣清單(混凝土/140/210/280/CLSM/鋼筋/格柵)');
+
 // 9. 今日未施工(週日休假/雨天停工)與刪除權限
 r=m.call({key:'field123',action:'report',data:{pid:'ntpu',date:'2026-11-08',by:'t',am:'雨',pm:'雨',nowork:'週日休假'}});ok(r.ok&&r.id,'未施工回報送出');
 r=m.call({key:'field123',action:'load',lite:true,from:ym,to:'9999-12'});const nw=r.reports.find(x=>x.date==='2026-11-08'&&x.pid==='ntpu');ok(nw&&nw.nowork==='週日休假','未施工原因可讀回');

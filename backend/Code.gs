@@ -293,10 +293,13 @@ function moveDailyToLast_() {
   } catch (err) { }
 }
 
+var DEFAULT_SAMPLES = ['混凝土', '混凝土 140', '混凝土 210', '混凝土 280', 'CLSM', '鋼筋', '格柵'];
+
 /** 第一次使用、或更新程式後執行一次 */
 function setup() {
   Object.keys(HEAD).forEach(function (name) { sheet_(name); });
   normalizeProjectsSheet_();
+  ensureConfigSamples_();
   projects_().forEach(function (p) {
     if (p.type === '土方暫置' || p.type === '機動修繕') return;
     var sh = sheet_(ITEM_PREFIX + p.short);
@@ -305,6 +308,16 @@ function setup() {
   migrateAndCleanup_();
   rebuildDiaries_();
   moveDailyToLast_();
+}
+
+function ensureConfigSamples_() {
+  try {
+    var t = read_('設定');
+    var hasSample = t.rows.some(function (r) { var k = str_(r['類別']); return k === '取樣' || k === '常用取樣'; });
+    if (!hasSample) {
+      append_('設定', DEFAULT_SAMPLES.map(function (s) { return { '類別': '取樣', '值': s, '屬性': '' }; }));
+    }
+  } catch (err) { }
 }
 
 /** 每個工程一個分頁,名稱為「契約-簡稱」(不含土方暫置與機動修繕)。回傳 {工程代號: 分頁名稱} */
@@ -349,7 +362,7 @@ function deleteById_(name, id) {
 }
 
 function config_() {
-  var c = { workers: [], crews: [], machines: [], soilTypes: [], dests: [], works: [], key: '', adminKey: '' };
+  var c = { workers: [], crews: [], machines: [], soilTypes: [], dests: [], works: [], samples: [], key: '', adminKey: '' };
   read_('設定').rows.forEach(function (r) {
     var k = str_(r['類別']), v = str_(r['值']), a = str_(r['屬性']); if (!v) return;
     if (k === '工人') { c.workers.push(v); if (a === '小工班' && v !== '菲吉') c.crews.push(v); }
@@ -357,10 +370,12 @@ function config_() {
     else if (k === '土質') c.soilTypes.push(v === '垃圾' ? '廢棄物' : v);
     else if (k === '出土去處') c.dests.push(v);
     else if (k === '常用工作') c.works.push(v);
+    else if (k === '取樣' || k === '常用取樣') c.samples.push(v);
     else if (k === '通行碼') c.key = v;
     else if (k === '管理者通行碼') c.adminKey = v;
   });
   if (c.machines.length && c.machines.indexOf('鏟裝機') < 0) c.machines.push('鏟裝機');
+  if (!c.samples.length) c.samples = DEFAULT_SAMPLES.slice();
   return c;
 }
 
@@ -570,7 +585,13 @@ function diaryData_(p, ym, site, ctx) {
   var day = {}, prevQ = {}, pcs = {}, wx = {}, seen = {};
   reps.forEach(function (r) {
     var inM = r.date.slice(0, 7) === ym, di = Number(r.date.slice(8, 10));
-    if (inM && !wx[di]) wx[di] = [r.am, r.pm];
+    if (inM) {
+      if (!wx[di]) wx[di] = [r.am || '', r.pm || ''];
+      else {
+        if (!wx[di][0] && r.am) wx[di][0] = r.am;
+        if (!wx[di][1] && r.pm) wx[di][1] = r.pm;
+      }
+    }
     r.entries.forEach(function (e) {
       if (!e.code || e.code === '-' || e.qty === '') return;
       var q = Number(e.qty);
@@ -681,7 +702,9 @@ function diaryData_(p, ym, site, ctx) {
     });
     if (r.nowork && !b.work.length && !b.fbWork.length) b.work.push('未施工(' + r.nowork + ')');
     if (r.notes) b.notes.push(r.notes);
-    if (r.sample) b.sample.push(r.sample);
+    if (r.sample) {
+      r.sample.split(/[、,，；;\n]/).map(str_).filter(Boolean).forEach(function (s) { if (b.sample.indexOf(s) < 0) b.sample.push(s); });
+    }
     if (r.materials) b.mat.push(r.materials);
     (r.mats || []).forEach(function (m) {
       if (m && m.name) {
@@ -703,7 +726,7 @@ function diaryData_(p, ym, site, ctx) {
     if (b3) {
       row3[2] = (b3.work.length ? b3.work : b3.fbWork).join('、');
       row3[3] = b3.notes.join(';');
-      row3[4] = b3.sample.join(';');
+      row3[4] = b3.sample.join('、');
       row3[5] = b3.mat.join('、');
       row3[6] = b3.t || ''; row3[7] = b3.g || ''; row3[8] = b3.l || '';
       row3[9] = b3.m0 || ''; row3[10] = b3.m1 || ''; row3[11] = b3.m2 || '';
@@ -1285,12 +1308,15 @@ var ACTIONS = {
       if (needSetup) {
         var lock = LockService.getScriptLock(); lock.waitLock(25000);
         try { setup(); } finally { lock.releaseLock(); }
+      } else {
+        try { ensureConfigSamples_(); } catch (e) { }
       }
+      c = config_();
     }
     var r = reports_(str_(q.from) || '0000-00', str_(q.to) || '9999-99', true);
     var out = {
       role: role, editDays: EDIT_DAYS, projects: projects_(), sites: sites_(), dispatch: {}, sums: r.sums, reports: r.reports,
-      config: { workers: c.workers, crews: c.crews, machines: c.machines, soilTypes: c.soilTypes, dests: c.dests, works: c.works }
+      config: { workers: c.workers, crews: c.crews, machines: c.machines, soilTypes: c.soilTypes, dests: c.dests, works: c.works, samples: c.samples }
     };
     if (!q.lite) out.items = items_();
     return out;
@@ -1403,6 +1429,7 @@ var ACTIONS = {
     (n.soilTypes || c.soilTypes).forEach(function (x) { rows.push(['土質', x, '']); });
     (n.dests || c.dests).forEach(function (x) { rows.push(['出土去處', x, '']); });
     (n.works || c.works).forEach(function (x) { rows.push(['常用工作', x, '']); });
+    (n.samples || c.samples || DEFAULT_SAMPLES).forEach(function (x) { rows.push(['取樣', x, '']); });
     var last = sh.getLastRow(); if (last > 1) sh.getRange(2, 1, last - 1, 3).clearContent();
     sh.getRange(2, 1, rows.length, 3).setValues(rows);
     return {};
