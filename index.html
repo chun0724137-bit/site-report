@@ -40,6 +40,10 @@ section.card{background:var(--card);border:1px solid var(--line);border-radius:1
 h2{font-size:14px;margin:0;color:var(--mute);font-weight:600;letter-spacing:.04em}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .row>*{flex:1 1 130px;min-width:0}
+.date-by-row{display:flex;gap:8px;align-items:flex-end;flex-wrap:nowrap}
+.date-by-row>.f-date{flex:0 1 142px;min-width:0}
+.date-by-row>.f-by{flex:0 1 110px;min-width:0}
+.date-by-row input{padding:7px 8px;font-size:14px;height:38px;max-width:100%}
 .f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mute)}
 .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .seg button{flex:1;padding:10px 4px;border:0;background:var(--card);border-left:1px solid var(--line)}
@@ -133,7 +137,7 @@ img.th{width:44px;height:44px;object-fit:cover;border-radius:6px}
 .lb-bar{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;width:100%;max-width:600px}
 </style>
 
-<header><div class="wrap"><b>現場回報</b><select id="proj" aria-label="工程"></select></div></header>
+<header><div class="wrap"><b>現場回報</b><select id="proj" aria-label="工程"></select><button id="exitBoss" type="button" class="btn primary" hidden style="margin-left:auto;padding:8px 12px;font-size:14px">← 回到現場回報</button></div></header>
 <div class="wrap"><main id="main"><section class="card"><p class="note" id="boot">讀取工程資料中…</p></section></main></div>
 <nav><div class="wrap">
   <button data-v="report">回報</button><button data-v="log">紀錄</button><button data-v="all">總覽</button><button data-v="set">設定</button>
@@ -143,8 +147,8 @@ img.th{width:44px;height:44px;object-fit:cover;border-radius:6px}
 const $=(s,r=document)=>r.querySelector(s), h=(t,a={},...c)=>{const e=document.createElement(t);for(const k in a){if(k==="class")e.className=a[k];else if(k.startsWith("on"))e.addEventListener(k.slice(2),a[k]);else if(a[k]!==null&&a[k]!==undefined&&a[k]!==false)e.setAttribute(k,a[k]===true?"":a[k]);}for(const x of c.flat()){if(x===null||x===undefined||x===false)continue;e.append(x.nodeType?x:document.createTextNode(String(x)));}return e;};
 const ls={get(k,d){try{return localStorage.getItem(k)??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
-const WX=["晴","陰","雨"], METHODS=["測距儀","捲尺"], NOWORK_REASONS=["週日休假","雨天停工","國定假日","待料/停工"], DEFAULT_SAMPLES=["混凝土","混凝土 140","混凝土 210","混凝土 280","CLSM","鋼筋","格柵"];
-const S={db:null,user:null,dl:null,assets:null,uid:"",projects:[],reports:[],roster:[],crews:[],machines:["挖土機:80型/120型","破碎機","傾卸貨車","鏟裝機","泵浦車"],machOpen:"",soilTypes:["B5","B2-3"],dests:["新店暫置","台北港"],machOther:false,boss:false,works:[],samples:DEFAULT_SAMPLES.slice(),soil:{type:"",trucks:"",per:"",dest:""},pid:ls.get("pid",""),view:"report",repMode:"daily",wkRepId:"",wkPick:null,loaded:false,err:"",
+const WX=["晴","陰","雨"], METHODS=["測距儀","捲尺"], NOWORK_REASONS=["週日休假","雨天停工","國定假日","待料/停工"], DEFAULT_SAMPLES=["混凝土","鋼筋","CLSM","格柵"], CONCRETE_SPECS=["140kgf/cm2","210kgf/cm2","280kgf/cm2"], REBAR_SPECS=["D10(#3)","D13(#4)","D16(#5)","D19(#6)","D22(#7)","D25(#8)","D29(#9)","D32(#10)"], REMOVED_WORKS=["配管","配線","AC清運","AC破碎","路緣石施工"], DEFAULT_NOTES=["安衛所督導","專任工程人員督察","機關工督","監造技師督察"];
+const S={db:null,user:null,dl:null,assets:null,uid:"",projects:[],reports:[],roster:[],crews:[],machines:["挖土機:80型/120型","破碎機","傾卸貨車","鏟裝機","泵浦車"],machOpen:"",soilTypes:["B5","B2-3"],dests:["新店暫置","台北港"],machOther:false,boss:false,works:[],samples:DEFAULT_SAMPLES.slice(),samplePick:null,wkSamplePick:null,soil:{type:"",trucks:"",per:"",dest:"",manualPer:false},pid:ls.get("pid",""),view:"report",repMode:"daily",wkRepId:"",wkPick:null,loaded:false,err:"",editDays:7,
   draft:null,pick:null,search:"",flash:"",month:today().slice(0,7),busy:false,openRepId:"",woOpen:"",lb:null};
 function newDraft(){return{date:today(),am:"",pm:"",nowork:"",work:"",tech:0,gen:0,lab:0,mach:{},machOther:"",soil:[],entries:[],materials:"",sample:"",notes:"",tomorrow:"",crew:{},crewOt:{},traffic:0,ot:"",photos:[],mats:[],place:"",by:ls.get("by","")}}
 S.draft=newDraft();
@@ -187,7 +191,7 @@ function viewReport(){const p=proj(),d=S.draft,out=[];const T=ptype(p),isSoil=T=
   if(S.editId)out.push(h("div",{class:"msg warn"},"正在修改 "+d.date+" 的回報,改完請按最下面的「送出修改」。 ",h("button",{type:"button",class:"btn",onclick:()=>{S.editId="";S.draft=newDraft();S.pick=null;render()}},"取消修改")));
   if(S.flash){out.push(h("div",{class:"msg ok"},S.flash));}
   if(!isSoil&&!isRepair&&!S.editId){
-    out.push(seg(["📝 每日現場回報","📊 看每日回報補填數量/取樣"],S.repMode==="weekly"?"📊 看每日回報補填數量/取樣":"📝 每日現場回報",v=>{S.repMode=v.startsWith("📊")?"weekly":"daily";S.wkPick=null;render()}));
+    out.push(seg(["📝 每日現場回報","📋 看每日回報及修改"],S.repMode==="weekly"?"📋 看每日回報及修改":"📝 每日現場回報",v=>{S.repMode=v.startsWith("📋")?"weekly":"daily";S.wkPick=null;S.wkSamplePick=null;render()}));
     if(S.repMode==="weekly")return out.concat(viewWeeklyQty(p));
   }
   const nwBox=[];
@@ -204,8 +208,9 @@ function viewReport(){const p=proj(),d=S.draft,out=[];const T=ptype(p),isSoil=T=
       nwBox.push(h("div",{class:"f"},"未施工原因",rtags,ri),h("div",{class:"msg ok"},"已設定為「今日未施工（"+d.nowork+"）」：不需填寫出工人數與施工項目，選好上下午天氣後即可直接按最下方「送出今日回報」。"));
     }
   }
+  const byLbl=txt("回報人","by","姓名");byLbl.classList.add("f-by");
   out.push(h("section",{class:"card"},h("h2",{},"今天"),
-    h("div",{class:"row"},(()=>{const i=h("input",{id:"f_date",type:"date"});i.value=d.date;i.addEventListener("change",()=>d.date=i.value);return h("label",{class:"f"},"日期",i)})(),txt("回報人","by","姓名")),
+    h("div",{class:"date-by-row"},(()=>{const i=h("input",{id:"f_date",type:"date"});i.value=d.date;i.addEventListener("change",()=>d.date=i.value);return h("label",{class:"f f-date"},"日期",i)})(),byLbl),
     isSoil||isRepair?null:h("div",{class:"row"},h("div",{class:"f"},"上午天氣(同日已填可略)",seg(WX,d.am,v=>d.am=v)),h("div",{class:"f"},"下午天氣(同日已填可略)",seg(WX,d.pm,v=>d.pm=v))),
     ...nwBox,
     isRepair?txt("修繕地點","place","例:板橋區文化路二段 82 號前"):null,p.multi?siteNodes(p,d):null));
@@ -222,19 +227,19 @@ function viewReport(){const p=proj(),d=S.draft,out=[];const T=ptype(p),isSoil=T=
     // work items
     const wIn=h("input",{id:"f_work",type:"text",placeholder:"例:警衛亭樓板澆置、圍牆基礎開挖"});wIn.value=d.work||"";wIn.addEventListener("input",()=>d.work=wIn.value);
     const wSug=h("div",{class:"sug"});
-    const usedWorks=[...new Set([...S.works,...S.reports.filter(r=>r.pid===p.id).flatMap(r=>[...(r.work||"").split(/[、,，]/).map(s=>s.trim()),...(r.entries||[]).filter(e=>e.code==="-").map(e=>e.name)]).filter(Boolean)])];
+    const usedWorks=[...new Set([...S.works,...S.reports.filter(r=>r.pid===p.id).flatMap(r=>[...(r.work||"").split(/[、,，]/).map(s=>s.trim()),...(r.entries||[]).filter(e=>e.code==="-").map(e=>e.name)]).filter(Boolean)])].filter(w=>!REMOVED_WORKS.includes(w));
     usedWorks.slice(0,12).forEach(w=>wSug.append(h("button",{type:"button",class:"tag",onclick:()=>{const cur=(d.work||"").trim();d.work=cur?(cur.includes(w)?cur:cur+"、"+w):w;wIn.value=d.work}}, "＋"+w)));
     const disp=p.multi&&d.site?((p.dispatch||{})[d.site]||[]):[],dq={};disp.forEach(x=>dq[x[0]]=x[1]);
     const act=(disp.length?disp.map(x=>p.items.find(i=>i.code===x[0])):(p.active||[]).map(c=>p.items.find(i=>i.code===c))).filter(i=>i&&i.mode!=="依大項百分比");
     const grid=h("div",{class:"items"});
-    act.forEach(it=>grid.append(h("button",{type:"button",class:"item"+(S.pick&&S.pick.code===it.code?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,qty:"",loc:"",method:"測距儀",photos:[]};render()}},
-      h("span",{class:"n"},it.name),h("span",{class:"q"},disp.length?it.code+"｜派工 "+fmt(dq[it.code])+" "+it.unit:itemStat(p,it)))));
+    act.forEach(it=>grid.append(h("button",{type:"button",class:"item"+(S.pick&&S.pick.code===it.code?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,cat:it.cat,qty:"",loc:"",method:"測距儀",photos:[]};render()}},
+      h("span",{class:"n"},it.name),h("span",{class:"q"},disp.length?it.code+(catTag(it)?"｜"+catTag(it):"")+"｜派工 "+fmt(dq[it.code])+" "+it.unit:itemStat(p,it)))));
     if(p.items.length)grid.append(h("button",{type:"button",class:"item"+(S.pick&&S.pick.code==="other"?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code==="other"?null:{code:"other",name:"",unit:"",qty:"",loc:"",method:"測距儀",photos:[]};S.search="";render()}},h("span",{class:"n"},"其他契約項目",h("span",{class:"pm"},S.pick&&S.pick.code==="other"?"－":"＋")),h("span",{class:"q"},"搜尋全部 "+p.items.length+" 項")));
     const sec=h("section",{class:"card"},
-      h("h2",{},"🛠 今日工作項目(多位工程師同日回報會自動合併於日誌與老闆版)"),
+      h("h2",{},"🛠 今日工作項目(多位工程師同日回報會自動合併)"),
       h("label",{class:"f"},"今日施作部位與工作說明(可直接打字或點下方常用詞)",wIn),
       usedWorks.length?wSug:null,
-      h("h2",{style:"margin-top:8px"},"📊 本日契約項目數量(可當日填，或於「看每日回報補填數量/取樣」統一填寫)"),
+      h("h2",{style:"margin-top:8px"},"📊 本日契約項目數量(可當日填，或於「看每日回報及修改」統一填寫)"),
       grid);
     if(S.pick)sec.append(pickSheet(p));
     d.entries.forEach((e,i)=>sec.append(h("div",{class:"entry"},h("span",{},(e.code==="-"?"":e.code+" ")+e.name+(e.loc?"｜"+e.loc:"")+(e.photo?" 📷":"")),h("b",{},(e.cnt&&e.hrs?fmt(e.cnt)+whoOf(e.name)+"×"+fmt(e.hrs)+"時＝":"")+(e.qty!==""?fmt(e.qty)+" "+e.unit:"")),h("button",{type:"button","aria-label":"刪除這一筆",onclick:()=>{d.entries.splice(i,1);render()}},"×"))));
@@ -243,7 +248,7 @@ function viewReport(){const p=proj(),d=S.draft,out=[];const T=ptype(p),isSoil=T=
     else{out.push(soilSection(p));
     if(!isSoil){
       out.push(sampleSection());
-      out.push(h("section",{class:"card"},h("h2",{},"其他"),txt("材料進場","materials","例:路緣石 50 m、環保沙 12 米"),txt("督導、會議、其他","notes","例:安衛所督導",true),txt("明日預定","tomorrow","")));
+      out.push(h("section",{class:"card"},h("h2",{},"其他"),txt("材料進場","materials","例:路緣石 50 m、環保沙 12 米"),notesField(),txt("明日預定","tomorrow","")));
     }
     }
   }else{
@@ -282,37 +287,197 @@ function machNodes(d){const tags=h("div",{class:"sug"});const add=(n,k)=>{d.mach
 function needSoil(d){return !d.soil.length&&(d.entries.some(e=>/出土/.test((e.name||"")+(e.loc||"")))||/出土/.test(d.notes||""))}
 function soilSection(p){const d=S.draft,k=S.soil,isSoil=ptype(p)==="土方暫置";const kinds=[...S.soilTypes.map(x=>x==="垃圾"?"廢棄物":x)];SOIL_KINDS.forEach(x=>{if(!kinds.includes(x))kinds.push(x)});
   const dests=isSoil?["台北港","廢清處理"]:S.dests;if(isSoil&&k.type==="廢棄物")k.dest="廢清處理";if(isSoil&&k.dest&&!dests.includes(k.dest))k.dest="";
+  const noDest=!isSoil&&k.type==="廢棄物";if(noDest)k.dest="";
   const sec=h("section",{class:"card",id:"soil"},h("h2",{},isSoil?"出土(從這裡運出去)":"出土"));
   if(isSoil){const srcs=S.projects.filter(x=>x.id!==p.id&&ptype(x)!=="土方暫置").map(x=>x.short||x.name);const sel=h("select",{id:"s_src","aria-label":"來源工地"},h("option",{value:""},"請選來源工地"),srcs.map(n=>h("option",{value:n},n)));sel.value=k.src||"";sel.addEventListener("change",()=>{k.src=sel.value});
     sec.append(h("label",{class:"f"},"來源工地(這批是哪個工地的)",sel),h("p",{class:"note"},"B5=無鋼筋或含鋼筋混凝土塊、B2-3=土壤與礫石及砂。B5、B2-3 運台北港,廢棄物送廢清處理。"))}if(needSoil(d))sec.append(h("div",{class:"msg warn"},"施工項目有寫到出土,請在這裡填出土車次。"));
-  const sum=()=>{const t=Number(k.trucks)*Number(k.per);return t>0?"合計 "+fmt(t)+" 米":"合計 –"};const tot=h("b",{},sum());
-  const inp=(id,label,key,ph,num)=>{const i=h("input",{id,type:num?"number":"text",inputmode:num?"decimal":null,step:num?"any":null,placeholder:ph});i.value=k[key];i.addEventListener("input",()=>{k[key]=i.value;if(num)tot.textContent=sum()});return h("label",{class:"f"},label,i)};
-  sec.append(h("div",{class:"row"},h("div",{class:"f"},isSoil?"種類":"土質",seg(kinds,k.type,v=>{k.type=v;if(isSoil){k.dest=v==="廢棄物"?"廢清處理":"台北港";render()}})),h("div",{class:"f"},"去處",seg(dests,k.dest,v=>k.dest=v))),h("div",{class:"row"},stepper("車次(台)","trucks",k,()=>tot.textContent=sum()),inp("s_per","每台(米)","per","0",true)),
-    h("div",{class:"row"},tot,h("button",{type:"button",class:"btn",onclick:()=>{const n=Number(k.trucks);if(!k.type||!k.dest){tot.textContent="請先點選土質和去處";return}if(isSoil&&!k.src){tot.textContent="請先選來源工地";return}if(!(n>0)){tot.textContent="請按 + 填車次";return}d.soil.push({type:k.type.trim(),dest:k.dest.trim(),src:isSoil?k.src:"",trucks:n,per:Number(k.per)||0,total:Math.round(n*(Number(k.per)||0)*100)/100});S.soil={src:k.src,type:k.type,trucks:"",per:k.per,dest:k.dest};render()}},"加入出土")));
+  let perIn=null;
+  const syncB5Port=()=>{
+    if(k.type==="B5"&&k.dest==="台北港"&&!k.manualPer){
+      const n=Number(k.trucks)||0;
+      k.per=n>0?String(n*12):"";
+      if(perIn)perIn.value=k.per;
+    }
+  };
+  syncB5Port();
+  const sum=()=>{const isB5Port=k.type==="B5"&&k.dest==="台北港";const t=isB5Port?(Number(k.per)||0):(Number(k.trucks)*Number(k.per));return t>0?"合計 "+fmt(t)+" 米":"合計 –"};
+  const tot=h("b",{},sum());
+  const inp=(id,label,key,ph,num)=>{const i=h("input",{id,type:num?"number":"text",inputmode:num?"decimal":null,step:num?"any":null,placeholder:ph});i.value=k[key];if(id==="s_per")perIn=i;i.addEventListener("input",()=>{k[key]=i.value;if(id==="s_per")k.manualPer=true;if(num)tot.textContent=sum()});return h("label",{class:"f"},label,i)};
+  sec.append(
+    h("div",{class:"row"},
+      h("div",{class:"f"},isSoil?"種類":"土質",seg(kinds,k.type,v=>{k.type=v;k.manualPer=false;if(isSoil)k.dest=v==="廢棄物"?"廢清處理":"台北港";else if(v==="廢棄物")k.dest="";syncB5Port();render()})),
+      noDest?h("div",{class:"f"},"去處",h("span",{class:"note",style:"padding:10px 0"},"廢棄物免選去處")):h("div",{class:"f"},"去處",seg(dests,k.dest,v=>{k.dest=v;k.manualPer=false;syncB5Port();tot.textContent=sum()}))),
+    h("div",{class:"row"},stepper("車次(台)","trucks",k,()=>{syncB5Port();tot.textContent=sum()}),inp("s_per","每台(米)","per","0",true)),
+    h("div",{class:"row"},tot,h("button",{type:"button",class:"btn",onclick:()=>{const n=Number(k.trucks);if(!k.type||(!noDest&&!k.dest)){tot.textContent=!k.type?"請先點選土質":"請先點選去處";return}if(isSoil&&!k.src){tot.textContent="請先選來源工地";return}if(!(n>0)){tot.textContent="請按 + 填車次";return}const isB5Port=k.type==="B5"&&k.dest==="台北港";const totM=isB5Port?(Number(k.per)||0):Math.round(n*(Number(k.per)||0)*100)/100;const perM=isB5Port?(n>0?Math.round((totM/n)*100)/100:12):(Number(k.per)||0);d.soil.push({type:k.type.trim(),dest:noDest?"":k.dest.trim(),src:isSoil?k.src:"",trucks:n,per:perM,total:totM});S.soil={src:k.src,type:k.type,trucks:"",per:isB5Port?"":k.per,dest:noDest?"":k.dest,manualPer:false};render()}},"加入出土")));
   d.soil.forEach((e,i)=>sec.append(h("div",{class:"entry"},h("span",{},(e.src?e.src+"｜":"")+(e.type||"未填土質")+(e.dest?"→"+e.dest:"")),h("b",{},fmt(e.trucks)+" 台"+(e.total?" / "+fmt(e.total)+" 米":"")),h("button",{type:"button","aria-label":"刪除這一筆出土",onclick:()=>{d.soil.splice(i,1);render()}},"×"))));
   return sec}
+function notesField(){
+  const d=S.draft,p=proj();
+  const isBeida=/北大/.test(((p&&p.short)||"")+((p&&p.name)||""));
+  const baseNotes=isBeida?["安衛所督導","專任工程人員督察","機關工督","監造技師督察"]:["專任工程人員督察","機關工督","監造技師督察"];
+  const el=h("textarea",{id:"f_notes",placeholder:isBeida?"例:安衛所督導、專任工程人員督察（可點下方常用詞，或打字自動篩選點選，也能自己打字）":"例:專任工程人員督察、機關工督（可點下方常用詞，或打字自動篩選點選，也能自己打字）"});
+  el.value=d.notes||"";
+  const sug=h("div",{class:"sug"});
+  const allOpts=[...new Set([...baseNotes,...S.reports.filter(r=>!p||r.pid===p.id).flatMap(r=>String(r.notes||"").split(/[、,，；;\n]/).map(s=>s.trim())).filter(x=>x&&(isBeida||x!=="安衛所督導"))])];
+  const fill=()=>{
+    sug.replaceChildren();
+    const val=el.value||"";
+    const parts=val.split(/[、,，；;\n]/);
+    const lastRaw=(parts[parts.length-1]||"").trim();
+    const committed=parts.slice(0,-1).map(s=>s.trim()).filter(Boolean);
+    const isPartial=lastRaw&&!allOpts.includes(lastRaw);
+    const list=isPartial?allOpts.filter(x=>x.includes(lastRaw)||lastRaw.includes(x)):allOpts;
+    (list.length?list:allOpts).slice(0,12).forEach(opt=>{
+      const selected=committed.includes(opt)||lastRaw===opt;
+      sug.append(h("button",{type:"button",class:"tag"+(selected?" on":""),onclick:()=>{
+        if(isPartial&&opt.includes(lastRaw)){
+          const nx=[...committed];if(!nx.includes(opt))nx.push(opt);
+          d.notes=nx.join("、");
+        }else{
+          let cur=val.split(/[、,，；;\n]/).map(s=>s.trim()).filter(Boolean);
+          if(cur.includes(opt))cur=cur.filter(x=>x!==opt);else cur.push(opt);
+          d.notes=cur.join("、");
+        }
+        el.value=d.notes;
+        fill();
+      }},(selected?"✓ ":"＋")+opt));
+    });
+  };
+  el.addEventListener("input",()=>{d.notes=el.value;fill()});
+  fill();
+  return h("div",{class:"f"},h("label",{for:"f_notes"},"督導、會議、其他(打字可自動篩選點選，或直接點選下方常用詞，也可自行打字)"),el,sug);
+}
 function matSection(){const d=S.draft;d.mats=d.mats||[];const sec=h("section",{class:"card"},h("h2",{},"物料(可以加很多項)"));
   const n=h("input",{id:"f_matname",type:"text",placeholder:"物料名稱,例:AC 冷料"}),q=h("input",{id:"f_matqty",type:"number",inputmode:"decimal",step:"any",placeholder:"數量"}),u=h("input",{id:"f_matunit",type:"text",placeholder:"單位,例:包"});
   sec.append(n,h("div",{class:"row"},q,u,h("button",{type:"button",class:"btn primary",style:"flex:0 0 auto",onclick:()=>{const v=n.value.trim();if(!v){n.focus();return}d.mats.push({name:v,qty:q.value===""?"":Number(q.value),unit:u.value.trim()});render();const nn=document.getElementById("f_matname");if(nn)nn.focus()}},"加入")));
   if(d.mats.length){const g=h("div",{class:"mgrid"});d.mats.forEach((x,i)=>g.append(h("div",{class:"mc"},h("span",{class:"n"},x.name),h("div",{class:"mr"},h("b",{},(x.qty!==""&&x.qty!==null?fmt(x.qty)+" ":"")+(x.unit||"")),h("button",{type:"button",class:"x","aria-label":"刪除"+x.name,onclick:()=>{d.mats.splice(i,1);render()}},"×")))));sec.append(g)}
   return sec}
-function toggleSampleStr(cur,t){
-  let parts=String(cur||"").split(/[、,，]/).map(s=>s.trim()).filter(Boolean);
-  if(parts.includes(t))parts=parts.filter(x=>x!==t);else parts.push(t);
-  return parts.join("、");
+function sampleItemsOf(str){
+  return String(str||"").split(/[、,，；;\n]/).map(s=>s.trim()).filter(Boolean);
+}
+function sampleBaseList(){
+  const raw=(S.samples&&S.samples.length)?S.samples:DEFAULT_SAMPLES;
+  const out=[...DEFAULT_SAMPLES];
+  raw.forEach(x=>{
+    const s=String(x||"").trim();
+    if(!s||/^混凝土\s*(140|210|280)/.test(s))return;
+    if(!out.includes(s))out.push(s);
+  });
+  return out;
+}
+function samplePickerUI(pk,onChange,onAdd,onCancel){
+  const box=h("div",{class:"sheet"});
+  const mat=pk.mat==="__other"?(pk.customMat||""):pk.mat;
+  box.append(h("div",{class:"t"},"🧪 新增取樣："+(pk.mat==="__other"?"其他材料":pk.mat)));
+  if(pk.mat==="__other"){
+    const mi=h("input",{type:"text",placeholder:"請輸入材料名稱,例:瀝青混凝土、高壓磚"});
+    mi.value=pk.customMat||"";mi.addEventListener("input",()=>pk.customMat=mi.value);
+    box.append(h("label",{class:"f"},"材料名稱",mi));
+  }
+  if(pk.mat==="混凝土"){
+    const spTags=h("div",{class:"sug"});
+    CONCRETE_SPECS.forEach(sp=>spTags.append(h("button",{type:"button",class:"tag"+(pk.spec===sp?" on":""),onclick:()=>{pk.spec=pk.spec===sp?"":sp;onChange()}},sp)));
+    const spIn=h("input",{type:"text",placeholder:"可點選上方強度或自行輸入,例:280kgf/cm2"});
+    spIn.value=pk.spec||"";spIn.addEventListener("input",()=>{pk.spec=spIn.value});
+    const gIn=h("input",{type:"number",inputmode:"decimal",step:"any",placeholder:"例: 1"});
+    gIn.value=pk.sets||"";gIn.addEventListener("input",()=>pk.sets=gIn.value);
+    const pIn=h("input",{type:"number",inputmode:"decimal",step:"any",placeholder:"例: 3"});
+    pIn.value=pk.pcs||"";pIn.addEventListener("input",()=>pk.pcs=pIn.value);
+    box.append(
+      h("div",{class:"f"},"混凝土強度(點選或自行輸入)",spTags,spIn),
+      h("div",{class:"row"},h("label",{class:"f"},"取樣組數(組)",gIn),h("label",{class:"f"},"取樣顆數(顆)",pIn))
+    );
+  }else if(pk.mat==="鋼筋"){
+    const rbTags=h("div",{class:"sug"});
+    REBAR_SPECS.forEach(sp=>rbTags.append(h("button",{type:"button",class:"tag"+(pk.spec===sp?" on":""),onclick:()=>{pk.spec=pk.spec===sp?"":sp;onChange()}},sp)));
+    const spIn=h("input",{type:"text",placeholder:"點選上方鋼筋號數或自行輸入,例:D16(#5)"});
+    spIn.value=pk.spec||"";spIn.addEventListener("input",()=>pk.spec=spIn.value);
+    const qIn=h("input",{type:"number",inputmode:"decimal",step:"any",placeholder:"例: 3"});
+    qIn.value=pk.qty||"";qIn.addEventListener("input",()=>pk.qty=qIn.value);
+    box.append(
+      h("div",{class:"f"},"鋼筋號數",rbTags,spIn),
+      h("label",{class:"f"},"取樣支數(支)",qIn)
+    );
+  }else{
+    const spIn=h("input",{type:"text",placeholder:"規格或部位說明(選填)"});
+    spIn.value=pk.spec||"";spIn.addEventListener("input",()=>pk.spec=spIn.value);
+    const qIn=h("input",{type:"number",inputmode:"decimal",step:"any",placeholder:"輸入取樣數量,例: 1"});
+    qIn.value=pk.qty||"";qIn.addEventListener("input",()=>pk.qty=qIn.value);
+    const uIn=h("input",{type:"text",placeholder:"單位,例:組、顆、支、處"});
+    uIn.value=pk.unit||"組";uIn.addEventListener("input",()=>pk.unit=uIn.value);
+    const uTags=h("div",{class:"sug"});
+    ["組","顆","支","塊","處","式"].forEach(u=>uTags.append(h("button",{type:"button",class:"tag"+((pk.unit||"組")===u?" on":""),onclick:()=>{pk.unit=u;uIn.value=u;onChange()}},u)));
+    box.append(
+      h("label",{class:"f"},"規格或說明(選填)",spIn),
+      h("div",{class:"row"},h("label",{class:"f"},"取樣數量",qIn),h("label",{class:"f"},"單位",uIn)),
+      uTags
+    );
+  }
+  const errEl=h("span",{class:"note",style:"color:var(--warn);font-weight:600"},pk.err||"");
+  if(pk.err)box.append(errEl);
+  box.append(h("div",{class:"row"},
+    h("button",{type:"button",class:"btn",onclick:onCancel},"取消"),
+    h("button",{type:"button",class:"btn primary",onclick:()=>{
+      const mName=(pk.mat==="__other"?(pk.customMat||"").trim():pk.mat).trim();
+      if(!mName){pk.err="請輸入材料名稱";onChange();return;}
+      let itemStr="";
+      if(pk.mat==="混凝土"){
+        const sp=(pk.spec||"").trim();
+        const sets=(pk.sets||"").trim(),pcs=(pk.pcs||"").trim();
+        if(!sp){pk.err="請點選或輸入混凝土強度(如 280kgf/cm2)";onChange();return;}
+        if(!sets&&!pcs){pk.err="請輸入取樣組數或顆數";onChange();return;}
+        const qPart=(sets&&pcs)?(sets+"組/"+pcs+"顆"):sets?(sets+"組"):(pcs+"顆");
+        itemStr=mName+" "+sp+" "+qPart;
+      }else if(pk.mat==="鋼筋"){
+        const sp=(pk.spec||"").trim();
+        const q=(pk.qty||"").trim();
+        if(!sp){pk.err="請點選鋼筋號數(如 D16(#5))";onChange();return;}
+        if(!q){pk.err="請輸入取樣支數";onChange();return;}
+        itemStr=mName+" "+sp+" "+q+"支";
+      }else{
+        const sp=(pk.spec||"").trim();
+        const q=(pk.qty||"").trim();
+        const u=(pk.unit||"組").trim();
+        if(!q){pk.err="請輸入取樣數量";onChange();return;}
+        itemStr=mName+(sp?" "+sp:"")+" "+q+u;
+      }
+      onAdd(itemStr);
+    }},"＋ 加入取樣項目")));
+  return box;
 }
 function sampleSection(){
   const d=S.draft;d.photos=d.photos||[];
   const sec=h("section",{class:"card"},h("h2",{},"🧪 材料抽試 / 取樣紀錄"));
-  const sIn=h("input",{id:"f_sample",type:"text",placeholder:"點選下方常用取樣或自行輸入,例:混凝土 280、鋼筋"});
-  sIn.value=d.sample||"";sIn.addEventListener("input",()=>d.sample=sIn.value);
   const stags=h("div",{class:"sug"});
-  const sList=(S.samples&&S.samples.length)?S.samples:DEFAULT_SAMPLES;
-  sList.forEach(t=>stags.append(h("button",{type:"button",class:"tag"+((d.sample||"").split(/[、,，]/).map(s=>s.trim()).includes(t)?" on":""),onclick:()=>{
-    d.sample=toggleSampleStr(d.sample,t);
-    sIn.value=d.sample;render();
+  const sList=sampleBaseList();
+  sList.forEach(t=>stags.append(h("button",{type:"button",class:"tag"+(S.samplePick&&S.samplePick.mat===t?" on":""),onclick:()=>{
+    S.samplePick=(S.samplePick&&S.samplePick.mat===t)?null:{mat:t,spec:"",sets:"",pcs:"",qty:"",unit:t==="CLSM"?"組":"組",err:""};
+    render();
   }},"＋"+t)));
-  sec.append(h("label",{class:"f"},"取樣名稱(常用可直接點選，可於試算表「設定」新增類別「取樣」)",sIn),stags);
+  stags.append(h("button",{type:"button",class:"tag"+(S.samplePick&&S.samplePick.mat==="__other"?" on":""),onclick:()=>{
+    S.samplePick=(S.samplePick&&S.samplePick.mat==="__other")?null:{mat:"__other",customMat:"",spec:"",qty:"",unit:"組",err:""};
+    render();
+  }},"＋其他材料"));
+  sec.append(h("div",{class:"f"},"點選取樣材料(可於試算表「設定」新增類別「取樣」)",stags));
+  if(S.samplePick){
+    sec.append(samplePickerUI(S.samplePick,()=>render(),itemStr=>{
+      const cur=sampleItemsOf(d.sample);
+      cur.push(itemStr);
+      d.sample=cur.join("、");
+      S.samplePick=null;
+      render();
+    },()=>{S.samplePick=null;render()}));
+  }
+  const items=sampleItemsOf(d.sample);
+  if(items.length){
+    const listBox=h("div",{class:"f"},"已加入的取樣項目（共 "+items.length+" 項）");
+    items.forEach((it,idx)=>listBox.append(h("div",{class:"entry"},
+      h("span",{},"🧪 "+it),
+      h("button",{type:"button","aria-label":"刪除取樣 "+it,onclick:()=>{
+        const nx=sampleItemsOf(d.sample);nx.splice(idx,1);d.sample=nx.join("、");render();
+      }},"×"))));
+    sec.append(listBox);
+  }
   if(S.assets){
     const f=h("input",{id:"f_sphotos",type:"file",accept:"image/*",multiple:true});
     f.addEventListener("change",async()=>{
@@ -350,11 +515,12 @@ function photoSection(){const d=S.draft;d.photos=d.photos||[];const sec=h("secti
     g.append(h("div",{class:"ph"},h("img",{src:photoUrl(x.url),alt:x.cap||"現場照片"}),cap,h("button",{type:"button",class:"btn","aria-label":"移除第 "+(i+1)+" 張照片",onclick:()=>{d.photos.splice(idx,1);render()}},"移除")))});sec.append(g)}
   return sec}
 function pickSheet(p){const k=S.pick,d=S.draft,box=h("div",{class:"sheet"});k.photos=k.photos||[];
-  if(k.code==="other"&&!k.name){const s=h("input",{id:"f_search",type:"text",placeholder:"輸入關鍵字,例:模板、欄杆"});s.value=S.search;
-    const list=h("div",{});const fill=()=>{list.replaceChildren();const q=S.search.trim();let n=0;p.items.forEach(it=>{if(it.mode==="依大項百分比")return;if(q&&!(it.name.includes(q)||it.code.includes(q)))return;if(n++>=30)return;
-      list.append(h("button",{type:"button",class:"chk",style:"width:100%;background:none;border:0;border-bottom:1px solid var(--line);text-align:left",onclick:()=>{Object.assign(k,{code:it.code,name:it.name,unit:it.unit,mode:it.mode});render()}},h("span",{},it.code+" "+it.name+"("+it.unit+")")))});if(!n)list.append(h("p",{class:"note"},"找不到符合的項目。"))};
+  if(k.code==="other"&&!k.name){const s=h("input",{id:"f_search",type:"text",placeholder:"輸入關鍵字,例:校名柱、模板、欄杆"});s.value=S.search;
+    const list=h("div",{});const fill=()=>{list.replaceChildren();const q=S.search.trim();let n=0;p.items.forEach(it=>{if(it.mode==="依大項百分比")return;const ct=catTag(it);if(q&&!(it.name.includes(q)||it.code.includes(q)||ct.includes(q)))return;if(n++>=30)return;
+      list.append(h("button",{type:"button",class:"chk",style:"width:100%;background:none;border:0;border-bottom:1px solid var(--line);text-align:left",onclick:()=>{Object.assign(k,{code:it.code,name:it.name,unit:it.unit,mode:it.mode,cat:it.cat});render()}},h("span",{},it.code+(ct?"｜"+ct+"｜":" ")+it.name+"("+it.unit+")")))});if(!n)list.append(h("p",{class:"note"},"找不到符合的項目。"))};
     s.addEventListener("input",()=>{S.search=s.value;fill()});fill();box.append(h("div",{class:"t"},"選擇契約項目"),s,list,h("button",{type:"button",class:"btn",onclick:()=>{S.pick=null;render()}},"取消"));return box;}
-  box.append(h("div",{class:"t"},k.code==="-"?"不單獨計量的工作":k.code+" "+k.name));
+  const kCat=catTag(k);
+  box.append(h("div",{class:"t"},k.code==="-"?"不單獨計量的工作":k.code+(kCat?"（"+kCat+"）":"")+" "+k.name));
   const dups=dupQtyEntries(p.id,d.date,p.multi?(d.site||""):"",k.code,S.editId);
   if(dups.length)box.append(dupWarnNode(dups));
   if(k.code==="-"){const n=h("input",{id:"f_wname",type:"text",placeholder:"工作內容,例:動力室基礎澆置 210 混凝土"});n.value=k.name;n.addEventListener("input",()=>k.name=n.value);const sug=h("div",{class:"sug"});const fill=()=>{sug.replaceChildren();const q=k.name.trim();const used=[...new Set([...S.works,...S.reports.flatMap(r=>(r.entries||[]).filter(e=>e.code==="-").map(e=>e.name))])];used.filter(w=>w&&w!==q&&(!q||w.includes(q)||q.includes(w))).slice(0,12).forEach(w=>sug.append(h("button",{type:"button",class:"tag",onclick:()=>{k.name=w;n.value=w;fill()}},w)))};n.addEventListener("input",fill);fill();
@@ -461,8 +627,8 @@ function viewWeeklyQty(p){
   const allMonth=rowsFor(p.id,S.month);
   const allSites=[...new Set([...(p.siteInfo||[]).map(s=>s.name),...(p.sites||[]),...allMonth.map(r=>r.site).filter(Boolean)])];
   const hdr=h("section",{class:"card"},
-    h("h2",{},"📊 看每日回報補填數量 / 取樣｜"+(p.short||p.name)),
-    h("p",{class:"note"},"同一天多位工程師回報的「工作項目、機具、照片」已自動合併！可在此直接對照回報內容與照片，統一填寫當日契約項目數量、日誌工作項目或取樣紀錄。"),
+    h("h2",{},"📋 看每日回報及修改（限 7 日內）｜"+(p.short||p.name)),
+    h("p",{class:"note"},"同一天多位工程師回報的「工作項目、機具、照片」已自動合併！可在此檢視每日回報內容與照片，並於 7 日內修改回報、補填契約數量或取樣紀錄（超過 7 日僅供檢視）。"),
     h("label",{class:"f"},"選擇月份",m));
   if(p.multi&&allSites.length){
     const stags=h("div",{class:"sug"});
@@ -476,11 +642,22 @@ function viewWeeklyQty(p){
   const days=groupByDay(rs);
   days.forEach(g=>{
     const primary=g.reps[0];
+    const canMod=daysAgo(g.date)<=7;
     const card=h("section",{class:"card"});
     card.append(h("div",{class:"row",style:"justify-content:space-between"},
       h("b",{style:"font-size:18px"},"📅 "+g.date+" "+wkOf(g.date)+(g.site?"｜📍 "+g.site:"")+(g.reps.length>1?"（"+g.reps.length+" 筆回報已合併）":"")),
       h("span",{class:"pill "+(g.nowork?"warn":"ok")},g.nowork?"未施工:"+g.nowork:"☀️ "+(g.am||"-")+"/"+(g.pm||"-")+"｜👷 "+fmt(g.hc)+" 工｜📷 "+g.photos.length+" 張")));
-    if(g.nowork){out.push(card);return;}
+    if(!canMod){
+      card.append(h("div",{class:"msg warn",style:"font-size:13px"},"🔒 已超過 7 日修改期限（僅供檢視，不可修改）"));
+    }
+    if(g.nowork){
+      if(canMod){
+        const editRow=h("div",{class:"row"});
+        g.reps.forEach((r,idx)=>editRow.append(h("button",{type:"button",class:"btn",onclick:()=>startEdit(r)},"✏️ 修改此日回報"+(g.reps.length>1?"（第 "+(idx+1)+" 筆）":""))));
+        card.append(editRow);
+      }
+      out.push(card);return;
+    }
     // 1. 顯示當日合併後的現場回報內容與照片(供對照填數量)
     const infoBox=h("div",{class:"sheet",style:"background:var(--soft);border-color:var(--accent)"});
     infoBox.append(
@@ -490,10 +667,27 @@ function viewWeeklyQty(p){
       h("div",{style:"font-size:15px"},"• 出工：技術工 "+g.tech+"、普通工 "+g.gen+"、體力工 "+g.lab+(g.crewStr?"（"+g.crewStr+"）":"")),
       g.soilStr?h("div",{style:"font-size:15px"},"• 出土："+g.soilStr):null,
       g.materials?h("div",{style:"font-size:15px"},"• 材料進場："+g.materials):null,
+      g.sample?h("div",{style:"font-size:15px"},"• 取樣紀錄："+g.sample):null,
       g.notes?h("div",{style:"font-size:15px"},"• 備註："+g.notes):null,
       g.photos.length?photoGrid(g.photos,(p.short||p.name)+" "+g.date):null
     );
+    if(canMod){
+      const editRow=h("div",{class:"row"});
+      g.reps.forEach((r,idx)=>editRow.append(h("button",{type:"button",class:"btn",onclick:()=>startEdit(r)},"✏️ 修改完整回報(天氣/人數/機具/出土/照片)"+(g.reps.length>1?"｜第 "+(idx+1)+" 筆":""))));
+      infoBox.append(editRow);
+    }
     card.append(infoBox);
+    if(!canMod){
+      if(g.entries.length){
+        const eBox=h("div",{class:"f"},"📊 當日契約項目數量（"+g.entries.length+" 筆）");
+        g.entries.forEach(({e,r})=>eBox.append(h("div",{class:"entry"},
+          h("span",{},(e.code==="-"?"":e.code+" ")+e.name+(e.loc?"｜"+e.loc:"")+(e.photo?" 📷":"")+(r.by?"（"+r.by+" 填）":"")),
+          h("b",{},(e.cnt&&e.hrs?fmt(e.cnt)+whoOf(e.name)+"×"+fmt(e.hrs)+"時＝":"")+(e.qty!==""?fmt(e.qty)+" "+(e.unit||""):"")))));
+        card.append(eBox);
+      }
+      out.push(card);
+      return;
+    }
     // 2. 日誌工作項目(已自動合併,可直接修改存檔)
     const wInput=h("input",{type:"text",placeholder:"例:警衛亭樓板澆置、圍牆基礎開挖(顯示在施工日誌「工作項目」欄)"});
     wInput.value=g.workStr||"";
@@ -502,32 +696,54 @@ function viewWeeklyQty(p){
         for(let i=1;i<g.reps.length;i++){if(g.reps[i].work)await saveReportPatch(g.reps[i],{work:""});}
         await saveReportPatch(primary,{work:wInput.value.trim()},"已更新 "+g.date+" 的日誌工作項目。");
       }},"儲存工作項目"))));
-    // 3. 當日取樣紀錄(點選鈕 + 上傳取樣照片)
-    const sInput=h("input",{type:"text",placeholder:"點下方常用取樣或自行輸入,例:混凝土 280、鋼筋"});
-    sInput.value=g.sample||"";
-    const stags=h("div",{class:"sug"});
-    const sList=(S.samples&&S.samples.length)?S.samples:DEFAULT_SAMPLES;
-    sList.forEach(t=>stags.append(h("button",{type:"button",class:"tag"+((sInput.value||"").split(/[、,，]/).map(s=>s.trim()).includes(t)?" on":""),onclick:()=>{
-      sInput.value=toggleSampleStr(sInput.value,t);
-    }},"＋"+t)));
-    const sf=h("input",{type:"file",accept:"image/*",multiple:true});
-    sf.addEventListener("change",async()=>{
-      const files=[...sf.files];if(!files.length||!S.assets)return;
-      const sName=sInput.value.trim()||"材料取樣";
-      const curPhotos=(primary.photos||[]).slice();
-      for(const file of files){
-        try{const r=await S.assets.upload(file,"取樣_"+sName,g.date,g.site);curPhotos.push({url:r.url,cap:"【取樣】"+sName,sample:true})}catch(e){}
-      }
+    // 3. 當日取樣紀錄(結構化點選 + 加入項目 + 上傳取樣照片)
+    const saveDaySample=async(newSampleStr,msg)=>{
       for(let i=1;i<g.reps.length;i++){if(g.reps[i].sample)await saveReportPatch(g.reps[i],{sample:""});}
-      await saveReportPatch(primary,{sample:sInput.value.trim(),photos:curPhotos},"已上傳取樣照片並更新 "+g.date+" 的取樣紀錄。");
-    });
-    card.append(h("div",{class:"f"},"🧪 當日取樣紀錄(可直接點選或上傳取樣照片，檔名自動加上取樣名稱)",
-      h("div",{class:"row"},sInput,h("button",{type:"button",class:"btn",style:"flex:0 0 auto",disabled:S.busy,onclick:async()=>{
-        for(let i=1;i<g.reps.length;i++){if(g.reps[i].sample)await saveReportPatch(g.reps[i],{sample:""});}
-        await saveReportPatch(primary,{sample:sInput.value.trim()},"已更新 "+g.date+" 的取樣紀錄。");
-      }},"儲存取樣")),
-      stags,
-      S.assets?h("label",{class:"f"},"📷 補傳這天的取樣照片(可多張)",sf):null));
+      await saveReportPatch(primary,{sample:newSampleStr},msg||("已更新 "+g.date+" 的取樣紀錄。"));
+    };
+    const sBox=h("div",{class:"f"},"🧪 當日取樣紀錄(點選材料填數量加入項目，或上傳取樣照片)");
+    const stags=h("div",{class:"sug"});
+    const sList=sampleBaseList();
+    sList.forEach(t=>stags.append(h("button",{type:"button",class:"tag"+(S.wkSamplePick&&S.wkSamplePick.key===g.key&&S.wkSamplePick.mat===t?" on":""),onclick:()=>{
+      S.wkSamplePick=(S.wkSamplePick&&S.wkSamplePick.key===g.key&&S.wkSamplePick.mat===t)?null:{key:g.key,mat:t,spec:"",sets:"",pcs:"",qty:"",unit:"組",err:""};
+      render();
+    }},"＋"+t)));
+    stags.append(h("button",{type:"button",class:"tag"+(S.wkSamplePick&&S.wkSamplePick.key===g.key&&S.wkSamplePick.mat==="__other"?" on":""),onclick:()=>{
+      S.wkSamplePick=(S.wkSamplePick&&S.wkSamplePick.key===g.key&&S.wkSamplePick.mat==="__other")?null:{key:g.key,mat:"__other",customMat:"",spec:"",qty:"",unit:"組",err:""};
+      render();
+    }},"＋其他材料"));
+    sBox.append(stags);
+    if(S.wkSamplePick&&S.wkSamplePick.key===g.key){
+      sBox.append(samplePickerUI(S.wkSamplePick,()=>render(),async itemStr=>{
+        const cur=sampleItemsOf(g.sample);
+        cur.push(itemStr);
+        S.wkSamplePick=null;
+        await saveDaySample(cur.join("、"),"已加入取樣「"+itemStr+"」至 "+g.date+"。");
+      },()=>{S.wkSamplePick=null;render()}));
+    }
+    const sItems=sampleItemsOf(g.sample);
+    if(sItems.length){
+      sItems.forEach((it,idx)=>sBox.append(h("div",{class:"entry"},
+        h("span",{},"🧪 "+it),
+        h("button",{type:"button","aria-label":"刪除取樣 "+it,disabled:S.busy,onclick:async()=>{
+          const nx=sampleItemsOf(g.sample);nx.splice(idx,1);
+          await saveDaySample(nx.join("、"),"已移除 "+g.date+" 的取樣項目。");
+        }},"×"))));
+    }
+    if(S.assets){
+      const sf=h("input",{type:"file",accept:"image/*",multiple:true});
+      sf.addEventListener("change",async()=>{
+        const files=[...sf.files];if(!files.length||!S.assets)return;
+        const sName=(g.sample||"").trim()||"材料取樣";
+        const curPhotos=(primary.photos||[]).slice();
+        for(const file of files){
+          try{const r=await S.assets.upload(file,"取樣_"+sName,g.date,g.site);curPhotos.push({url:r.url,cap:"【取樣】"+sName,sample:true})}catch(e){}
+        }
+        await saveReportPatch(primary,{photos:curPhotos},"已上傳取樣照片至 "+g.date+"。");
+      });
+      sBox.append(h("label",{class:"f"},"📷 補傳這天的取樣照片(可多張，檔名自動加上取樣名稱)",sf));
+    }
+    card.append(sBox);
     // 4. 已填的契約項目數量列表 + 新增按鈕(含重複填寫提醒)
     const eBox=h("div",{class:"f"},"📊 當日契約項目數量("+(g.entries.length?g.entries.length+" 筆":"尚未填寫")+")");
     g.entries.forEach(({e,r,idx})=>{
@@ -541,7 +757,7 @@ function viewWeeklyQty(p){
     if(isAdding){
       const act=(p.active||[]).map(c=>p.items.find(i=>i.code===c)).filter(i=>i&&i.mode!=="依大項百分比");
       const grid=h("div",{class:"items"});
-      act.forEach(it=>grid.append(h("button",{type:"button",class:"item"+(S.wkPick&&S.wkPick.code===it.code?" sel":""),onclick:()=>{S.wkPick=S.wkPick&&S.wkPick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,qty:"",loc:"",method:"測距儀",photos:[]};render()}},
+      act.forEach(it=>grid.append(h("button",{type:"button",class:"item"+(S.wkPick&&S.wkPick.code===it.code?" sel":""),onclick:()=>{S.wkPick=S.wkPick&&S.wkPick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,cat:it.cat,qty:"",loc:"",method:"測距儀",photos:[]};render()}},
         h("span",{class:"n"},it.name),h("span",{class:"q"},itemStat(p,it)))));
       if(p.items.length)grid.append(h("button",{type:"button",class:"item"+(S.wkPick&&S.wkPick.code==="other"?" sel":""),onclick:()=>{S.wkPick=S.wkPick&&S.wkPick.code==="other"?null:{code:"other",name:"",unit:"",qty:"",loc:"",method:"測距儀",photos:[]};S.search="";render()}},
         h("span",{class:"n"},"搜尋全部契約項目",h("span",{class:"pm"},S.wkPick&&S.wkPick.code==="other"?"－":"＋")),h("span",{class:"q"},"全部 "+p.items.length+" 項")));
@@ -549,14 +765,15 @@ function viewWeeklyQty(p){
       if(S.wkPick){
         const k=S.wkPick,sbox=h("div",{class:"sheet"});k.photos=k.photos||[];
         if(k.code==="other"&&!k.name){
-          const s=h("input",{type:"text",placeholder:"輸入關鍵字,例:混凝土、模板、路緣石"});s.value=S.search;
+          const s=h("input",{type:"text",placeholder:"輸入關鍵字,例:校名柱、混凝土、模板、路緣石"});s.value=S.search;
           const list=h("div",{});
-          const fill=()=>{list.replaceChildren();const q=S.search.trim();let n=0;p.items.forEach(it=>{if(it.mode==="依大項百分比")return;if(q&&!(it.name.includes(q)||it.code.includes(q)))return;if(n++>=30)return;
-            list.append(h("button",{type:"button",class:"chk",style:"width:100%;background:none;border:0;border-bottom:1px solid var(--line);text-align:left",onclick:()=>{Object.assign(k,{code:it.code,name:it.name,unit:it.unit,mode:it.mode});render()}},h("span",{},it.code+" "+it.name+"("+it.unit+")")))});if(!n)list.append(h("p",{class:"note"},"找不到符合的項目。"))};
+          const fill=()=>{list.replaceChildren();const q=S.search.trim();let n=0;p.items.forEach(it=>{if(it.mode==="依大項百分比")return;const ct=catTag(it);if(q&&!(it.name.includes(q)||it.code.includes(q)||ct.includes(q)))return;if(n++>=30)return;
+            list.append(h("button",{type:"button",class:"chk",style:"width:100%;background:none;border:0;border-bottom:1px solid var(--line);text-align:left",onclick:()=>{Object.assign(k,{code:it.code,name:it.name,unit:it.unit,mode:it.mode,cat:it.cat});render()}},h("span",{},it.code+(ct?"｜"+ct+"｜":" ")+it.name+"("+it.unit+")")))});if(!n)list.append(h("p",{class:"note"},"找不到符合的項目。"))};
           s.addEventListener("input",()=>{S.search=s.value;fill()});fill();
           sbox.append(h("div",{class:"t"},"選擇契約項目"),s,list);
         }else{
-          sbox.append(h("div",{class:"t"},k.code+" "+k.name));
+          const kCat=catTag(k);
+          sbox.append(h("div",{class:"t"},k.code+(kCat?"（"+kCat+"）":"")+" "+k.name));
           const dups=dupQtyEntries(p.id,g.date,g.site,k.code,"");
           if(dups.length)sbox.append(dupWarnNode(dups));
           const hourly=p.multi&&k.code!=="-"&&isHour(k.unit);
@@ -818,7 +1035,14 @@ function ratioOf(p,it){
   if(it.mode==="依大項百分比"){const cats=String(it.basis||"").split(/[、,，]/).map(x=>x.trim()).filter(Boolean);let a=0,dn=0;p.items.forEach(x=>{if(cats.includes(x.cat)&&x.mode!=="依大項百分比"){const am=amt(x);a+=am;dn+=am*ratioOf(p,x)}});return a?dn/a:0}
   const q=Number(it.qty)||0;return q?doneQty(p,it)/q:0}
 const doneAmt=(p,it)=>it.mode==="數量"?(Number(it.price)||0)*doneQty(p,it):amt(it)*ratioOf(p,it);
-function itemStat(p,it){if(it.mode==="現場填百分比")return it.code+"｜一式｜累計 "+fmt(ratioOf(p,it)*100)+"%";return it.code+"｜"+(it.qty===null||it.qty===undefined?"":"契約 "+fmt(it.qty)+" "+it.unit+"｜")+"累計 "+fmt(doneQty(p,it))}
+function catTag(it){
+  if(!it||!it.cat||it.cat==="未分類")return "";
+  const m=String(it.code||"").match(/^(\d+)\./);
+  const c=String(it.cat).trim();
+  if(m&&!c.startsWith(m[1]+"."))return m[1]+"."+c;
+  return c;
+}
+function itemStat(p,it){const ct=catTag(it),head=it.code+(ct?" "+ct:"");if(it.mode==="現場填百分比")return head+"｜一式｜累計 "+fmt(ratioOf(p,it)*100)+"%";return head+"｜"+(it.qty===null||it.qty===undefined?"":"契約 "+fmt(it.qty)+" "+it.unit+"｜")+"累計 "+fmt(doneQty(p,it))}
 function progOf(p){let total=0,done=0;const cats={};p.items.forEach(it=>{if(!it.prog)return;const a=amt(it),d=doneAmt(p,it);total+=a;done+=d;const c=cats[it.cat]=cats[it.cat]||{name:it.cat,total:0,done:0};c.total+=a;c.done+=d});
   const sites={};if(p.multi)p.items.forEach(it=>{if(!it.prog||it.mode!=="數量")return;const s=(((p.sums||{})[it.code])||{}).s||{};Object.keys(s).forEach(k=>{sites[k]=(sites[k]||0)+(Number(it.price)||0)*s[k]})});
   return{total,done,cats:Object.values(cats),sites}}
@@ -882,7 +1106,7 @@ function viewPhotos(p,m,rs){const sec=h("section",{class:"card"},h("h2",{},(p.sh
     sec.append(h("div",{class:"cat"},"📅 "+g.date+" "+wkOf(g.date)+(g.site?"｜"+g.site:"")+"　🛠 "+g.brief),photoGrid(g.ph,(p.short||p.name)+" "+g.date))});
   sec.append(h("p",{class:"note"},n?"點照片可放大檢視或開啟雲端原圖。全部照片皆存於 Google 雲端硬碟「現場回報照片」資料夾,依工程、日期分類。":"這個月沒有照片。現場在回報頁的「現場照片」或施工項目附上照片後,會出現在這裡。"));return [sec]}
 function daysAgo(d){return Math.round((new Date(today()+"T00:00:00")-new Date(String(d)+"T00:00:00"))/86400000)}
-function canEditReport(r){return !!S.g&&(S.admin||daysAgo(r.date)<=(S.editDays||14))}
+function canEditReport(r){return !!S.g&&daysAgo(r.date)<=(S.editDays||7)}
 function startEdit(r){const c=x=>JSON.parse(JSON.stringify(x||{}));S.editId=r.id;S.pid=r.pid;ls.set("pid",r.pid);S.boss=false;S.view="report";S.repMode="daily";S.pick=null;
   S.draft={date:r.date,am:r.am||"",pm:r.pm||"",nowork:r.nowork||"",work:r.work||"",tech:r.tech||0,gen:r.gen||0,lab:r.lab||0,mach:c(r.mach),machOther:r.machOther||"",soil:JSON.parse(JSON.stringify(r.soil||[])),entries:JSON.parse(JSON.stringify(r.entries||[])),materials:r.materials||"",sample:r.sample||"",notes:r.notes||"",tomorrow:r.tomorrow||"",crew:c(r.crew),crewOt:c(r.crewOt),traffic:r.traffic||0,ot:r.ot||"",photos:JSON.parse(JSON.stringify(r.photos||[])),mats:JSON.parse(JSON.stringify(r.mats||[])),place:r.place||"",by:r.by||ls.get("by",""),site:r.site||""};
   try{location.hash="report"}catch(e){}render();window.scrollTo(0,0)}
@@ -922,7 +1146,7 @@ function viewPeople(){const out=[],mo=S.month,rs=rowsFor("",mo);const ym=mo.spli
 function viewSet(){const p=proj(),out=[];const act=new Set(p.active||[]);
   const sec=h("section",{class:"card"},h("h2",{},"本週施工中的項目｜"+(p.short||p.name)),h("p",{class:"note"},"勾選的項目會變成「回報」頁的大按鈕。建議維持 5 到 10 項。"));
   if(!S.canWrite)sec.append(h("div",{class:"msg warn"},"名單與大按鈕只有管理者可以修改。請用管理者通行碼登入。"));
-  (p.cats||[]).forEach(c=>{sec.append(h("div",{class:"cat"},c.name));p.items.filter(i=>i.cat===c.code).forEach(it=>{const cb=h("input",{type:"checkbox",id:"a_"+it.code,disabled:!S.canWrite});cb.checked=act.has(it.code);
+  (p.cats||[]).forEach(c=>{const firstIt=p.items.find(i=>i.cat===c.code);sec.append(h("div",{class:"cat"},catTag(firstIt)||c.name));p.items.filter(i=>i.cat===c.code).forEach(it=>{const cb=h("input",{type:"checkbox",id:"a_"+it.code,disabled:!S.canWrite});cb.checked=act.has(it.code);
     cb.addEventListener("change",async()=>{cb.checked?act.add(it.code):act.delete(it.code);const next=p.items.filter(i=>act.has(i.code)).map(i=>i.code);try{await S.db.doc("projects/"+p.id).update({active:next})}catch(e){S.err="清單沒有存成功。";render()}});
     sec.append(h("label",{class:"chk",for:"a_"+it.code},cb,h("span",{},it.code+" "+it.name+"("+fmt(it.qty)+" "+it.unit+")")))})});
   if(!p.items.length)sec.append(h("p",{class:"note"},"這個工程還沒有匯入契約項目。"));
@@ -941,7 +1165,7 @@ function svgPhoto(title,sub,bg){
   return "data:image/svg+xml;utf8,"+encodeURIComponent(s);
 }
 function demoData(){const mo=S.month,ym=mo.split("-").map(Number),nd=new Date(ym[0],ym[1],0).getDate(),t=today();const ps=S.projects.slice(0,3);const out=[];let seed=7;const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280};
-  const works=S.works.length?S.works:["鋼筋綁紮","模板組立","PC澆置","路緣石施工","土方整理"];
+  const works=S.works.length?S.works:["鋼筋綁紮","模板組立","PC澆置","土方整理"];
   for(let d=1;d<=nd;d++){const date=mo+"-"+String(d).padStart(2,"0");if(date>t)break;
     const isSun=new Date(ym[0],ym[1]-1,d).getDay()===0;
     ps.forEach((p,pi)=>{
@@ -965,6 +1189,7 @@ function render(){const main=$("#main");if(!S.loaded){return}
   const p=proj();if(p){S.pid=p.id;sel.value=p.id}
   document.querySelectorAll("nav button").forEach(b=>b.setAttribute("aria-current",String(b.dataset.v===S.view)));
   $("nav").hidden=S.boss;sel.hidden=S.boss;$("header b").textContent=S.boss?"松青工程總覽":"現場回報";
+  const eb=$("#exitBoss");if(eb)eb.hidden=!S.boss;
   if(S.demo)S.reports=demoData();
   let out=[];if(S.err){out.push(h("div",{class:"msg warn"},S.err));S.err=""}
   if(S.g)S.g.ensure(S.month);
@@ -976,6 +1201,7 @@ function render(){const main=$("#main");if(!S.loaded){return}
   main.replaceChildren(...out);if(S.view!=="report")S.flash="";}
 
 $("#proj").addEventListener("change",e=>{S.pid=e.target.value;S.logSite="";ls.set("pid",S.pid);S.pick=null;S.draft.site="";render()});
+$("#exitBoss").addEventListener("click",()=>{try{location.hash="report"}catch(e){}S.boss=false;S.view="report";render();window.scrollTo(0,0)});
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{S.view=b.dataset.v;S.pick=null;if(["report","log","all","set"].includes(S.view))try{location.hash=S.view==="set"?"items":S.view}catch(e){}render();window.scrollTo(0,0)}));
 function fromHash(){const v=location.hash.split("#").filter(Boolean).pop()||"";S.boss=v==="boss"||v==="people"||v==="progress";S.view=v==="people"?"people":v==="progress"?"prog":S.boss?"all":v==="items"?"set":["report","log","all"].includes(v)?v:"report"}
 window.addEventListener("hashchange",()=>{fromHash();render()});fromHash();
@@ -991,8 +1217,8 @@ function pushReports(){S.real=[...G.rep.values()];if(!S.demo)S.reports=S.real}
 function applyLoad(j){if(j.items)G.items=j.items;const sites={},info={};(j.sites||[]).forEach(s=>{const o=Object.assign({name:s[1],status:s[2]||"施工中"},s[3]||{});(info[s[0]]=info[s[0]]||[]).push(o);if(siteOpen(o))(sites[s[0]]=sites[s[0]]||[]).push(s[1])});
   S.projects=j.projects.map(a=>{const its=(G.items[a.id]||[]).map(x=>({code:x[0],name:x[1],unit:x[2],price:x[3],qty:x[4],cat:x[5]||"未分類",mode:x[6],basis:x[7],prog:x[8],base:x[9],on:x[10]}));const cats=[];its.forEach(i=>{if(!cats.some(c=>c.code===i.cat))cats.push({code:i.cat,name:i.cat})});
     return Object.assign({},a,{items:its,cats,active:its.filter(i=>i.on).map(i=>i.code),sites:sites[a.id]||[],siteInfo:info[a.id]||[],dispatch:(j.dispatch||{})[a.id]||{},sums:(j.sums||{})[a.id]||{},note:a.status==="未開工"?(a.note||"尚未開工"):""})});
-  const c=j.config||{};S.roster=c.workers||[];S.crews=(c.crews||[]).filter(x=>x!=="菲吉");if((c.machines||[]).length){S.machines=c.machines.map(x=>String(x).replace(/^怪手/,"挖土機"));if(!S.machines.some(x=>x.startsWith("鏟裝機")))S.machines.push("鏟裝機")}S.works=c.works||[];if((c.dests||[]).length)S.dests=c.dests;if((c.soilTypes||[]).length)S.soilTypes=c.soilTypes.map(x=>x==="垃圾"?"廢棄物":x);S.samples=(c.samples&&c.samples.length)?c.samples:DEFAULT_SAMPLES.slice();
-  S.admin=j.role==="admin";S.canWrite=S.admin;S.canEdit=S.admin;S.editDays=j.editDays||3;
+  const c=j.config||{};S.roster=c.workers||[];S.crews=(c.crews||[]).filter(x=>x!=="菲吉");if((c.machines||[]).length){S.machines=c.machines.map(x=>String(x).replace(/^怪手/,"挖土機"));if(!S.machines.some(x=>x.startsWith("鏟裝機")))S.machines.push("鏟裝機")}S.works=(c.works||[]).filter(w=>!REMOVED_WORKS.includes(w));if((c.dests||[]).length)S.dests=c.dests;if((c.soilTypes||[]).length)S.soilTypes=c.soilTypes.map(x=>x==="垃圾"?"廢棄物":x);S.samples=(c.samples&&c.samples.length)?c.samples.filter(s=>!/^混凝土\s*(140|210|280)/.test(s)):DEFAULT_SAMPLES.slice();
+  S.admin=j.role==="admin";S.canWrite=S.admin;S.canEdit=S.admin;S.editDays=j.editDays||7;
   const keep=new Map();G.rep.forEach((r,id)=>{if(r.date.slice(0,7)<j._from)keep.set(id,r)});j.reports.forEach(r=>keep.set(r.id,r));G.rep=keep;pushReports()}
 async function reload(lite){const from=G.from||prevMonth(today().slice(0,7));const j=await api("load",{from,to:"9999-12",lite:!!lite});j._from=from;G.from=from;applyLoad(j);S.loaded=true;render()}
 function setActiveLocal(pid,codes){(G.items[pid]||[]).forEach(x=>{x[10]=codes.includes(x[0])?1:0})}
