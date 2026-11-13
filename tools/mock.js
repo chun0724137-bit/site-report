@@ -11,7 +11,7 @@ function mk(){
     setValues(v){for(let i=0;i<v.length;i++){const y=this.r-1+i;while(this.sh.d.length<=y)this.sh.d.push([]);for(let j=0;j<v[i].length;j++){let x=v[i][j];
       if(typeof x==='string'&&/^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?$/.test(x))x=new Date(x.replace(' ','T')+(x.length>10?'':'T00:00:00')); // Sheets auto-parses dates
       this.sh.d[y][this.c-1+j]=x}}return chain(this)}
-    setValue(x){return this.setValues([[x]])} getValue(){return this.getValues()[0][0]} getSheet(){return this.sh} getRow(){return this.r}
+    setValue(x){return this.setValues([[x]])} getValue(){return this.getValues()[0][0]} getSheet(){return this.sh} getRow(){return this.r} getColumn(){return this.c}
     merge(){if(this.nr>1||this.nc>1)this.sh.merges.push([this.c,this.c+this.nc-1]);return chain(this)} breakApart(){this.sh.merges=[];return chain(this)}
     clearContent(){for(let i=0;i<this.nr;i++){const row=this.sh.d[this.r-1+i];if(row)for(let j=0;j<this.nc;j++)row[this.c-1+j]=''}return chain(this)}}
   class Sheet{constructor(n){this.n=n;this.d=[];this.merges=[];return chain(this)}
@@ -23,7 +23,11 @@ function mk(){
     getRange(r,c,nr,nc){return new Range(this,r,c,nr||1,nc||1)} deleteRow(r){this.d.splice(r-1,1)}}
   function book(name){const sheets={},order=[];const b={name,id:'BOOK'+books.length,
     getSheets:()=>order.map(n=>sheets[n]).filter(Boolean),getSheetByName:n=>Object.values(sheets).find(s=>s.getName()===n)||null,
-    insertSheet:n=>{const s=new Sheet(n);sheets[n]=s;order.push(n);return s},getSpreadsheetTimeZone:()=>'Asia/Taipei',getId(){return this.id},getUrl(){return 'https://docs.google.com/'+this.id},sheets};
+    insertSheet:n=>{const s=new Sheet(n);sheets[n]=s;order.push(n);return s},
+    deleteSheet:sh=>{const n=sh&&sh.getName();if(n){delete sheets[n];const i=order.indexOf(n);if(i>=0)order.splice(i,1)}},
+    setActiveSheet:sh=>{b._act=sh},
+    moveActiveSheet:pos=>{if(!b._act)return;const n=b._act.getName(),i=order.indexOf(n);if(i>=0){order.splice(i,1);order.splice(Math.max(0,pos-1),0,n)}},
+    getSpreadsheetTimeZone:()=>'Asia/Taipei',getId(){return this.id},getUrl(){return 'https://docs.google.com/'+this.id},sheets,order};
     books.push(b);return b}
   const ss=book('main');const sheets=ss.sheets;
   const pad=n=>String(n).padStart(2,'0');
@@ -38,10 +42,11 @@ function mk(){
   vm.createContext(g);vm.runInContext(fs.readFileSync(__dirname+'/../backend/Code.gs','utf8'),g);
   vm.runInContext('setup()',g);
   const put=(n,rows)=>rows.forEach(r=>sheets[n].d.push(r.map(v=>v===null?'':v)));
-  put('工程',seed.projects);put('派工地點',seed.sites);put('設定',seed.config);if(seed.dispatch)put('派工數量',seed.dispatch);
+  put('工程',seed.projects);put('派工地點',seed.sites);put('設定',seed.config);
   if(seed.types){const w=sheets['工程'],hd=w.d[0],ti=hd.indexOf('工程類型')>=0?hd.indexOf('工程類型'):hd.length;hd[ti]='工程類型';w.d.forEach(r=>{if(seed.types[r[0]])r[ti]=seed.types[r[0]]})}
   vm.runInContext('ENSURED={};setup()',g);const sn={};seed.projects.forEach(p=>sn[p[0]]='契約-'+p[2]);
-  seed.items.forEach(r=>sheets[sn[r[0]]].d.push([r[1],r[2],r[3],r[4],r[5]===null?'':r[5],'','',r[6],r[7],r[8],r[9],r[10],r[11]]));
+  seed.items.forEach(r=>{if(sheets[sn[r[0]]])sheets[sn[r[0]]].d.push([r[1],r[2],r[3],r[4],r[5]===null?'':r[5],'','',r[6],r[7],r[8],r[9],r[10],r[11]])});
+  vm.runInContext('rebuildDiaries_()',g);
   return {g,sheets,books,call:q=>vm.runInContext('handle_('+JSON.stringify(q)+')',g),run:s=>vm.runInContext(s,g)};
 }
 module.exports=mk;

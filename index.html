@@ -225,8 +225,8 @@ function siteNodes(p,d){const tags=h("div",{class:"sug"});(p.sites||[]).forEach(
   const i=h("input",{id:"f_newsite",type:"text",placeholder:"新增派工地點,例:實踐國小"});
   return [h("div",{class:"f"},"派工地點(必選)",(p.sites||[]).length?tags:h("span",{class:"note"},"還沒有地點,請在下面新增。")),h("div",{class:"row"},i,h("button",{type:"button",class:"btn",onclick:async()=>{const v=i.value.trim();if(!v)return;const next=[...new Set([...(p.sites||[]),v])];d.site=v;try{await S.db.doc("projects/"+p.id).update({sites:next})}catch(e){S.err="地點沒有存成功。"}render()}},"新增地點"))]}
 const MACH_BUILTIN=["水車","工程車","吊車:?噸","廢棄物清運=米"];
-// 機具清單寫法:「怪手:80型/120型」點開選型號;「吊車:?噸」點了填噸數(記成 25噸吊車);「廢棄物清運=米」填的是米數不是台數
-function machList(){const base=n=>n.split(/[:：=]/)[0].trim();const l=[...S.machines];MACH_BUILTIN.forEach(b=>{if(!l.some(m=>base(m)===base(b)))l.push(b)});return l.map(m=>{const q=m.split("=");if(q.length>1)return{name:q[0].trim(),qtyUnit:q[1].trim()};const pr=m.split(/[:：]/),name=pr[0].trim(),v=(pr[1]||"").trim();
+// 機具清單寫法:「怪手:80型/120型」點開選型號;「吊車:?噸」點了填噸數(記成 25噸吊車);「廢棄物清運=米」填的是米數不是台數(支援各工程專屬機具)
+function machList(){const base=n=>n.split(/[:：=]/)[0].trim();const p=proj();const src=(p&&p.machines&&p.machines.length)?p.machines:S.machines;const l=[...src];MACH_BUILTIN.forEach(b=>{if(!l.some(m=>base(m)===base(b)))l.push(b)});return l.map(m=>{const q=m.split("=");if(q.length>1)return{name:q[0].trim(),qtyUnit:q[1].trim()};const pr=m.split(/[:：]/),name=pr[0].trim(),v=(pr[1]||"").trim();
   if(v.startsWith("?"))return{name,spec:v.slice(1).trim()||"噸"};return{name,vars:v?v.split("/").map(s=>s.trim()).filter(Boolean):[]}})}
 const machUnitOf=n=>{const m=/^(.+)\((.+)\)$/.exec(n);return m&&machList().some(x=>x.qtyUnit===m[2]&&x.name===m[1])?{name:m[1],unit:m[2]}:null};
 function machNodes(d){const tags=h("div",{class:"sug"});const add=(n,k)=>{d.mach[n]=(d.mach[n]||0)+(k||1);S.machOpen="";render()};const L=machList();
@@ -436,7 +436,7 @@ function viewAll(){const out=[],t=today(),mo=S.month;const cs=r=>rHeadcount(r);
   const sec=h("section",{class:"card"},h("h2",{},"各工地今日狀況與進度（點選看各日照片）"));
   liveProjects().forEach(p=>{const all=S.reports.filter(r=>r.pid===p.id),td=all.filter(r=>r.date===t),mon=all.filter(r=>String(r.date).startsWith(mo));
     const last=all.map(r=>r.date).sort().pop();const ppl=td.reduce((a,r)=>a+cs(r),0);const days=new Set(mon.filter(r=>!r.nowork).map(r=>r.date)).size;
-    if(p.multi&&((p.siteInfo||[]).length||Object.keys(p.dispatch||{}).length)){sec.append(multiCard(p,all,td,t,ppl,days,last));return}
+    if(p.multi){sec.append(multiCard(p,all,td,t,ppl,days,last));return}
     const nw=td.find(r=>r.nowork),phCnt=all.reduce((s,r)=>s+photosOf(r).length,0);
     sec.append(h("button",{type:"button",class:"proj",style:"background:var(--card);text-align:left;width:100%;cursor:pointer",onclick:()=>{S.pid=p.id;ls.set("pid",p.id);S.logSite="";S.logTab="每日紀錄與照片";S.openRepId=td[0]?td[0].id:"";S.view="log";$("#proj").value=p.id;render();window.scrollTo(0,0)}},
       h("div",{class:"h"},h("b",{},(p.short||p.name)+" ›"),h("span",{class:"pill "+(td.length||(p.note&&!all.length)?"ok":"warn")},nw?"今日未施工("+nw.nowork+")":td.length?"今日已回報":(p.note&&!all.length?p.note:"今日未回報"))),
@@ -626,7 +626,11 @@ function viewSet(){const p=proj(),out=[];const act=new Set(p.active||[]);
     sec.append(h("label",{class:"chk",for:"a_"+it.code},cb,h("span",{},it.code+" "+it.name+"("+fmt(it.qty)+" "+it.unit+")")))})});
   if(!p.items.length)sec.append(h("p",{class:"note"},"這個工程還沒有匯入契約項目。"));
   out.push(sec);if(S.admin&&p.multi)out.push(siteAdmin(p));if(S.admin)out.push(projAdmin());
-  const ta=h("textarea",{id:"f_roster",disabled:!S.canWrite});ta.value=S.roster.join("、");const tc=h("input",{id:"f_crews",type:"text",disabled:!S.canWrite});tc.value=S.crews.join("、");const tm=h("textarea",{id:"f_mach",disabled:!S.canWrite});tm.value=S.machines.join("、");const tw=h("textarea",{id:"f_works",disabled:!S.canWrite});tw.value=S.works.join("、");const tdd=h("input",{id:"f_dests",type:"text",disabled:!S.canWrite});tdd.value=S.dests.join("、");const sp=v=>[...new Set(v.split(/[、,，\n]/).map(s=>s.trim()).filter(Boolean))];
+  const sp=v=>[...new Set(v.split(/[、,，\n]/).map(s=>s.trim()).filter(Boolean))];
+  const pmInput=h("textarea",{id:"f_pmach",disabled:!S.canWrite,placeholder:"留空則使用下方的共用機具清單；若在試算表「日誌_"+(p.short||p.name)+"」修改重要事項的機具標題(如把破碎機改成壓路機)也會自動同步到這裡"});
+  pmInput.value=(p.machines||[]).join("、");
+  out.push(h("section",{class:"card"},h("h2",{},"本工程專屬機具｜"+(p.short||p.name)),h("p",{class:"note"},"可針對此工程設定專屬機具（例：怪手:80型/120型、壓路機、傾卸貨車）。您也可以直接在 Google 試算表「日誌_"+(p.short||p.name)+"」下方的「重要事項」把機具欄標題改掉（如破碎機改壓路機），前端按鈕會自動跟著變動！"),pmInput,h("button",{type:"button",class:"btn primary",disabled:!S.canWrite,onclick:async()=>{try{await S.db.doc("projects/"+p.id).update({machines:sp(pmInput.value)});S.flash="已儲存「"+(p.short||p.name)+"」專屬機具。";render()}catch(e){S.err="機具沒有存成功。";render()}}},"儲存本工程機具")));
+  const ta=h("textarea",{id:"f_roster",disabled:!S.canWrite});ta.value=S.roster.join("、");const tc=h("input",{id:"f_crews",type:"text",disabled:!S.canWrite});tc.value=S.crews.join("、");const tm=h("textarea",{id:"f_mach",disabled:!S.canWrite});tm.value=S.machines.join("、");const tw=h("textarea",{id:"f_works",disabled:!S.canWrite});tw.value=S.works.join("、");const tdd=h("input",{id:"f_dests",type:"text",disabled:!S.canWrite});tdd.value=S.dests.join("、");
   out.push(h("section",{class:"card"},h("h2",{},"名單設定(所有工程共用)"),h("p",{class:"note"},"用頓號或換行分隔。"),ta,h("label",{class:"f"},"小工班(會帶人,回報時填人數)",tc),h("label",{class:"f"},"機具清單",tm),h("label",{class:"f"},"出土去處",tdd),h("label",{class:"f"},"常用工作名稱(現場統一用語)",tw),h("button",{type:"button",class:"btn primary",disabled:!S.canWrite,onclick:async()=>{const names=[...new Set(ta.value.split(/[、,，\n]/).map(s=>s.trim()).filter(Boolean))];const cr=[...new Set(tc.value.split(/[、,，\n]/).map(s=>s.trim()).filter(Boolean))].filter(n=>names.includes(n));try{await S.db.doc("config/roster").set({workers:names,crews:cr,machines:sp(tm.value),dests:sp(tdd.value),works:sp(tw.value)})}catch(e){S.err="名單沒有存成功。";render()}}},"儲存名單")));
   if(S.g)out.push(h("button",{type:"button",class:"btn",onclick:()=>{ls.set("gkey","");G.key="";S.loaded=false;gate("")}},"更換通行碼(目前身分:"+(S.admin?"管理者":"現場")+")"));
   return out;}
@@ -693,7 +697,7 @@ async function reload(lite){const from=G.from||prevMonth(today().slice(0,7));con
 function setActiveLocal(pid,codes){(G.items[pid]||[]).forEach(x=>{x[10]=codes.includes(x[0])?1:0})}
 const gdb={collection:()=>({add:async d=>{const data=Object.assign({},d);const id=data._id||"";delete data._id;const j=await api("report",{id,data});await reload(true);return{id:j.id}}}),
   doc:path=>{const parts=path.split("/"),c=parts[0],id=parts[1];return{
-    update:async u=>{if(c==="projects"){if(u.sites)await api("addSite",{pid:id,sites:u.sites});if(u.active){await api("setActive",{pid:id,active:u.active});setActiveLocal(id,u.active)}if(u.status)await api("saveProject",{project:{id,status:u.status}})}await reload(true)},
+    update:async u=>{if(c==="projects"){if(u.sites)await api("addSite",{pid:id,sites:u.sites});if(u.active){await api("setActive",{pid:id,active:u.active});setActiveLocal(id,u.active)}if(u.status)await api("saveProject",{project:{id,status:u.status}});if(u.machines!==undefined)await api("saveProject",{project:{id,machines:u.machines}})}await reload(true)},
     set:async v=>{if(c==="config")await api("saveConfig",{config:v});else if(c==="projects")await api("saveProject",{project:Object.assign({},v,id==="new"?{}:{id})});await reload(true)},
     delete:async()=>{await api("deleteReport",{id,by:ls.get("by","")});G.rep.delete(id);await reload(true)}}}};
 function photoUrl(v){const m=String(v||"").match(/\/d\/([^/]+)/);return m?"https://drive.google.com/thumbnail?id="+m[1]+"&sz=w400":String(v||"")}

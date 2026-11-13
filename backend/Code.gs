@@ -4,24 +4,15 @@
  * 執行身分:我;存取權:所有人。通行碼在「設定」分頁。
  */
 var HEAD = {
-  '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型'],
+  '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型', '常用機具'],
   '派工地點': ['工程代號', '地點', '狀態', '區域', '工作性質', '開工日', '預定完工日', '實際完工日'],
-  '派工數量': ['工程代號', '派工地點', '項次', '派工數量'],
   '設定': ['類別', '值', '屬性'],
-  '每日回報': ['回報編號', '日期', '工程代號', '工程', '派工地點', '上午天氣', '下午天氣', '回報人', '技術工', '普通工', '體力工', '義交', '加班或其他', '材料進場', '取樣', '備註', '明日預定', '送出時間', '修改時間', '修繕地點', '未施工原因'],
-  '人力': ['回報編號', '日期', '工程', '派工地點', '姓名', '工數', '加班時數'],
-  '出土': ['回報編號', '日期', '工程', '派工地點', '土質', '去處', '車次', '每台米數', '合計米數', '來源工程'],
-  '施工項目': ['回報編號', '日期', '工程', '派工地點', '項次', '項目', '單位', '計量', '數量', '位置', '量測方式', '照片', '台數', '時數'],
-  '機具': ['回報編號', '日期', '工程', '派工地點', '機具', '台數'],
-  '照片': ['回報編號', '日期', '工程', '派工地點', '說明', '連結'],
-  '物料': ['回報編號', '日期', '工程', '派工地點', '物料', '數量', '單位'],
-  '修改紀錄': ['時間', '動作', '回報編號', '修改人', '修改前內容']
+  '每日回報': ['回報編號', '日期', '工程代號', '工程', '派工地點', '上午天氣', '下午天氣', '回報人', '技術工', '普通工', '體力工', '義交', '人員出工與加班', '機具', '施工項目', '出土', '材料與物料', '取樣', '備註', '明日預定', '現場照片', '修繕地點', '未施工原因', '送出時間', '最後修改人', '修改時間', '修改前內容', '原始資料JSON']
 };
 var ITEM_HEAD = ['項次', '項目', '單位', '單價', '原契約數量', '第一次變更數量', '第二次變更數量', '分類', '計量方式', '依據分類', '計入進度', '起算累計', '大按鈕'];
 var ITEM_PREFIX = '契約-';
 var DIARY_PREFIX = '日誌_';
-var TEXT_COLS = { '施工項目': ['項次'], '派工數量': ['項次'] };
-var CHILD = ['人力', '出土', '施工項目', '機具', '照片', '物料'];
+var OBSOLETE_SHEETS = ['契約-新店土尾', '契約-機動修繕類', '日誌_新店土尾', '日誌_機動修繕類', '派工數量', '照片', '物料', '修改紀錄', '施工項目', '機具'];
 var EDIT_DAYS = 3;
 var SITE_CLOSED = { '完工': 1, '結案': 1 };
 
@@ -29,11 +20,26 @@ function ss_() { return SpreadsheetApp.getActiveSpreadsheet(); }
 function tz_() { return ss_().getSpreadsheetTimeZone() || 'Asia/Taipei'; }
 function headFor_(name) { return name.indexOf(ITEM_PREFIX) === 0 ? ITEM_HEAD : HEAD[name]; }
 var ENSURED = {};
-/** 取得分頁;沒有就建立。舊分頁缺少的新欄位會自動補在最右邊。 */
+
+function str_(v) { return v === null || v === undefined ? '' : String(v).trim(); }
+function num_(v) { if (v === '' || v === null || v === undefined) return null; var n = Number(v); return isNaN(n) ? null : n; }
+function date_(v) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd');
+  var s = str_(v).replace(/\//g, '-'); var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  return m ? m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2) : s;
+}
+function dt_(v) { if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd HH:mm'); return str_(v).slice(0, 16); }
+function now_() { return Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:mm:ss'); }
+function today_() { return Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd'); }
+
+/** 取得分頁;沒有就建立。每日回報第 1 列為篩選列、第 2 列為標題列。 */
 function sheet_(name) {
+  if (name === '每日回報') return ensureDailySheet_();
   var sh = ss_().getSheetByName(name), hd = headFor_(name);
   if (!sh) {
-    sh = ss_().insertSheet(name); sh.getRange(1, 1, 1, hd.length).setValues([hd]); ENSURED[name] = 1;
+    sh = ss_().insertSheet(name);
+    if (hd) sh.getRange(1, 1, 1, hd.length).setValues([hd]);
+    ENSURED[name] = 1;
     if (name.indexOf(ITEM_PREFIX) === 0) sh.getRange(1, 1, sh.getMaxRows(), 1).setNumberFormat('@');
     return sh;
   }
@@ -45,57 +51,303 @@ function sheet_(name) {
   }
   return sh;
 }
-/** 第一次使用、或更新程式後執行一次:補齊分頁與欄位,項次欄設為純文字,並建立各工程的日誌分頁。 */
-function setup() {
-  Object.keys(HEAD).forEach(function (name) {
-    var sh = sheet_(name), head = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(str_);
-    (TEXT_COLS[name] || []).forEach(function (col) {
-      var i = head.indexOf(col);
-      if (i >= 0) sh.getRange(1, i + 1, Math.max(sh.getMaxRows(), 1), 1).setNumberFormat('@');
-    });
-  });
-  projects_().forEach(function (p) { var sh = sheet_(ITEM_PREFIX + p.short); sh.getRange(1, 1, sh.getMaxRows(), 1).setNumberFormat('@'); });
-  rebuildDiaries_();
+
+/** 確保「每日回報」第 1 列是篩選下拉選單、第 2 列是標題列 */
+function ensureDailySheet_() {
+  var sh = ss_().getSheetByName('每日回報'), hd = HEAD['每日回報'];
+  if (!sh) {
+    sh = ss_().insertSheet('每日回報');
+    var r1 = []; for (var i = 0; i < hd.length; i++) r1.push('');
+    r1[0] = '年度'; r1[1] = '全部'; r1[2] = '月份'; r1[3] = '全部'; r1[4] = '工程'; r1[5] = '全部';
+    r1[6] = '← 黃色格子用下拉選單篩選年、月、工程（選「全部」顯示所有資料）';
+    sh.getRange(1, 1, 2, hd.length).setValues([r1, hd]);
+    styleDailyHeader_(sh, hd.length);
+    ENSURED['每日回報'] = 1;
+    return sh;
+  }
+  if (!ENSURED['每日回報']) {
+    ENSURED['每日回報'] = 1;
+    var lc = Math.max(sh.getLastColumn(), 1);
+    var firstRow = sh.getRange(1, 1, 1, lc).getValues()[0].map(str_);
+    if (firstRow[0] !== '年度') {
+      // 舊版第 1 列是標題列:往下移 1 列
+      var lr = sh.getLastRow();
+      var oldData = lr ? sh.getRange(1, 1, lr, lc).getValues() : [hd];
+      sh.clear();
+      var r1b = []; for (var j = 0; j < Math.max(lc, hd.length); j++) r1b.push('');
+      r1b[0] = '年度'; r1b[1] = '全部'; r1b[2] = '月份'; r1b[3] = '全部'; r1b[4] = '工程'; r1b[5] = '全部';
+      r1b[6] = '← 黃色格子用下拉選單篩選年、月、工程（選「全部」顯示所有資料）';
+      sh.getRange(1, 1, 1, r1b.length).setValues([r1b]);
+      sh.getRange(2, 1, oldData.length, lc).setValues(oldData);
+    }
+    var cur = sh.getRange(2, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(str_);
+    var miss = hd.filter(function (x) { return cur.indexOf(x) < 0; });
+    if (miss.length) sh.getRange(2, cur.length + 1, 1, miss.length).setValues([miss]);
+    styleDailyHeader_(sh, Math.max(sh.getLastColumn(), hd.length));
+  }
+  return sh;
 }
-/** 每個工程一個分頁,名稱為「契約-簡稱」。回傳 {工程代號: 分頁名稱} */
+
+function styleDailyHeader_(sh, w) {
+  try {
+    [2, 4, 6].forEach(function (c) { sh.getRange(1, c).setBackground('#FFF2CC').setFontWeight('bold').setHorizontalAlignment('center').setBorder(true, true, true, true, false, false); });
+    sh.getRange(1, 7).setFontColor('#B4530B').setFontWeight('bold');
+    sh.getRange(2, 1, 1, w).setBackground('#DDEBE8').setFontWeight('bold').setHorizontalAlignment('center');
+    var dv = function (list) { return SpreadsheetApp.newDataValidation().requireValueInList(list.map(String), true).setAllowInvalid(false).build(); };
+    var ys = ['全部']; for (var yy = 2025; yy <= Number(today_().slice(0, 4)) + 1; yy++) ys.push(String(yy));
+    var ms = ['全部', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
+    var ps = ['全部'];
+    try {
+      var psh = ss_().getSheetByName('工程');
+      if (psh && psh.getLastRow() > 1) {
+        var pv = psh.getDataRange().getValues(), ph = (pv[0] || []).map(str_), si = ph.indexOf('簡稱'), ni = ph.indexOf('工程名稱');
+        for (var i = 1; i < pv.length; i++) { var sn = str_(pv[i][si]) || str_(pv[i][ni]); if (sn && ps.indexOf(sn) < 0) ps.push(sn); }
+      }
+    } catch (e2) { }
+    sh.getRange(1, 2).setDataValidation(dv(ys));
+    sh.getRange(1, 4).setDataValidation(dv(ms));
+    sh.getRange(1, 6).setDataValidation(dv(ps));
+    sh.setFrozenRows(2);
+  } catch (err) { }
+}
+
+/** 依「每日回報」第 1 列的年度、月份、工程下拉選單顯示/隱藏資料列 */
+function filterDailySheet_() {
+  try {
+    var sh = ensureDailySheet_(), lr = sh.getLastRow();
+    if (lr < 3) return;
+    var f = sh.getRange(1, 1, 1, 6).getValues()[0];
+    var fy = str_(f[1]), fm = str_(f[3]), fp = str_(f[5]);
+    var head = sh.getRange(2, 1, 1, sh.getLastColumn()).getValues()[0].map(str_);
+    var di = head.indexOf('日期'), pi = head.indexOf('工程');
+    var data = sh.getRange(3, 1, lr - 2, sh.getLastColumn()).getValues();
+    sh.showRows(3, lr - 2);
+    for (var i = 0; i < data.length; i++) {
+      var d = date_(data[i][di]), p = str_(data[i][pi]);
+      if (!d && !p) continue;
+      var yOk = !fy || fy === '全部' || d.slice(0, 4) === fy;
+      var mOk = !fm || fm === '全部' || Number(d.slice(5, 7)) === Number(fm);
+      var pOk = !fp || fp === '全部' || p === fp;
+      if (!yOk || !mOk || !pOk) sh.hideRows(i + 3, 1);
+    }
+  } catch (err) { }
+}
+
+/** 將舊分頁(施工項目、機具、照片、物料、修改紀錄、舊人力、舊出土)的資料合併進「每日回報」,並刪除多餘分頁 */
+function migrateAndCleanup_() {
+  var s = ss_();
+  var shDaily = ensureDailySheet_();
+  var t = read_('每日回報');
+  var byId = {};
+  t.rows.forEach(function (r) { var id = str_(r['回報編號']); if (id) byId[id] = r; });
+
+  var needUpdate = false;
+  var parsed = {};
+  Object.keys(byId).forEach(function (id) {
+    var raw = str_(byId[id]['原始資料JSON']);
+    if (raw) { try { parsed[id] = JSON.parse(raw); } catch (e) { parsed[id] = null; } }
+    if (!parsed[id]) parsed[id] = { crew: {}, crewOt: {}, soil: [], entries: [], mach: {}, machOther: '', photos: [], mats: [], ot: str_(byId[id]['加班或其他'] || '') };
+  });
+
+  // 若舊分頁還在且有資料,先讀進 parsed
+  function readRawSheet_(sname) {
+    var sh = s.getSheetByName(sname); if (!sh || sh.getLastRow() < 2) return [];
+    var v = sh.getDataRange().getValues(), hd = (v[0] || []).map(str_);
+    if (hd[0] !== '回報編號' && hd[0] !== '時間') return [];
+    var out = [];
+    for (var i = 1; i < v.length; i++) { var o = {}; for (var j = 0; j < hd.length; j++) o[hd[j]] = v[i][j]; out.push(o); }
+    return out;
+  }
+
+  readRawSheet_('人力').forEach(function (r) {
+    var p = parsed[str_(r['回報編號'])], n = str_(r['姓名']);
+    if (!p || !n) return;
+    if (num_(r['工數'])) { p.crew[n] = num_(r['工數']); needUpdate = true; }
+    if (num_(r['加班時數'])) { p.crewOt[n] = num_(r['加班時數']); needUpdate = true; }
+  });
+  readRawSheet_('出土').forEach(function (r) {
+    var p = parsed[str_(r['回報編號'])];
+    if (!p || !str_(r['土質'])) return;
+    if (!p._migratedSoil) { p.soil = []; p._migratedSoil = 1; }
+    p.soil.push({ type: str_(r['土質']), dest: str_(r['去處']), trucks: num_(r['車次']) || 0, per: num_(r['每台米數']) || 0, total: num_(r['合計米數']) || 0, src: str_(r['來源工程']) });
+    needUpdate = true;
+  });
+  readRawSheet_('施工項目').forEach(function (r) {
+    var p = parsed[str_(r['回報編號'])];
+    if (!p || (!str_(r['項目']) && !str_(r['項次']))) return;
+    if (!p._migratedEntries) { p.entries = []; p._migratedEntries = 1; }
+    var q = num_(r['數量']);
+    p.entries.push({ code: str_(r['項次']) || '-', name: str_(r['項目']), unit: str_(r['單位']), mode: str_(r['計量']) || '數量', qty: q === null ? '' : q, loc: str_(r['位置']), method: str_(r['量測方式']), photo: str_(r['照片']), cnt: num_(r['台數']), hrs: num_(r['時數']) });
+    needUpdate = true;
+  });
+  readRawSheet_('機具').forEach(function (r) {
+    var p = parsed[str_(r['回報編號'])];
+    if (!p || !str_(r['機具'])) return;
+    var n = num_(r['台數']);
+    if (n === null) p.machOther = str_(r['機具']); else p.mach[str_(r['機具'])] = n;
+    needUpdate = true;
+  });
+  readRawSheet_('照片').forEach(function (r) {
+    var p = parsed[str_(r['回報編號'])];
+    if (!p || !str_(r['連結'])) return;
+    if (!p._migratedPhotos) { p.photos = []; p._migratedPhotos = 1; }
+    p.photos.push({ cap: str_(r['說明']), url: str_(r['連結']) });
+    needUpdate = true;
+  });
+  readRawSheet_('物料').forEach(function (r) {
+    var p = parsed[str_(r['回報編號'])];
+    if (!p || !str_(r['物料'])) return;
+    if (!p._migratedMats) { p.mats = []; p._migratedMats = 1; }
+    p.mats.push({ name: str_(r['物料']), qty: num_(r['數量']), unit: str_(r['單位']) });
+    needUpdate = true;
+  });
+  readRawSheet_('修改紀錄').forEach(function (r) {
+    var row = byId[str_(r['回報編號'])];
+    if (!row) return;
+    row['最後修改人'] = str_(r['修改人']);
+    row['修改時間'] = str_(r['時間']);
+    row['修改前內容'] = str_(r['修改前內容']);
+    needUpdate = true;
+  });
+
+  if (needUpdate) {
+    var head = shDaily.getRange(2, 1, 1, shDaily.getLastColumn()).getValues()[0].map(str_);
+    Object.keys(byId).forEach(function (id) {
+      var r = byId[id], p = parsed[id];
+      delete p._migratedSoil; delete p._migratedEntries; delete p._migratedPhotos; delete p._migratedMats;
+      var sumCols = formatDailySummaries_(p, str_(r['材料進場']));
+      r['人員出工與加班'] = sumCols.crewText;
+      r['機具'] = sumCols.machText;
+      r['施工項目'] = sumCols.entryText;
+      r['出土'] = sumCols.soilText;
+      r['材料與物料'] = sumCols.matText;
+      r['現場照片'] = sumCols.photoText;
+      r['原始資料JSON'] = JSON.stringify(p);
+      var rowVals = head.map(function (h) { return r[h] === undefined || r[h] === null ? '' : r[h]; });
+      shDaily.getRange(r._row, 1, 1, head.length).setValues([rowVals]);
+    });
+  }
+
+  // 刪除不再需要的分頁
+  OBSOLETE_SHEETS.forEach(function (name) {
+    var sh = s.getSheetByName(name);
+    if (sh && s.getSheets().length > 1) { try { s.deleteSheet(sh); } catch (e) { } }
+  });
+}
+
+function formatDailySummaries_(d, materialsStr) {
+  var crew = d.crew || {}, crewOt = d.crewOt || {}, cList = [];
+  Object.keys(crew).forEach(function (n) { if (Number(crew[n]) > 0) cList.push(n + (Number(crew[n]) === 1 ? '' : ' ' + crew[n] + '工') + (crewOt[n] ? '(+' + crewOt[n] + '時)' : '')); });
+  Object.keys(crewOt).forEach(function (n) { if (Number(crewOt[n]) > 0 && !crew[n]) cList.push(n + '(+' + crewOt[n] + '時)'); });
+  if (d.ot) cList.push('備註:' + d.ot);
+
+  var mach = d.mach || {}, mList = Object.keys(mach).filter(function (n) { return Number(mach[n]) > 0; }).map(function (n) { return n + '×' + mach[n]; });
+  if (d.machOther) mList.push(d.machOther);
+
+  var eList = (d.entries || []).map(function (e) {
+    return (e.code && e.code !== '-' ? e.code + ' ' : '') + (e.name || '') + (e.qty !== '' && e.qty !== null && e.qty !== undefined ? ' ' + e.qty + (e.unit || '') : '') + (e.loc ? '(' + e.loc + ')' : '');
+  });
+
+  var sList = (d.soil || []).map(function (e) {
+    return (e.src ? e.src + '｜' : '') + (e.type || '') + (e.dest ? '→' + e.dest : '') + ' ' + (e.trucks || 0) + '台(' + (e.total || 0) + '米)';
+  });
+
+  var matParts = [];
+  if (materialsStr) matParts.push(materialsStr);
+  (d.mats || []).forEach(function (m) { if (m && m.name) matParts.push(m.name + (m.qty !== '' && m.qty !== null && m.qty !== undefined ? ' ' + m.qty : '') + (m.unit || '')); });
+
+  var pList = (d.photos || []).filter(function (x) { return x && x.url; }).map(function (x) { return (x.cap ? x.cap + ':' : '') + x.url; });
+
+  return {
+    crewText: cList.join('、'),
+    machText: mList.join('、'),
+    entryText: eList.join('；'),
+    soilText: sList.join('；'),
+    matText: matParts.join('、'),
+    photoText: pList.join('\n')
+  };
+}
+
+/** 確保工程分頁中:115資本門與115新工開口皆為開口契約,新店土尾為土方暫置,機動修繕類為機動修繕 */
+function normalizeProjectsSheet_() {
+  var sh = sheet_('工程'), t = read_('工程');
+  var hiMulti = t.head.indexOf('開口契約') + 1, hiType = t.head.indexOf('工程類型') + 1;
+  t.rows.forEach(function (r) {
+    var id = str_(r['工程代號']), shName = str_(r['簡稱']) || str_(r['工程名稱']);
+    if (id === 'yanggong1' || id === 'xingong-north' || /開口|資本門/.test(shName)) {
+      if (hiMulti > 0 && str_(r['開口契約']) !== '是') sh.getRange(r._row, hiMulti).setValue('是');
+      if (hiType > 0 && !str_(r['工程類型'])) sh.getRange(r._row, hiType).setValue('開口契約');
+    } else if (id === 'xindian' || /土尾|暫置/.test(shName)) {
+      if (hiType > 0 && str_(r['工程類型']) !== '土方暫置') sh.getRange(r._row, hiType).setValue('土方暫置');
+    } else if (id === 'mobile' || /機動修繕/.test(shName)) {
+      if (hiType > 0 && str_(r['工程類型']) !== '機動修繕') sh.getRange(r._row, hiType).setValue('機動修繕');
+    }
+  });
+}
+
+/** 把「每日回報」分頁移到所有分頁的最後面(最右邊) */
+function moveDailyToLast_() {
+  try {
+    var s = ss_(), sh = s.getSheetByName('每日回報');
+    if (sh) { s.setActiveSheet(sh); s.moveActiveSheet(s.getSheets().length); }
+  } catch (err) { }
+}
+
+/** 第一次使用、或更新程式後執行一次 */
+function setup() {
+  Object.keys(HEAD).forEach(function (name) { sheet_(name); });
+  normalizeProjectsSheet_();
+  projects_().forEach(function (p) {
+    if (p.type === '土方暫置' || p.type === '機動修繕') return;
+    var sh = sheet_(ITEM_PREFIX + p.short);
+    sh.getRange(1, 1, sh.getMaxRows(), 1).setNumberFormat('@');
+  });
+  migrateAndCleanup_();
+  rebuildDiaries_();
+  moveDailyToLast_();
+}
+
+/** 每個工程一個分頁,名稱為「契約-簡稱」(不含土方暫置與機動修繕)。回傳 {工程代號: 分頁名稱} */
 function itemSheets_() {
   var names = {}; ss_().getSheets().forEach(function (sh) { var n = sh.getName(); if (n.indexOf(ITEM_PREFIX) === 0) names[n.slice(ITEM_PREFIX.length).trim()] = n; });
-  var out = {}; projects_().forEach(function (p) { var n = names[p.short] || names[p.name] || names[p.id]; if (n) out[p.id] = n; });
+  var out = {}; projects_().forEach(function (p) {
+    if (p.type === '土方暫置' || p.type === '機動修繕') return;
+    var n = names[p.short] || names[p.name] || names[p.id]; if (n) out[p.id] = n;
+  });
   return out;
 }
-function str_(v) { return v === null || v === undefined ? '' : String(v).trim(); }
-function num_(v) { if (v === '' || v === null || v === undefined) return null; var n = Number(v); return isNaN(n) ? null : n; }
-function date_(v) {
-  if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd');
-  var s = str_(v).replace(/\//g, '-'); var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  return m ? m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2) : s;
-}
-function dt_(v) { if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd HH:mm'); return str_(v).slice(0, 16); }
-function now_() { return Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:mm:ss'); }
-function today_() { return Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd'); }
-/** 讀整張表,回傳 {head, rows:[{欄名:值,_row:列號}]} */
+
+/** 讀整張表,回傳 {head, rows:[{欄名:值,_row:列號}]} (支援「每日回報」第 2 列為標題列) */
 function read_(name) {
-  var sh = sheet_(name); var v = sh.getDataRange().getValues(); var head = (v[0] || []).map(str_); var rows = [];
-  for (var i = 1; i < v.length; i++) {
+  var sh = sheet_(name); var v = sh.getDataRange().getValues();
+  var hRow = (name === '每日回報' && str_((v[0] || [])[0]) === '年度') ? 1 : 0;
+  var head = (v[hRow] || []).map(str_); var rows = [];
+  for (var i = hRow + 1; i < v.length; i++) {
     var o = { _row: i + 1 }, any = false;
     for (var j = 0; j < head.length; j++) { o[head[j]] = v[i][j]; if (v[i][j] !== '' && v[i][j] !== null) any = true; }
     if (any) rows.push(o);
   }
   return { head: head, rows: rows };
 }
+
 function append_(name, objs) {
   if (!objs.length) return;
-  var sh = sheet_(name); var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(str_);
+  var sh = sheet_(name);
+  var hRow = name === '每日回報' ? 2 : 1;
+  var head = sh.getRange(hRow, 1, 1, sh.getLastColumn()).getValues()[0].map(str_);
   var data = objs.map(function (o) { return head.map(function (hd) { var x = o[hd]; return x === undefined || x === null ? '' : x; }); });
-  var r0 = sh.getLastRow() + 1;
-  (TEXT_COLS[name] || []).forEach(function (col) { var i = head.indexOf(col); if (i >= 0) sh.getRange(r0, i + 1, data.length, 1).setNumberFormat('@'); });
+  var r0 = Math.max(sh.getLastRow(), hRow) + 1;
   sh.getRange(r0, 1, data.length, head.length).setValues(data);
 }
+
 function deleteById_(name, id) {
-  var sh = sheet_(name); var last = sh.getLastRow(); if (last < 2) return;
-  var ids = sh.getRange(2, 1, last - 1, 1).getValues();
-  for (var i = ids.length - 1; i >= 0; i--) if (str_(ids[i][0]) === id) sh.deleteRow(i + 2);
+  var sh = sheet_(name); var last = sh.getLastRow();
+  var startRow = name === '每日回報' ? 3 : 2;
+  if (last < startRow) return;
+  var ids = sh.getRange(startRow, 1, last - startRow + 1, 1).getValues();
+  for (var i = ids.length - 1; i >= 0; i--) if (str_(ids[i][0]) === id) sh.deleteRow(i + startRow);
 }
+
 function config_() {
   var c = { workers: [], crews: [], machines: [], soilTypes: [], dests: [], works: [], key: '', adminKey: '' };
   read_('設定').rows.forEach(function (r) {
@@ -110,20 +362,37 @@ function config_() {
   });
   return c;
 }
+
 function role_(key, c) {
   key = str_(key); if (!key) return '';
   if (c.adminKey && key === c.adminKey) return 'admin';
   if (c.key && key === c.key) return c.adminKey ? 'field' : 'admin';
   return '';
 }
+
 function projects_() {
   return read_('工程').rows.map(function (r) {
-    return { id: str_(r['工程代號']), name: str_(r['工程名稱']), short: str_(r['簡稱']) || str_(r['工程名稱']), multi: str_(r['開口契約']) === '是',
+    var id = str_(r['工程代號']), name = str_(r['工程名稱']), shortName = str_(r['簡稱']) || name;
+    var rawType = str_(r['工程類型']);
+    if (!rawType) {
+      if (id === 'xindian' || /土尾|暫置/.test(shortName)) rawType = '土方暫置';
+      else if (id === 'mobile' || /機動修繕/.test(shortName)) rawType = '機動修繕';
+    }
+    var isMulti = str_(r['開口契約']) === '是' || rawType === '開口契約' || id === 'yanggong1' || id === 'xingong-north' || /開口|資本門/.test(shortName);
+    var mStr = str_(r['常用機具']);
+    var machs = mStr ? mStr.split(/[、,，\n]/).map(str_).filter(function (x) { return x; }) : [];
+    return {
+      id: id, name: name, short: shortName, multi: isMulti,
       status: str_(r['狀態']) || '施工中', start: date_(r['開工日']), end: date_(r['完工日']), note: str_(r['備註']), order: num_(r['排序']) || 99,
-      place: str_(r['施工地點']), agency: str_(r['機關名稱']), diaryMode: str_(r['日誌方式']), ch: [date_(r['第一次變更日']), date_(r['第二次變更日'])], type: str_(r['工程類型']) || (str_(r['開口契約']) === '是' ? '開口契約' : '一般') };
+      place: str_(r['施工地點']), agency: str_(r['機關名稱']), diaryMode: str_(r['日誌方式']), ch: [date_(r['第一次變更日']), date_(r['第二次變更日'])],
+      type: rawType || (isMulti ? '開口契約' : '一般'),
+      machines: machs
+    };
   }).filter(function (p) { return p.id; }).sort(function (a, b) { return a.order - b.order; });
 }
+
 function projById_(id) { var out = null; projects_().forEach(function (p) { if (p.id === id || p.short === id || p.name === id) out = out || p; }); return out; }
+
 function items_() {
   var out = {}, map = itemSheets_();
   Object.keys(map).forEach(function (pid) {
@@ -138,70 +407,74 @@ function items_() {
   });
   return out;
 }
+
 /** 契約項目完整資料(含每次變更的數量),給日誌與結算用 */
 function itemsFull_(pid, map) {
   var name = (map || itemSheets_())[pid]; if (!name) return [];
   var t = read_(name), qcols = t.head.filter(function (hd) { return hd.indexOf('變更數量') >= 0; });
   return t.rows.filter(function (r) { return str_(r['項次']); }).map(function (r) {
-    return { code: str_(r['項次']), name: str_(r['項目']), unit: str_(r['單位']), price: num_(r['單價']),
+    return {
+      code: str_(r['項次']), name: str_(r['項目']), unit: str_(r['單位']), price: num_(r['單價']),
       q: [num_(r['原契約數量'])].concat(qcols.map(function (c) { return num_(r[c]); })), cat: str_(r['分類']) || '未分類',
-      mode: str_(r['計量方式']) || '數量', basis: str_(r['依據分類']), prog: str_(r['計入進度']) !== '否', base: num_(r['起算累計']) || 0 };
+      mode: str_(r['計量方式']) || '數量', basis: str_(r['依據分類']), prog: str_(r['計入進度']) !== '否', base: num_(r['起算累計']) || 0
+    };
   });
 }
-/** 某一天有效的契約數量:變更日(工程分頁)當天起改用變更數量;沒填變更日就一直用最新的變更數量 */
+
 function qtyAt_(it, p, date) {
   var q = it.q[0];
   for (var i = 1; i < it.q.length; i++) if (it.q[i] !== null && (!p.ch[i - 1] || date >= p.ch[i - 1])) q = it.q[i];
   return q;
 }
+
 function sites_() {
   return read_('派工地點').rows.map(function (r) {
     return [str_(r['工程代號']), str_(r['地點']), str_(r['狀態']) || '施工中',
       { area: str_(r['區域']), kind: str_(r['工作性質']), start: date_(r['開工日']), plan: date_(r['預定完工日']), done: date_(r['實際完工日']) }];
   }).filter(function (s) { return s[0] && s[1]; });
 }
-/** 派工數量:{工程代號: {派工地點: [[項次, 數量], ...]}};同一項次填好幾列會加總(追加數量) */
-function dispatch_() {
-  var ids = {}; projects_().forEach(function (p) { ids[p.id] = p.id; ids[p.short] = p.id; ids[p.name] = p.id; });
-  var out = {};
-  read_('派工數量').rows.forEach(function (r) {
-    var pid = ids[str_(r['工程代號'])], site = str_(r['派工地點']), code = str_(r['項次']), q = num_(r['派工數量']);
-    if (!pid || !site || !code) return;
-    var list = (out[pid] = out[pid] || {})[site] = (out[pid][site] || []), hit = null;
-    list.forEach(function (x) { if (x[0] === code) hit = x; });
-    if (hit) hit[1] = (hit[1] || 0) + (q || 0); else list.push([code, q]);
-  });
-  return out;
-}
-/** 回報(依月份範圍)與全期累計 */
+
+function dispatch_() { return {}; }
+
+/** 回報(依月份範圍)與全期累計 — 直接從「每日回報」單一分頁讀取 */
 function reports_(from, to, wantSums) {
-  var main = read_('每日回報').rows, pidOf = {}, siteOf = {}, list = {}, order = [];
+  var main = read_('每日回報').rows, list = {}, order = [], sums = {};
   main.forEach(function (r) {
-    var id = str_(r['回報編號']); if (!id) return; var d = date_(r['日期']); pidOf[id] = str_(r['工程代號']); siteOf[id] = str_(r['派工地點']);
+    var id = str_(r['回報編號']); if (!id) return;
+    var d = date_(r['日期']), pid = str_(r['工程代號']), site = str_(r['派工地點']);
+    var raw = {};
+    var jStr = str_(r['原始資料JSON']);
+    if (jStr) { try { raw = JSON.parse(jStr) || {}; } catch (e) { raw = {}; } }
+    var entries = (raw.entries || []).map(function (e) {
+      var q = num_(e.qty);
+      return { code: str_(e.code) || '-', name: str_(e.name), unit: str_(e.unit), mode: str_(e.mode) || '數量', qty: q === null ? '' : q, loc: str_(e.loc), method: str_(e.method), photo: str_(e.photo), cnt: num_(e.cnt), hrs: num_(e.hrs) };
+    });
+
+    if (wantSums && pid) {
+      entries.forEach(function (e) {
+        var code = e.code, q = num_(e.qty), mode = e.mode;
+        if (!code || code === '-' || q === null) return;
+        var p = sums[pid] = sums[pid] || {}, s = p[code] = p[code] || { q: 0, p: null, pd: '', s: {} };
+        if (mode === '累計%' || mode === '現場填百分比') { if (d >= s.pd) { s.p = q; s.pd = d; } }
+        else { s.q += q; if (site) s.s[site] = (s.s[site] || 0) + q; }
+      });
+    }
+
     var m = d.slice(0, 7); if (m < from || m > to) return;
-    list[id] = { id: id, date: d, pid: pidOf[id], site: siteOf[id], am: str_(r['上午天氣']), pm: str_(r['下午天氣']), by: str_(r['回報人']),
-      tech: num_(r['技術工']) || 0, gen: num_(r['普通工']) || 0, lab: num_(r['體力工']) || 0, traffic: num_(r['義交']) || 0, ot: str_(r['加班或其他']),
-      materials: str_(r['材料進場']), sample: str_(r['取樣']), notes: str_(r['備註']), tomorrow: str_(r['明日預定']), at: dt_(r['送出時間']), edited: dt_(r['修改時間']), place: str_(r['修繕地點']), nowork: str_(r['未施工原因']), mats: [],
-      crew: {}, crewOt: {}, soil: [], entries: [], mach: {}, machOther: '', photos: [] };
+    list[id] = {
+      id: id, date: d, pid: pid, site: site, am: str_(r['上午天氣']), pm: str_(r['下午天氣']), by: str_(r['回報人']),
+      tech: num_(r['技術工']) || 0, gen: num_(r['普通工']) || 0, lab: num_(r['體力工']) || 0, traffic: num_(r['義交']) || 0,
+      ot: str_(raw.ot !== undefined ? raw.ot : r['加班或其他']),
+      materials: str_(r['材料進場'] || raw.materials || ''), sample: str_(r['取樣']), notes: str_(r['備註']), tomorrow: str_(r['明日預定']),
+      at: dt_(r['送出時間']), edited: dt_(r['修改時間']), place: str_(r['修繕地點']), nowork: str_(r['未施工原因']),
+      mats: raw.mats || [], crew: raw.crew || {}, crewOt: raw.crewOt || {}, soil: raw.soil || [],
+      entries: entries, mach: raw.mach || {}, machOther: str_(raw.machOther), photos: raw.photos || []
+    };
     order.push(id);
-  });
-  read_('人力').rows.forEach(function (r) { var x = list[str_(r['回報編號'])], n = str_(r['姓名']); if (!x || !n) return; if (num_(r['工數'])) x.crew[n] = num_(r['工數']) || 0; if (num_(r['加班時數'])) x.crewOt[n] = num_(r['加班時數']) || 0; });
-  read_('出土').rows.forEach(function (r) { var x = list[str_(r['回報編號'])]; if (x) x.soil.push({ type: str_(r['土質']), dest: str_(r['去處']), trucks: num_(r['車次']) || 0, per: num_(r['每台米數']) || 0, total: num_(r['合計米數']) || 0, src: str_(r['來源工程']) }); });
-  read_('物料').rows.forEach(function (r) { var x = list[str_(r['回報編號'])]; if (x && str_(r['物料'])) x.mats.push({ name: str_(r['物料']), qty: num_(r['數量']), unit: str_(r['單位']) }); });
-  read_('機具').rows.forEach(function (r) { var x = list[str_(r['回報編號'])]; if (!x) return; var n = num_(r['台數']); if (n === null) x.machOther = str_(r['機具']); else x.mach[str_(r['機具'])] = n; });
-  read_('照片').rows.forEach(function (r) { var x = list[str_(r['回報編號'])]; if (x && str_(r['連結'])) x.photos.push({ cap: str_(r['說明']), url: str_(r['連結']) }); });
-  var sums = {};
-  read_('施工項目').rows.forEach(function (r) {
-    var id = str_(r['回報編號']), code = str_(r['項次']), q = num_(r['數量']), mode = str_(r['計量']) || '數量', x = list[id];
-    if (x) x.entries.push({ code: code || '-', name: str_(r['項目']), unit: str_(r['單位']), mode: mode, qty: q === null ? '' : q, loc: str_(r['位置']), method: str_(r['量測方式']), photo: str_(r['照片']),
-      cnt: num_(r['台數']), hrs: num_(r['時數']) });
-    if (!wantSums || !code || code === '-' || q === null || !pidOf[id]) return;
-    var p = sums[pidOf[id]] = sums[pidOf[id]] || {}, s = p[code] = p[code] || { q: 0, p: null, pd: '', s: {} }, d = date_(r['日期']);
-    if (mode === '累計%') { if (d >= s.pd) { s.p = q; s.pd = d; } }
-    else { s.q += q; var st = siteOf[id] || ''; if (st) s.s[st] = (s.s[st] || 0) + q; }
   });
   return { reports: order.map(function (id) { return list[id]; }), sums: sums };
 }
+
 function daysAgo_(d) { var a = new Date(today_() + 'T00:00:00'), b = new Date(date_(d) + 'T00:00:00'); return Math.round((a - b) / 86400000); }
 function ratio_(it, sums, all) {
   var s = sums[it[0]];
@@ -216,13 +489,75 @@ function ratio_(it, sums, all) {
 function r4_(x) { return Math.round(x * 10000) / 10000; }
 function n_(x) { return String(Math.round(Number(x) * 1000) / 1000); }
 
+/* ===== 機具名稱對照與日誌雙向同步 ===== */
+var DEFAULT_DIARY_MACHS = ['挖土機', '破碎機', '傾卸貨車'];
+function machBaseName_(m) { return str_(m).split(/[:：=(]/)[0].trim(); }
+/** 取得該工程在日誌「重要事項」最後三欄的機具名稱(預設:挖土機、破碎機、傾卸貨車;若工程有設定常用機具則帶入前 3 項) */
+function diaryMachColsFor_(p) {
+  var custom = (p.machines || []).map(machBaseName_).filter(function (x) { return x; });
+  if (!custom.length) return DEFAULT_DIARY_MACHS.slice();
+  var out = custom.slice(0, 3);
+  DEFAULT_DIARY_MACHS.forEach(function (d) { if (out.length < 3 && out.indexOf(d) < 0) out.push(d); });
+  return out;
+}
+/** 檢查現有日誌分頁的「重要事項」標題列是否有被使用者手動修改機具名稱(例如把「破碎機」改成「壓路機」),若有則同步回「工程」分頁的「常用機具」 */
+function syncDiaryMachHeaderFromSheet_(sh, p) {
+  if (!sh || sh.getLastRow() < 15) return;
+  try {
+    var v = sh.getDataRange().getValues();
+    for (var r = 0; r < v.length; r++) {
+      if (str_(v[r][0]) === '日期' && str_(v[r][2]) === '工作項目') {
+        var mCols = [str_(v[r][9]), str_(v[r][10]), str_(v[r][11])].filter(function (x) { return x; });
+        if (mCols.length === 3) {
+          var curCols = diaryMachColsFor_(p);
+          if (mCols.join('|') !== curCols.join('|')) {
+            saveProjectMachinesFromDiary_(p, mCols);
+          }
+        }
+        break;
+      }
+    }
+  } catch (err) { }
+}
+function saveProjectMachinesFromDiary_(p, mCols) {
+  var c = config_();
+  var baseList = (p.machines && p.machines.length ? p.machines.slice() : (c.machines || ['怪手:80型/120型', '破碎機', '傾卸貨車', '泵浦車']).slice());
+  // 將前 3 個機具替換成日誌標題列修改後的名稱(若原為「怪手:80型/120型」且標題為「挖土機」或「怪手」則保留型號設定)
+  var next = mCols.map(function (colName, idx) {
+    var old = baseList[idx] || '';
+    var oldBase = machBaseName_(old);
+    if (old && (oldBase === colName || (colName === '挖土機' && oldBase === '怪手') || (colName === '怪手' && oldBase === '挖土機'))) return old;
+    return colName;
+  });
+  baseList.slice(3).forEach(function (x) {
+    var b = machBaseName_(x);
+    if (mCols.indexOf(b) < 0) next.push(x);
+  });
+  p.machines = next;
+  var sh = sheet_('工程'), t = read_('工程'), ci = t.head.indexOf('常用機具') + 1;
+  if (ci > 0) {
+    t.rows.forEach(function (r) {
+      if (str_(r['工程代號']) === p.id) sh.getRange(r._row, ci).setValue(next.join('、'));
+    });
+  }
+}
+function matchMachCol_(machName, colTitle) {
+  var n = str_(machName), t = str_(colTitle);
+  if (!n || !t) return false;
+  if (n.indexOf(t) >= 0 || t.indexOf(machBaseName_(n)) >= 0) return true;
+  if ((t === '挖土機' || t === '怪手') && /怪手|挖土機/.test(n)) return true;
+  if (t === '破碎機' && /破碎/.test(n)) return true;
+  if (t === '傾卸貨車' && /傾卸|卡車|貨車/.test(n)) return true;
+  return false;
+}
+
 /* ===== 日誌分頁:每個工程一張「日誌_簡稱」,版面比照施工日誌附件;第 1 列的下拉選單選年、月(開口契約再選派工地點) ===== */
 var D_DAY0 = 11, D_PREV = 42, D_CUM = 43, D_NOTE = 44, D_FLAG = 45, D_W = 45, D_FIRST = 8;
 var WD_ = ['日', '一', '二', '三', '四', '五', '六'];
 function col_(c) { var s = ''; while (c > 0) { var m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; }
-/** all:一般工程列出全部契約項目;site:開口契約每個派工地點一份;merge:開口契約全部地點合在一張 */
 function diaryMode_(p) { return p.multi ? (p.diaryMode === '合併' ? 'merge' : 'site') : 'all'; }
 function blank_() { var a = []; for (var i = 0; i < D_W; i++) a.push(''); return a; }
+
 /** 算出日誌的內容(不含格式) */
 function diaryData_(p, ym, site, ctx) {
   var mode = diaryMode_(p), y = Number(ym.slice(0, 4)), mo = Number(ym.slice(5, 7)), nd = new Date(y, mo, 0).getDate();
@@ -237,7 +572,7 @@ function diaryData_(p, ym, site, ctx) {
     r.entries.forEach(function (e) {
       if (!e.code || e.code === '-' || e.qty === '') return;
       var q = Number(e.qty);
-      if (e.mode === '累計%') { (pcs[e.code] = pcs[e.code] || []).push([r.date, q]); return; }
+      if (e.mode === '累計%' || e.mode === '現場填百分比') { (pcs[e.code] = pcs[e.code] || []).push([r.date, q]); return; }
       if (inM) { var d = day[e.code] = day[e.code] || {}; d[di] = (d[di] || 0) + q; } else prevQ[e.code] = (prevQ[e.code] || 0) + q;
       if (r.site) (seen[e.code] = seen[e.code] || {})[r.site] = 1;
     });
@@ -245,8 +580,15 @@ function diaryData_(p, ym, site, ctx) {
   // 要列出的項目
   var list = [], used = {};
   if (mode === 'site') {
-    (((ctx.dispatch[p.id] || {})[site]) || []).forEach(function (x) { used[x[0]] = 1; list.push({ it: byCode[x[0]], code: x[0], dq: x[1], note: byCode[x[0]] ? '' : '契約查無此項次' }); });
-    Object.keys(day).concat(Object.keys(prevQ), Object.keys(pcs)).forEach(function (c) { if (!used[c]) { used[c] = 1; list.push({ it: byCode[c], code: c, dq: null, note: '派工單未列' }); } });
+    all.forEach(function (it) {
+      if (day[it.code] || prevQ[it.code] || pcs[it.code]) {
+        used[it.code] = 1;
+        list.push({ it: it, code: it.code, dq: qtyAt_(it, p, mEnd), note: '' });
+      }
+    });
+    Object.keys(day).concat(Object.keys(prevQ), Object.keys(pcs)).forEach(function (c) {
+      if (!used[c]) { used[c] = 1; list.push({ it: byCode[c], code: c, dq: byCode[c] ? qtyAt_(byCode[c], p, mEnd) : null, note: byCode[c] ? '' : '契約查無此項次' }); }
+    });
   } else {
     all.forEach(function (it) {
       if (mode === 'merge' && !day[it.code] && !prevQ[it.code] && !pcs[it.code]) return;
@@ -265,7 +607,6 @@ function diaryData_(p, ym, site, ctx) {
   var r5 = blank_(); r5[0] = '施工地點'; r5[1] = mode === 'site' ? site : p.place;
   var r6 = blank_(), r7 = blank_();
   ['項次', '項目及說明', '單位', '契約數量', '契約單價', '本月數量', '累計數量', '完成百分比', '契約金額', '累計完成金額'].forEach(function (x, i) { r6[i] = x; });
-  if (mode === 'site') r6[3] = '派工數量';
   for (var d = 1; d <= 31; d++) { if (d <= nd) { r6[D_DAY0 + d - 2] = d; r7[D_DAY0 + d - 2] = WD_[new Date(y, mo - 1, d).getDay()]; } }
   r6[D_PREV - 1] = '以前完成'; r6[D_CUM - 1] = '累計完成'; r6[D_NOTE - 1] = '備註'; r6[D_FLAG - 1] = '計入進度';
   rows.push(r1, r2, r3, r4, r5, r6, r7);
@@ -316,42 +657,67 @@ function diaryData_(p, ym, site, ctx) {
     }
     rows.push(row);
   });
-  // 重要事項:欄位順序與施工日誌 Excel「重要事項」分頁相同,一天一列
+  // 重要事項:欄位順序與施工日誌 Excel「重要事項」分頁相同,一天一列(包含物料/材料進場與可自訂的 3 欄機具)
+  var mCols = diaryMachColsFor_(p);
   rows.push(blank_());
   var im = rows.length + 1, ti = blank_();
-  ti[0] = '重要事項(' + y + ' 年 ' + mo + ' 月)— 複製 A' + (im + 2) + ':L' + (im + 1 + nd) + ',貼到 Excel「重要事項」這個月 1 日那一列的 A 欄(選擇性貼上 → 值)';
-  var ih = blank_(); ['日期', '星期', '工作項目', '主辦督導', '取樣', '協力廠商通知', '技術工', '普通工', '體力工', '挖土機', '破碎機', '傾卸貨車'].forEach(function (x, i) { ih[i] = x; });
+  ti[0] = '重要事項(' + y + ' 年 ' + mo + ' 月)— 複製 A' + (im + 2) + ':L' + (im + 1 + nd) + ',貼到 Excel「重要事項」這個月 1 日那一列的 A 欄(提示:可直接修改 J～L 欄的機具名稱如「壓路機」,前端網頁會自動跟著變動!)';
+  var ih = blank_();
+  ['日期', '星期', '工作項目', '主辦督導', '取樣', '材料/物料進場', '技術工', '普通工', '體力工', mCols[0], mCols[1], mCols[2]].forEach(function (x, i) { ih[i] = x; });
   rows.push(ti, ih);
   var byDay = {};
   reps.forEach(function (r) {
     if (r.date.slice(0, 7) !== ym) return;
-    var di = Number(r.date.slice(8, 10)), b = byDay[di] = byDay[di] || { work: [], notes: [], sample: [], t: 0, g: 0, l: 0, ex: 0, br: 0, du: 0 };
+    var di = Number(r.date.slice(8, 10)), b = byDay[di] = byDay[di] || { work: [], notes: [], sample: [], mat: [], t: 0, g: 0, l: 0, m0: 0, m1: 0, m2: 0 };
     r.entries.forEach(function (e) { if (e.name && b.work.indexOf(e.name) < 0) b.work.push(e.name); });
     if (r.nowork && !b.work.length) b.work.push('未施工(' + r.nowork + ')');
-    if (r.notes) b.notes.push(r.notes); if (r.sample) b.sample.push(r.sample);
+    if (r.notes) b.notes.push(r.notes);
+    if (r.sample) b.sample.push(r.sample);
+    if (r.materials) b.mat.push(r.materials);
+    (r.mats || []).forEach(function (m) {
+      if (m && m.name) {
+        var ms = m.name + (m.qty !== '' && m.qty !== null && m.qty !== undefined ? ' ' + m.qty : '') + (m.unit || '');
+        b.mat.push(ms);
+      }
+    });
     b.t += r.tech; b.g += r.gen; b.l += r.lab;
-    Object.keys(r.mach || {}).forEach(function (n) { var v = Number(r.mach[n]) || 0; if (/怪手|挖土機/.test(n)) b.ex += v; else if (/破碎/.test(n)) b.br += v; else if (/傾卸/.test(n)) b.du += v; });
+    Object.keys(r.mach || {}).forEach(function (n) {
+      var v = Number(r.mach[n]) || 0;
+      if (matchMachCol_(n, mCols[0])) b.m0 += v;
+      else if (matchMachCol_(n, mCols[1])) b.m1 += v;
+      else if (matchMachCol_(n, mCols[2])) b.m2 += v;
+    });
   });
   for (var d3 = 1; d3 <= nd; d3++) {
     var b3 = byDay[d3], row3 = blank_();
     row3[0] = ym + '-' + ('0' + d3).slice(-2); row3[1] = '星期' + WD_[new Date(y, mo - 1, d3).getDay()];
-    if (b3) { row3[2] = b3.work.join('、'); row3[3] = b3.notes.join(';'); row3[4] = b3.sample.join(';'); row3[6] = b3.t || ''; row3[7] = b3.g || ''; row3[8] = b3.l || ''; row3[9] = b3.ex || ''; row3[10] = b3.br || ''; row3[11] = b3.du || ''; }
+    if (b3) {
+      row3[2] = b3.work.join('、');
+      row3[3] = b3.notes.join(';');
+      row3[4] = b3.sample.join(';');
+      row3[5] = b3.mat.join('、');
+      row3[6] = b3.t || ''; row3[7] = b3.g || ''; row3[8] = b3.l || '';
+      row3[9] = b3.m0 || ''; row3[10] = b3.m1 || ''; row3[11] = b3.m2 || '';
+    }
     rows.push(row3);
   }
   rows[1][D_DAY0 - 1] = '藍色區塊要貼到施工日誌 Excel(選擇性貼上 → 值):① K' + D_FIRST + ':AO' + L + ' → 附件 K' + D_FIRST + '　② K' + (ra + 4) + ':AO' + (ra + 5) + '(天氣)→ 附件 K90　③ 最下面的重要事項 → 重要事項分頁';
   return { rows: rows, nd: nd, y: y, mo: mo, L: L, cats: cats, t0: t0, ra: ra, im: im, mode: mode };
 }
+
 function diarySites_(p, ctx) { return (ctx && ctx.sites || sites_()).filter(function (s) { return s[0] === p.id && s[2] !== '結案'; }).map(function (s) { return s[1]; }); }
-/** 日誌需要的資料一次讀好(所有工程共用,不分月份) */
 function diaryCtx_() {
   var map = itemSheets_(), items = {};
   Object.keys(map).forEach(function (pid) { items[pid] = itemsFull_(pid, map); });
-  return { items: items, legacy: items_(), rep: reports_('0000-00', '9999-99', true), dispatch: dispatch_(), sites: sites_() };
+  return { items: items, legacy: items_(), rep: reports_('0000-00', '9999-99', true), sites: sites_() };
 }
-/** 產生(或重寫)一個工程的日誌分頁。格式整批設定,減少呼叫 Google 的次數 */
+
+/** 產生(或重寫)一個工程的日誌分頁 */
 function writeDiary_(p, ym, site, ctx) {
+  var name = DIARY_PREFIX + p.short, existingSh = ss_().getSheetByName(name);
+  if (existingSh) syncDiaryMachHeaderFromSheet_(existingSh, p);
   ctx = ctx || diaryCtx_();
-  var D = diaryData_(p, ym, site, ctx), name = DIARY_PREFIX + p.short, sh = ss_().getSheetByName(name) || ss_().insertSheet(name);
+  var D = diaryData_(p, ym, site, ctx), sh = existingSh || ss_().insertSheet(name);
   var R = D.rows.length, W = D_W, nItem = D.L - D_FIRST + 1, BLUE = '#E6F1FB';
   var full = sh.getRange(1, 1, Math.max(sh.getMaxRows(), R), Math.max(sh.getMaxColumns(), W));
   full.breakApart(); full.clearDataValidations(); sh.clear();
@@ -373,15 +739,18 @@ function writeDiary_(p, ym, site, ctx) {
   row_(bg, D.t0, 8, 10, '#DDEBE8'); row_(bold, D.t0, 8, 10, 'bold'); row_(align, D.t0, 8, 10, 'center');
   row_(bold, D.t0 + 1, 8, 10, 'bold'); row_(size, D.t0 + 1, 8, 10, 13); row_(align, D.t0 + 1, 8, 10, 'center');
   row_(fmt, D.t0 + 1, 8, 9, '#,##0'); fmt[D.t0][9] = '0.00%';
-  for (var i = 0; i < 6; i++) { var rr2 = D.ra + i; row_(bold, rr2, 8, 10, 'bold'); row_(align, rr2, 8, 10, 'right'); row_(align, rr2, D_DAY0, D_DAY0 + 30, 'center'); row_(size, rr2, D_DAY0, D_DAY0 + 30, 9);
-    row_(fmt, rr2, D_DAY0, D_DAY0 + 30, i < 2 ? '#,##0' : i < 4 ? '0.0%' : 'General'); if (i >= 4) row_(bg, rr2, D_DAY0, D_DAY0 + D.nd - 1, BLUE); }
-  for (var d = 1; d <= 31; d++) {   // 假日與當月沒有的日期塗灰
+  for (var i = 0; i < 6; i++) {
+    var rr2 = D.ra + i; row_(bold, rr2, 8, 10, 'bold'); row_(align, rr2, 8, 10, 'right'); row_(align, rr2, D_DAY0, D_DAY0 + 30, 'center'); row_(size, rr2, D_DAY0, D_DAY0 + 30, 9);
+    row_(fmt, rr2, D_DAY0, D_DAY0 + 30, i < 2 ? '#,##0' : i < 4 ? '0.0%' : 'General'); if (i >= 4) row_(bg, rr2, D_DAY0, D_DAY0 + D.nd - 1, BLUE);
+  }
+  for (var d = 1; d <= 31; d++) {
     var wk = d <= D.nd ? new Date(D.y, D.mo - 1, d).getDay() : -1;
     if (wk === 0 || wk === 6 || d > D.nd) { col_v(bg, D_DAY0 + d - 1, 6, 7, '#EDEDED'); if (d > D.nd) { col_v(bg, D_DAY0 + d - 1, D_FIRST, D.L, '#EDEDED'); col_v(bg, D_DAY0 + d - 1, D.ra, D.ra + 5, '#EDEDED'); } }
   }
-  // 重要事項區
+  // 重要事項區(J~L 機具標題設為淺黃底提示可直接編輯)
   bold[D.im - 1][0] = 'bold'; color[D.im - 1][0] = '#B4530B'; size[D.im - 1][0] = 12;
   row_(bg, D.im + 1, 1, 12, '#DDEBE8'); row_(bold, D.im + 1, 1, 12, 'bold'); row_(align, D.im + 1, 1, 12, 'center');
+  row_(bg, D.im + 1, 10, 12, '#FFF2CC');
   for (var r6 = D.im + 2; r6 <= D.im + 1 + D.nd; r6++) { row_(bg, r6, 1, 12, BLUE); fmt[r6 - 1][0] = 'yyyy/mm/dd'; row_(align, r6, 7, 12, 'center'); align[r6 - 1][0] = 'center'; align[r6 - 1][1] = 'center'; }
   var rg = sh.getRange(1, 1, R, W);
   rg.setNumberFormats(fmt); rg.setValues(D.rows);
@@ -389,7 +758,6 @@ function writeDiary_(p, ym, site, ctx) {
   rg.setBackgrounds(bg); rg.setFontWeights(bold); rg.setFontSizes(size); rg.setHorizontalAlignments(align); rg.setFontColors(color);
   sh.getRange(D_FIRST, 2, nItem, 1).setWrap(true); sh.getRange(D_FIRST, D_NOTE, nItem, 1).setWrap(true); sh.getRange(6, 1, 2, W).setWrap(true);
   sh.getRange(D.im + 2, 3, D.nd, 4).setWrap(true);
-  // 合併(不能跨過凍結的第 2 欄)、框線
   sh.getRange(3, D_DAY0, 1, W - D_DAY0 + 1).merge();
   sh.getRange(6, 1, 2, D_DAY0 - 1).mergeVertically(); sh.getRange(6, D_PREV, 2, W - D_PREV + 1).mergeVertically();
   sh.getRange(D.ra, 8, 6, 3).mergeAcross();
@@ -398,17 +766,16 @@ function writeDiary_(p, ym, site, ctx) {
   sh.getRange(D.t0, 8, 2, 3).setBorder(true, true, true, true, true, true);
   sh.getRange(D.ra, 8, 6, 3 + 31).setBorder(true, true, true, true, true, true);
   sh.getRange(D.im + 1, 1, D.nd + 1, 12).setBorder(true, true, true, true, true, true);
-  // 下拉選單
   var dv = function (list) { return SpreadsheetApp.newDataValidation().requireValueInList(list.map(String), true).setAllowInvalid(false).build(); };
   var ys = []; for (var yy = 2025; yy <= Number(today_().slice(0, 4)) + 1; yy++) ys.push(yy);
   sh.getRange(1, 2).setDataValidation(dv(ys)).setBorder(true, true, true, true, false, false);
   sh.getRange(1, 4).setDataValidation(dv([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])).setBorder(true, true, true, true, false, false);
   if (D.mode === 'site') { var sl = diarySites_(p, ctx); if (sl.length) sh.getRange(1, 6).setDataValidation(dv(sl)).setBorder(true, true, true, true, false, false); }
-  // 欄寬、凍結
   sh.setColumnWidth(1, 90); sh.setColumnWidth(2, 280); sh.setColumnWidth(3, 120); sh.setColumnWidths(4, 3, 100); sh.setColumnWidths(7, 2, 80); sh.setColumnWidths(9, 2, 110);
   sh.setColumnWidths(D_DAY0, 31, 52); sh.setColumnWidths(D_PREV, 2, 80); sh.setColumnWidth(D_NOTE, 180); sh.setColumnWidth(D_FLAG, 70);
   sh.setFrozenRows(7); sh.setFrozenColumns(2);
 }
+
 function diarySel_(sh, p) {
   var v = sh.getRange(1, 1, 1, 6).getValues()[0], y = Number(v[1]), m = Number(v[3]), t = today_();
   var ym = y >= 2000 && m >= 1 && m <= 12 ? y + '-' + ('0' + m).slice(-2) : t.slice(0, 7);
@@ -416,8 +783,221 @@ function diarySel_(sh, p) {
   return { ym: ym, site: site };
 }
 function diaryProjects_() { var map = itemSheets_(); return projects_().filter(function (p) { return p.status !== '完工' && p.type !== '土方暫置' && p.type !== '機動修繕' && (p.multi || map[p.id]); }); }
-/** 重新整理日誌:每張日誌維持目前選的年月(與派工地點) */
+
+/* ===== 「出土」分頁(上方選年、月;左邊當月出土明細,右邊並排各案工程出土總計) ===== */
+function ymSel_(sh) {
+  if (!sh || sh.getLastRow() < 1) return today_().slice(0, 7);
+  var v = sh.getRange(1, 1, 1, 4).getValues()[0], y = Number(v[1]), m = Number(v[3]);
+  return y >= 2000 && m >= 1 && m <= 12 ? y + '-' + ('0' + m).slice(-2) : today_().slice(0, 7);
+}
+
+function writeOutSoilSheet_(ym, ctx) {
+  ctx = ctx || diaryCtx_();
+  var sh = ss_().getSheetByName('出土') || ss_().insertSheet('出土');
+  ym = ym || ymSel_(sh);
+  var y = Number(ym.slice(0, 4)), mo = Number(ym.slice(5, 7)), nd = new Date(y, mo, 0).getDate(), mEnd = ym + '-' + ('0' + nd).slice(-2);
+  var pMap = {}; projects_().forEach(function (p) { pMap[p.id] = p.short || p.name; });
+
+  var monthRows = [], sumMap = {}, sumOrder = [];
+  ctx.rep.reports.forEach(function (r) {
+    if (r.date > mEnd) return;
+    var pName = pMap[r.pid] || r.pid, inM = r.date.slice(0, 7) === ym;
+    (r.soil || []).forEach(function (e) {
+      var tr = Number(e.trucks) || 0, tot = Number(e.total) || 0, tp = str_(e.type) || '未填', dst = str_(e.dest);
+      if (inM) {
+        monthRows.push([r.date, '星期' + WD_[new Date(r.date + 'T00:00:00').getDay()], pName, r.site || '', tp, dst, tr, Number(e.per) || '', r4_(tot), e.src || '']);
+      }
+      var k = pName + '@@' + tp;
+      if (!sumMap[k]) { sumMap[k] = { p: pName, t: tp, mTr: 0, mVol: 0, cTr: 0, cVol: 0, dests: {} }; sumOrder.push(k); }
+      var s = sumMap[k];
+      s.cTr += tr; s.cVol += tot;
+      if (inM) { s.mTr += tr; s.mVol += tot; }
+      if (dst) s.dests[dst] = 1;
+    });
+  });
+
+  monthRows.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
+  sumOrder.sort();
+
+  var W = 18;
+  var blank = function () { var a = []; for (var i = 0; i < W; i++) a.push(''); return a; };
+  var rows = [];
+  var r1 = blank(); r1[0] = '年度'; r1[1] = y; r1[2] = '月份'; r1[3] = mo; r1[4] = '← 黃色格子用下拉選單選年、月，選完整張表會自動代入資料';
+  var r2 = blank(); r2[4] = '最後更新:' + now_();
+  var r3 = blank();
+  r3[0] = '一、本月出土明細（' + y + ' 年 ' + mo + ' 月）';
+  r3[11] = '二、各案工程出土總計（截至 ' + y + ' 年 ' + mo + ' 月）';
+  var r4 = blank();
+  ['日期', '星期', '工程', '派工地點', '土質', '去處', '車次(台)', '每台(米)', '合計(米)', '來源工程'].forEach(function (h, i) { r4[i] = h; });
+  ['工程', '土質', '本月車次', '本月米數', '累計總車次', '累計總米數', '去處'].forEach(function (h, i) { r4[11 + i] = h; });
+  rows.push(r1, r2, r3, r4);
+
+  var leftRows = monthRows.slice();
+  var mTrSum = 0, mVolSum = 0;
+  leftRows.forEach(function (x) { mTrSum += Number(x[6]) || 0; mVolSum += Number(x[8]) || 0; });
+  if (!leftRows.length) leftRows.push(['本月無出土紀錄', '', '', '', '', '', '', '', '', '']);
+  leftRows.push(['本月合計', '', '', '', '', '', mTrSum, '', r4_(mVolSum), '']);
+
+  var rightRows = [];
+  var smTr = 0, smVol = 0, scTr = 0, scVol = 0;
+  sumOrder.forEach(function (k) {
+    var s = sumMap[k];
+    smTr += s.mTr; smVol += s.mVol; scTr += s.cTr; scVol += s.cVol;
+    rightRows.push([s.p, s.t, s.mTr || 0, r4_(s.mVol), s.cTr || 0, r4_(s.cVol), Object.keys(s.dests).join('、')]);
+  });
+  if (!rightRows.length) rightRows.push(['尚無出土紀錄', '', '', '', '', '', '']);
+  rightRows.push(['總計', '', smTr, r4_(smVol), scTr, r4_(scVol), '']);
+
+  var maxLen = Math.max(leftRows.length, rightRows.length);
+  for (var i = 0; i < maxLen; i++) {
+    var row = blank();
+    if (leftRows[i]) for (var c = 0; c < 10; c++) row[c] = leftRows[i][c];
+    if (rightRows[i]) for (var c2 = 0; c2 < 7; c2++) row[11 + c2] = rightRows[i][c2];
+    rows.push(row);
+  }
+
+  var R = rows.length;
+  var full = sh.getRange(1, 1, Math.max(sh.getMaxRows(), R), Math.max(sh.getMaxColumns(), W));
+  full.breakApart(); full.clearDataValidations(); sh.clear();
+  var rg = sh.getRange(1, 1, R, W);
+  rg.setValues(rows).setFontFamily('標楷體').setFontSize(11).setVerticalAlignment('middle');
+  [2, 4].forEach(function (c) { sh.getRange(1, c).setBackground('#FFF2CC').setFontWeight('bold').setFontSize(13).setHorizontalAlignment('center').setBorder(true, true, true, true, false, false); });
+  sh.getRange(1, 5, 2, 1).setFontColor('#B4530B').setFontWeight('bold');
+  sh.getRange(3, 1).setFontWeight('bold').setFontSize(13);
+  sh.getRange(3, 12).setFontWeight('bold').setFontSize(13);
+  sh.getRange(4, 1, 1, 10).setBackground('#DDEBE8').setFontWeight('bold').setHorizontalAlignment('center');
+  sh.getRange(4, 12, 1, 7).setBackground('#DDEBE8').setFontWeight('bold').setHorizontalAlignment('center');
+  sh.getRange(4, 1, leftRows.length + 1, 10).setBorder(true, true, true, true, true, true);
+  sh.getRange(4, 12, rightRows.length + 1, 7).setBorder(true, true, true, true, true, true);
+  sh.getRange(4 + leftRows.length, 1, 1, 10).setBackground('#F5F5F5').setFontWeight('bold');
+  sh.getRange(4 + rightRows.length, 12, 1, 7).setBackground('#F5F5F5').setFontWeight('bold');
+  var dv = function (list) { return SpreadsheetApp.newDataValidation().requireValueInList(list.map(String), true).setAllowInvalid(false).build(); };
+  var ys = []; for (var yy = 2025; yy <= Number(today_().slice(0, 4)) + 1; yy++) ys.push(yy);
+  sh.getRange(1, 2).setDataValidation(dv(ys));
+  sh.getRange(1, 4).setDataValidation(dv([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]));
+  sh.setColumnWidth(11, 30);
+  sh.setFrozenRows(4);
+}
+
+/* ===== 「人力」分頁(上方選年、月;左邊當月出工與加班明細,右邊並排各案工程人力總計與每人月小計) ===== */
+function writeCrewSheet_(ym, ctx) {
+  ctx = ctx || diaryCtx_();
+  var sh = ss_().getSheetByName('人力') || ss_().insertSheet('人力');
+  ym = ym || ymSel_(sh);
+  var y = Number(ym.slice(0, 4)), mo = Number(ym.slice(5, 7)), nd = new Date(y, mo, 0).getDate(), mEnd = ym + '-' + ('0' + nd).slice(-2);
+  var pMap = {}, pOrder = [];
+  projects_().forEach(function (p) { pMap[p.id] = p.short || p.name; pOrder.push(p.short || p.name); });
+
+  var monthRows = [], projStats = {}, workerStats = {}, workerOrder = [];
+  pOrder.forEach(function (pn) { projStats[pn] = { mDays: 0, mOt: 0, cDays: 0, cOt: 0, mTrf: 0 }; });
+
+  ctx.rep.reports.forEach(function (r) {
+    if (r.date > mEnd || r.nowork) return;
+    var pName = pMap[r.pid] || r.pid, inM = r.date.slice(0, 7) === ym;
+    if (!projStats[pName]) { projStats[pName] = { mDays: 0, mOt: 0, cDays: 0, cOt: 0, mTrf: 0 }; pOrder.push(pName); }
+    var ps = projStats[pName];
+    var crew = r.crew || {}, crewOt = r.crewOt || {}, names = {};
+    Object.keys(crew).forEach(function (n) { if (Number(crew[n]) > 0) names[n] = 1; });
+    Object.keys(crewOt).forEach(function (n) { if (Number(crewOt[n]) > 0) names[n] = 1; });
+    var nList = Object.keys(names);
+    var dayCrewSum = 0, dayOtSum = 0;
+    nList.forEach(function (n) {
+      var w = Number(crew[n]) || 0, ot = Number(crewOt[n]) || 0;
+      dayCrewSum += w; dayOtSum += ot;
+      if (inM) {
+        monthRows.push([r.date, '星期' + WD_[new Date(r.date + 'T00:00:00').getDay()], pName, r.site || '', n, w || '', ot || '']);
+        if (!workerStats[n]) { workerStats[n] = { days: 0, ot: 0, projs: {} }; workerOrder.push(n); }
+        workerStats[n].days += w;
+        workerStats[n].ot += ot;
+        workerStats[n].projs[pName] = 1;
+      }
+    });
+    var headCnt = (Number(r.tech) || 0) + (Number(r.gen) || 0) + (Number(r.lab) || 0);
+    var effDays = Math.max(dayCrewSum, headCnt);
+    ps.cDays += effDays; ps.cOt += dayOtSum;
+    if (inM) { ps.mDays += effDays; ps.mOt += dayOtSum; ps.mTrf += (Number(r.traffic) || 0); }
+  });
+
+  monthRows.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
+
+  var W = 15;
+  var blank = function () { var a = []; for (var i = 0; i < W; i++) a.push(''); return a; };
+  var rows = [];
+  var r1 = blank(); r1[0] = '年度'; r1[1] = y; r1[2] = '月份'; r1[3] = mo; r1[4] = '← 黃色格子用下拉選單選年、月，選完整張表會自動代入資料';
+  var r2 = blank(); r2[4] = '最後更新:' + now_();
+  var r3 = blank();
+  r3[0] = '一、本月每日出工與加班明細（' + y + ' 年 ' + mo + ' 月）';
+  r3[8] = '二、各案工程人力總計（截至 ' + y + ' 年 ' + mo + ' 月）';
+  var r4 = blank();
+  ['日期', '星期', '工程', '派工地點', '姓名', '工數(日)', '加班(時)'].forEach(function (h, i) { r4[i] = h; });
+  ['工程', '本月出工(工)', '本月加班(時)', '累計總出工(工)', '累計總加班(時)', '本月義交(人)'].forEach(function (h, i) { r4[8 + i] = h; });
+  rows.push(r1, r2, r3, r4);
+
+  var leftRows = monthRows.slice();
+  var mDaySum = 0, mOtSum = 0;
+  leftRows.forEach(function (x) { mDaySum += Number(x[5]) || 0; mOtSum += Number(x[6]) || 0; });
+  if (!leftRows.length) leftRows.push(['本月無點名出工紀錄', '', '', '', '', '', '']);
+  leftRows.push(['本月合計', '', '', '', '', r4_(mDaySum), r4_(mOtSum)]);
+
+  var rightRows = [];
+  var pmDays = 0, pmOt = 0, pcDays = 0, pcOt = 0, pmTrf = 0;
+  pOrder.forEach(function (pn) {
+    var ps = projStats[pn];
+    if (!ps) return;
+    pmDays += ps.mDays; pmOt += ps.mOt; pcDays += ps.cDays; pcOt += ps.cOt; pmTrf += ps.mTrf;
+    rightRows.push([pn, r4_(ps.mDays), r4_(ps.mOt), r4_(ps.cDays), r4_(ps.cOt), ps.mTrf || 0]);
+  });
+  rightRows.push(['總計', r4_(pmDays), r4_(pmOt), r4_(pcDays), r4_(pcOt), pmTrf]);
+  var projTableLen = rightRows.length;
+
+  // 右下角附上本月各人員出工與加班小計
+  rightRows.push(['', '', '', '', '', '']);
+  rightRows.push(['三、本月各人員出工與加班小計（' + y + ' 年 ' + mo + ' 月）', '', '', '', '', '']);
+  rightRows.push(['姓名', '本月出工(工)', '正班時數(時)', '本月加班(時)', '本月總時數', '出工工程']);
+  workerOrder.forEach(function (n) {
+    var ws = workerStats[n], regH = r4_(ws.days * 8), totH = r4_(ws.days * 8 + ws.ot);
+    rightRows.push([n, r4_(ws.days), regH, r4_(ws.ot), totH, Object.keys(ws.projs).join('、')]);
+  });
+  if (!workerOrder.length) rightRows.push(['本月無人員紀錄', '', '', '', '', '']);
+
+  var maxLen = Math.max(leftRows.length, rightRows.length);
+  for (var i = 0; i < maxLen; i++) {
+    var row = blank();
+    if (leftRows[i]) for (var c = 0; c < 7; c++) row[c] = leftRows[i][c];
+    if (rightRows[i]) for (var c2 = 0; c2 < 6; c2++) row[8 + c2] = rightRows[i][c2];
+    rows.push(row);
+  }
+
+  var R = rows.length;
+  var full = sh.getRange(1, 1, Math.max(sh.getMaxRows(), R), Math.max(sh.getMaxColumns(), W));
+  full.breakApart(); full.clearDataValidations(); sh.clear();
+  var rg = sh.getRange(1, 1, R, W);
+  rg.setValues(rows).setFontFamily('標楷體').setFontSize(11).setVerticalAlignment('middle');
+  [2, 4].forEach(function (c) { sh.getRange(1, c).setBackground('#FFF2CC').setFontWeight('bold').setFontSize(13).setHorizontalAlignment('center').setBorder(true, true, true, true, false, false); });
+  sh.getRange(1, 5, 2, 1).setFontColor('#B4530B').setFontWeight('bold');
+  sh.getRange(3, 1).setFontWeight('bold').setFontSize(13);
+  sh.getRange(3, 9).setFontWeight('bold').setFontSize(13);
+  sh.getRange(4, 1, 1, 7).setBackground('#DDEBE8').setFontWeight('bold').setHorizontalAlignment('center');
+  sh.getRange(4, 9, 1, 6).setBackground('#DDEBE8').setFontWeight('bold').setHorizontalAlignment('center');
+  sh.getRange(4, 1, leftRows.length + 1, 7).setBorder(true, true, true, true, true, true);
+  sh.getRange(4, 9, projTableLen + 1, 6).setBorder(true, true, true, true, true, true);
+  sh.getRange(4 + leftRows.length, 1, 1, 7).setBackground('#F5F5F5').setFontWeight('bold');
+  sh.getRange(4 + projTableLen, 9, 1, 6).setBackground('#F5F5F5').setFontWeight('bold');
+  var wHeadRow = 4 + projTableLen + 3;
+  sh.getRange(wHeadRow - 1, 9).setFontWeight('bold').setFontSize(13);
+  sh.getRange(wHeadRow, 9, 1, 6).setBackground('#DDEBE8').setFontWeight('bold').setHorizontalAlignment('center');
+  sh.getRange(wHeadRow, 9, Math.max(workerOrder.length, 1) + 1, 6).setBorder(true, true, true, true, true, true);
+  var dv = function (list) { return SpreadsheetApp.newDataValidation().requireValueInList(list.map(String), true).setAllowInvalid(false).build(); };
+  var ys = []; for (var yy = 2025; yy <= Number(today_().slice(0, 4)) + 1; yy++) ys.push(yy);
+  sh.getRange(1, 2).setDataValidation(dv(ys));
+  sh.getRange(1, 4).setDataValidation(dv([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]));
+  sh.setColumnWidth(8, 30);
+  sh.setFrozenRows(4);
+}
+
+/** 重新整理日誌、土方月報、出土分頁、人力分頁 */
 function rebuildDiaries_(onlyPid) {
+  migrateAndCleanup_();
   var ctx = diaryCtx_();
   diaryProjects_().forEach(function (p) {
     if (onlyPid && p.id !== onlyPid) return;
@@ -429,32 +1009,53 @@ function rebuildDiaries_(onlyPid) {
     if (onlyPid && p.id !== onlyPid) return;
     var sh = ss_().getSheetByName(SOIL_PREFIX + p.short); writeSoil_(p, sh ? soilSel_(sh) : today_().slice(0, 7), ctx);
   });
+  if (!onlyPid) {
+    writeOutSoilSheet_(null, ctx);
+    writeCrewSheet_(null, ctx);
+    moveDailyToLast_();
+  }
 }
-/** 回報、修改、刪除之後:日誌分頁正在顯示同一個月(與同一個派工地點)時才重算 */
+
 function autoDiary_(pid, date, site) {
   try {
-    var p = projById_(pid); if (!p) return;
-    var sh = ss_().getSheetByName(DIARY_PREFIX + p.short); if (!sh) return;
-    var sel = diarySel_(sh, p);
-    if (sel.ym === str_(date).slice(0, 7) && (diaryMode_(p) !== 'site' || sel.site === site)) writeDiary_(p, sel.ym, sel.site);
+    var ctx = diaryCtx_();
+    var p = projById_(pid);
+    if (p) {
+      var sh = ss_().getSheetByName(DIARY_PREFIX + p.short);
+      if (sh) {
+        var sel = diarySel_(sh, p);
+        if (sel.ym === str_(date).slice(0, 7) && (diaryMode_(p) !== 'site' || sel.site === site)) writeDiary_(p, sel.ym, sel.site, ctx);
+      }
+    }
+    writeOutSoilSheet_(null, ctx);
+    writeCrewSheet_(null, ctx);
+    filterDailySheet_();
   } catch (err) { }
 }
-/** 在日誌分頁第 1 列改了年度、月份或派工地點,就自動重算 */
+
+/** 在日誌、土方月報、出土、人力、每日回報改了下拉選單(或修改了日誌的重要事項機具欄標題),就自動重算 */
 function onEdit(e) {
   try {
-    var sh = e.range.getSheet(), n = sh.getName();
-    if (e.range.getRow() !== 1) return;
-    if (n.indexOf(SOIL_PREFIX) === 0) { var sp = projById_(n.slice(SOIL_PREFIX.length)); if (sp) writeSoil_(sp, soilSel_(sh)); return; }
-    if (n.indexOf(DIARY_PREFIX) !== 0) return;
-    var p = projById_(n.slice(DIARY_PREFIX.length)); if (!p) return;
-    var sel = diarySel_(sh, p); writeDiary_(p, sel.ym, sel.site);
+    var sh = e.range.getSheet(), n = sh.getName(), r = e.range.getRow();
+    if (n === '每日回報' && r === 1) { filterDailySheet_(); return; }
+    if (n === '出土' && r === 1) { writeOutSoilSheet_(ymSel_(sh)); return; }
+    if (n === '人力' && r === 1) { writeCrewSheet_(ymSel_(sh)); return; }
+    if (n.indexOf(SOIL_PREFIX) === 0 && r === 1) { var sp = projById_(n.slice(SOIL_PREFIX.length)); if (sp) writeSoil_(sp, soilSel_(sh)); return; }
+    if (n.indexOf(DIARY_PREFIX) === 0) {
+      var p = projById_(n.slice(DIARY_PREFIX.length)); if (!p) return;
+      // 支援直接在日誌「重要事項」標題列修改機具名稱(如把破碎機改成壓路機)或第 1 列選年月地點
+      if (r === 1 || (e.range.getColumn() >= 10 && e.range.getColumn() <= 12)) {
+        syncDiaryMachHeaderFromSheet_(sh, p);
+        var sel = diarySel_(sh, p);
+        writeDiary_(projById_(p.id), sel.ym, sel.site);
+      }
+    }
   } catch (err) { }
 }
 
 /* ===== 土方月報:工程類型「土方暫置」(例:新店土尾)一張「土方月報_簡稱」,第 1 列選年、月 ===== */
 var SOIL_PREFIX = '土方月報_', SOIL_KINDS = ['B5', 'B2-3', '垃圾'], SOIL_NOTE = { 'B5': '無鋼筋或含鋼筋混凝土塊', 'B2-3': '土壤與礫石及砂', '垃圾': '' };
 function soilProjects_() { return projects_().filter(function (p) { return p.type === '土方暫置' && p.status !== '完工'; }); }
-/** 出土去處對應到哪個土方暫置工程:去處含「暫置」;只有一個暫置工程就是它,否則比對簡稱前兩個字(例:新店暫置 → 新店土尾) */
 function soilTarget_(dest, sps) {
   if (!/暫置/.test(dest || '')) return null;
   if (sps.length === 1) return sps[0];
@@ -531,7 +1132,6 @@ function writeSoil_(p, ym, ctx) {
   sh.setFrozenRows(3);
 }
 function soilSel_(sh) { var v = sh.getRange(1, 1, 1, 4).getValues()[0], y = Number(v[1]), m = Number(v[3]); return y >= 2000 && m >= 1 && m <= 12 ? y + '-' + ('0' + m).slice(-2) : today_().slice(0, 7); }
-/** 回報有出土到暫置場、或是土方暫置工程本身的回報:土方月報正在顯示的月份在這筆之後(含同月)就重算 */
 function autoSoil_(p, date, soil) {
   try {
     if (!p) return; var sps = soilProjects_(), targets = [];
@@ -546,9 +1146,7 @@ function autoSoil_(p, date, soil) {
 function settleData_(pid, site) {
   var p = projById_(pid); if (!p) throw new Error('找不到工程');
   var byCode = {}; itemsFull_(p.id).forEach(function (it) { byCode[it.code] = it; });
-  var disp = ((dispatch_()[p.id] || {})[site]) || [], dq = {}, order = [];
-  disp.forEach(function (x) { dq[x[0]] = x[1]; order.push(x[0]); });
-  var per = {};
+  var order = [], per = {};
   reports_('0000-00', '9999-99', false).reports.filter(function (r) { return r.pid === p.id && r.site === site; })
     .sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; })
     .forEach(function (r) {
@@ -567,7 +1165,7 @@ function settleData_(pid, site) {
       return md + ' ' + (e.cnt && e.hrs ? n_(e.cnt) + who + '×' + n_(e.hrs) + '時' : n_(e.qty) + it.unit) + (e.loc ? '(' + e.loc + ')' : '');
     }).join('、');
     var formula = es.map(function (e) { return e.cnt && e.hrs ? n_(e.cnt) + '*' + n_(e.hrs) : n_(e.qty); }).join('+');
-    return { code: code, name: it.name, unit: it.unit, price: it.price, desc: desc, formula: formula, dq: dq[code] === undefined ? null : dq[code], note: dq[code] === undefined ? '派工單未列' : '' };
+    return { code: code, name: it.name, unit: it.unit, price: it.price, desc: desc, formula: formula, dq: null, note: '' };
   });
   return { p: p, site: site, info: info || {}, rows: rows };
 }
@@ -586,7 +1184,6 @@ function writeSettlement_(book, D) {
     widths.forEach(function (x, i) { sh.setColumnWidth(i + 1, x); });
     sh.getRange(1, 1, 3, w).setFontFamily('標楷體');
   }
-  // 數量計算表
   headRows(s1, '工程數量計算表', 8);
   var r = 5, last = 4 + n;
   var d1 = D.rows.map(function (x, i) { var rr = 5 + i; return [x.code, x.name, x.desc, x.formula, x.formula ? '=' + x.formula : 0, x.unit, x.price === null ? '' : x.price, '=ROUND(N(G' + rr + ')*E' + rr + ',0)']; });
@@ -595,15 +1192,12 @@ function writeSettlement_(book, D) {
   table(s1, ['契約項次', '工程項目', '施作項目及說明(由每日回報自動產生)', '計算公式', '合計施作數量', '單位', '單價', '複價'], d1, 8, [70, 220, 380, 220, 90, 50, 80, 90]);
   s1.getRange(5, 7, n + 1, 2).setNumberFormat('#,##0.##'); s1.getRange(5, 8, n + 1, 1).setNumberFormat('#,##0');
   s1.getRange(6 + n, 1, 1, 1).setValue('說明:計算式由現場每日回報產生,可直接修改「計算公式」與「合計施作數量」,明細與派工單會跟著更新。').setFontColor('#B4530B');
-  // 明細
   headRows(s2, '工程數量明細表', 10);
   var d2 = D.rows.map(function (x, i) { var rr = 5 + i; return [x.code, x.name, x.unit, x.price === null ? '' : x.price, '=G' + rr, '=ROUND(N(D' + rr + ')*N(E' + rr + '),0)', '=數量計算表!E' + rr, '=ROUND(N(D' + rr + ')*N(G' + rr + '),0)', '=IF(H' + rr + '-F' + rr + '>0,H' + rr + '-F' + rr + ',0)', '=IF(H' + rr + '-F' + rr + '>0,0,H' + rr + '-F' + rr + ')']; });
   d2.push(['合計', '', '', '', '', '=SUM(F5:F' + last + ')', '', '=SUM(H5:H' + last + ')', '=SUM(I5:I' + last + ')', '=SUM(J5:J' + last + ')']);
   table(s2, ['契約項次', '工程項目', '單位', '契約單價', '設計數量', '設計金額', '結算數量', '結算金額', '增加', '減少'], d2, 10, [70, 260, 50, 80, 80, 90, 80, 90, 80, 80]);
   s2.getRange(5, 4, n + 1, 1).setNumberFormat('#,##0.##'); s2.getRange(5, 6, n + 1, 1).setNumberFormat('#,##0'); s2.getRange(5, 8, n + 1, 3).setNumberFormat('#,##0');
-  var dn = D.rows.filter(function (x) { return x.dq !== null; }).map(function (x) { return x.code + ' ' + n_(x.dq); });
-  s2.getRange(6 + n, 1, 1, 1).setValue('備註:設計數量預設與結算數量相同。派工單原列數量:' + (dn.join('、') || '(未填派工數量)')).setFontColor('#B4530B');
-  // 派工單
+  s2.getRange(6 + n, 1, 1, 1).setValue('備註:設計數量預設與結算數量相同。').setFontColor('#B4530B');
   s3.getRange(1, 1, 1, 10).merge().setValue(agency).setFontSize(15).setFontWeight('bold').setHorizontalAlignment('center');
   s3.getRange(2, 1, 1, 10).merge().setValue(D.p.name + '【派工單】').setFontSize(13).setFontWeight('bold').setHorizontalAlignment('center');
   s3.getRange(3, 1, 1, 10).merge().setValue('開工日期:' + (D.info.start || '') + '　預定完工日期:' + (D.info.plan || '') + '　實際完工日期:' + (D.info.done || '')).setHorizontalAlignment('center');
@@ -613,7 +1207,6 @@ function writeSettlement_(book, D) {
   s3.getRange(5, 9, n + 1, 1).setNumberFormat('#,##0.##'); s3.getRange(5, 10, n + 1, 1).setNumberFormat('#,##0');
   if (n > 1) [2, 3, 4].forEach(function (c) { s3.getRange(5, c, n, 1).merge(); });
 }
-/** 產生結算資料檔:先寫成 Google 試算表,再轉成 Excel 存到「結算資料」資料夾 */
 function makeSettlement_(pid, site) {
   var D = settleData_(pid, site), name = safe_((D.p.short || '') + '_' + site + '_結算資料_' + today_().replace(/-/g, ''));
   var book = SpreadsheetApp.create(name);
@@ -632,7 +1225,7 @@ function makeSettlement_(pid, site) {
 
 /** 試算表選單 */
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu('現場回報').addItem('重新整理日誌', 'menuDiaries').addItem('產生結算資料…', 'menuSettle').addToUi();
+  SpreadsheetApp.getUi().createMenu('現場回報').addItem('重新整理日誌與報表', 'menuDiaries').addItem('產生結算資料…', 'menuSettle').addToUi();
 }
 function menuDiaries() { rebuildDiaries_(); }
 function menuSettle() {
@@ -650,15 +1243,25 @@ function menuSettle() {
 
 var ACTIONS = {
   load: function (q, role, c) {
+    if (!q.lite) {
+      var s = ss_(), shSoil = s.getSheetByName('出土');
+      var needSetup = s.getSheetByName('照片') || s.getSheetByName('派工數量') || s.getSheetByName('契約-新店土尾') || (shSoil && shSoil.getLastRow() > 0 && str_(shSoil.getRange(1, 1).getValue()) !== '年度');
+      if (needSetup) {
+        var lock = LockService.getScriptLock(); lock.waitLock(25000);
+        try { setup(); } finally { lock.releaseLock(); }
+      }
+    }
     var r = reports_(str_(q.from) || '0000-00', str_(q.to) || '9999-99', true);
-    var out = { role: role, editDays: EDIT_DAYS, projects: projects_(), sites: sites_(), dispatch: dispatch_(), sums: r.sums, reports: r.reports,
-      config: { workers: c.workers, crews: c.crews, machines: c.machines, soilTypes: c.soilTypes, dests: c.dests, works: c.works } };
+    var out = {
+      role: role, editDays: EDIT_DAYS, projects: projects_(), sites: sites_(), dispatch: {}, sums: r.sums, reports: r.reports,
+      config: { workers: c.workers, crews: c.crews, machines: c.machines, soilTypes: c.soilTypes, dests: c.dests, works: c.works }
+    };
     if (!q.lite) out.items = items_();
     return out;
   },
   reports: function (q) { return { reports: reports_(str_(q.from) || '0000-00', str_(q.to) || '9999-99', false).reports }; },
   report: function (q, role) {
-    var d = q.data || {}, id = str_(q.id), sent = now_(), edited = '';
+    var d = q.data || {}, id = str_(q.id), sent = now_(), edited = '', editBy = '', prevJson = '';
     var ps = projects_(), p = null; ps.forEach(function (x) { if (x.id === d.pid) p = x; });
     if (!p) throw new Error('找不到工程');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(str_(d.date))) throw new Error('日期格式不正確');
@@ -667,39 +1270,62 @@ var ACTIONS = {
       if (!old) throw new Error('找不到要修改的回報');
       if (role !== 'admin' && daysAgo_(old['日期']) > EDIT_DAYS) throw new Error('超過 ' + EDIT_DAYS + ' 天的回報請由管理者修改');
       var before = reports_('0000-00', '9999-99', false).reports.filter(function (x) { return x.id === id; })[0];
-      append_('修改紀錄', [{ '時間': now_(), '動作': '修改', '回報編號': id, '修改人': str_(d.by), '修改前內容': JSON.stringify(before) }]);
-      sent = old['送出時間']; edited = now_();
-      ['每日回報'].concat(CHILD).forEach(function (n) { deleteById_(n, id); });
+      sent = old['送出時間']; edited = now_(); editBy = str_(d.by); prevJson = JSON.stringify(before);
+      deleteById_('每日回報', id);
     } else id = Utilities.getUuid().slice(0, 8) + '-' + Utilities.formatDate(new Date(), tz_(), 'MMddHHmmss');
-    var site = p.multi ? str_(d.site) : '', base = { '回報編號': id, '日期': d.date, '工程': p.short, '派工地點': site };
-    function row(extra) { var o = {}; for (var k in base) o[k] = base[k]; for (var k2 in extra) o[k2] = extra[k2]; return o; }
-    append_('每日回報', [row({ '工程代號': p.id, '上午天氣': str_(d.am), '下午天氣': str_(d.pm), '回報人': str_(d.by), '技術工': num_(d.tech) || 0, '普通工': num_(d.gen) || 0, '體力工': num_(d.lab) || 0,
-      '義交': num_(d.traffic) || 0, '加班或其他': str_(d.ot), '材料進場': str_(d.materials), '取樣': str_(d.sample), '備註': str_(d.notes), '明日預定': str_(d.tomorrow), '送出時間': sent, '修改時間': edited, '修繕地點': str_(d.place), '未施工原因': str_(d.nowork) })]);
-    var crew = d.crew || {}, crewOt = d.crewOt || {}, cNames = {};
-    Object.keys(crew).forEach(function (n) { if (Number(crew[n]) > 0) cNames[n] = 1; });
-    Object.keys(crewOt).forEach(function (n) { if (Number(crewOt[n]) > 0) cNames[n] = 1; });
-    append_('人力', Object.keys(cNames).map(function (n) { return row({ '姓名': n, '工數': Number(crew[n]) || 0, '加班時數': Number(crewOt[n]) || '' }); }));
-    append_('出土', (d.soil || []).map(function (e) { return row({ '土質': str_(e.type), '去處': str_(e.dest), '車次': num_(e.trucks) || 0, '每台米數': num_(e.per) || 0, '合計米數': num_(e.total) || 0, '來源工程': str_(e.src) }); }));
-    append_('物料', (d.mats || []).filter(function (x) { return x && str_(x.name); }).map(function (x) { return row({ '物料': str_(x.name), '數量': num_(x.qty) === null ? '' : num_(x.qty), '單位': str_(x.unit) }); }));
-    append_('施工項目', (d.entries || []).map(function (e) {
+
+    var site = p.multi ? str_(d.site) : '';
+    var normEntries = (d.entries || []).map(function (e) {
       var cnt = num_(e.cnt), hrs = num_(e.hrs), qty = e.qty === '' || e.qty === null || e.qty === undefined ? (cnt && hrs ? cnt * hrs : '') : Number(e.qty);
-      return row({ '項次': str_(e.code) === '-' ? '' : str_(e.code), '項目': str_(e.name), '單位': str_(e.unit), '計量': e.mode === '現場填百分比' || e.mode === '累計%' ? '累計%' : '數量',
-        '數量': qty, '位置': str_(e.loc), '量測方式': str_(e.method), '照片': str_(e.photo), '台數': cnt === null ? '' : cnt, '時數': hrs === null ? '' : hrs });
-    }));
-    var mach = d.mach || {}, ms = Object.keys(mach).filter(function (n) { return Number(mach[n]) > 0; }).map(function (n) { return row({ '機具': n, '台數': Number(mach[n]) }); });
-    if (str_(d.machOther)) ms.push(row({ '機具': str_(d.machOther), '台數': '' }));
-    append_('機具', ms);
-    append_('照片', (d.photos || []).filter(function (x) { return x && str_(x.url); }).map(function (x) { return row({ '說明': str_(x.cap), '連結': str_(x.url) }); }));
+      return {
+        code: str_(e.code) === '-' || !str_(e.code) ? '-' : str_(e.code), name: str_(e.name), unit: str_(e.unit),
+        mode: e.mode === '現場填百分比' || e.mode === '累計%' ? '累計%' : '數量', qty: qty, loc: str_(e.loc),
+        method: str_(e.method), photo: str_(e.photo), cnt: cnt === null ? null : cnt, hrs: hrs === null ? null : hrs
+      };
+    });
+    var normSoil = (d.soil || []).map(function (e) {
+      return { type: str_(e.type), dest: str_(e.dest), trucks: num_(e.trucks) || 0, per: num_(e.per) || 0, total: num_(e.total) || 0, src: str_(e.src) };
+    });
+    var normMats = (d.mats || []).filter(function (x) { return x && str_(x.name); }).map(function (x) {
+      return { name: str_(x.name), qty: num_(x.qty) === null ? '' : num_(x.qty), unit: str_(x.unit) };
+    });
+    var normPhotos = (d.photos || []).filter(function (x) { return x && str_(x.url); }).map(function (x) {
+      return { cap: str_(x.cap), url: str_(x.url) };
+    });
+    var crew = {}, crewOt = {};
+    Object.keys(d.crew || {}).forEach(function (n) { if (Number(d.crew[n]) > 0) crew[n] = Number(d.crew[n]); });
+    Object.keys(d.crewOt || {}).forEach(function (n) { if (Number(d.crewOt[n]) > 0) crewOt[n] = Number(d.crewOt[n]); });
+    var mach = {};
+    Object.keys(d.mach || {}).forEach(function (n) { if (Number(d.mach[n]) > 0) mach[n] = Number(d.mach[n]); });
+
+    var rawPayload = {
+      crew: crew, crewOt: crewOt, soil: normSoil, entries: normEntries,
+      mach: mach, machOther: str_(d.machOther), photos: normPhotos, mats: normMats,
+      ot: str_(d.ot), materials: str_(d.materials)
+    };
+    var sumCols = formatDailySummaries_(rawPayload, str_(d.materials));
+
+    append_('每日回報', [{
+      '回報編號': id, '日期': d.date, '工程代號': p.id, '工程': p.short, '派工地點': site,
+      '上午天氣': str_(d.am), '下午天氣': str_(d.pm), '回報人': str_(d.by),
+      '技術工': num_(d.tech) || 0, '普通工': num_(d.gen) || 0, '體力工': num_(d.lab) || 0, '義交': num_(d.traffic) || 0,
+      '人員出工與加班': sumCols.crewText, '機具': sumCols.machText, '施工項目': sumCols.entryText,
+      '出土': sumCols.soilText, '材料與物料': sumCols.matText, '取樣': str_(d.sample),
+      '備註': str_(d.notes), '明日預定': str_(d.tomorrow), '現場照片': sumCols.photoText,
+      '修繕地點': str_(d.place), '未施工原因': str_(d.nowork), '送出時間': sent,
+      '最後修改人': editBy, '修改時間': edited, '修改前內容': prevJson,
+      '原始資料JSON': JSON.stringify(rawPayload)
+    }]);
+
     if (p.multi && site) ACTIONS.addSite({ pid: p.id, sites: [site] });
-    autoDiary_(p.id, d.date, site); autoSoil_(p, d.date, d.soil);
+    autoDiary_(p.id, d.date, site); autoSoil_(p, d.date, normSoil);
     return { id: id };
   },
   deleteReport: function (q, role) {
     if (role !== 'admin') throw new Error('只有管理者可以刪除回報');
     var id = str_(q.id), before = reports_('0000-00', '9999-99', false).reports.filter(function (x) { return x.id === id; })[0];
     if (!before) throw new Error('找不到回報');
-    append_('修改紀錄', [{ '時間': now_(), '動作': '刪除', '回報編號': id, '修改人': str_(q.by), '修改前內容': JSON.stringify(before) }]);
-    ['每日回報'].concat(CHILD).forEach(function (n) { deleteById_(n, id); });
+    deleteById_('每日回報', id);
     autoDiary_(before.pid, before.date, before.site); autoSoil_(projById_(before.pid), before.date, before.soil);
     return {};
   },
@@ -708,7 +1334,6 @@ var ACTIONS = {
     append_('派工地點', (q.sites || []).map(str_).filter(function (s) { return s && !have[s] && (have[s] = 1); }).map(function (s) { return { '工程代號': pid, '地點': s, '狀態': '施工中' }; }));
     return {};
   },
-  /** 分案完工 / 恢復施工(管理者) */
   siteStatus: function (q, role) {
     if (role !== 'admin') throw new Error('只有管理者可以設定分案完工');
     var pid = str_(q.pid), site = str_(q.site), t = read_('派工地點'), sh = sheet_('派工地點'), hit = null;
@@ -719,7 +1344,6 @@ var ACTIONS = {
     sh.getRange(hit._row, t.head.indexOf('實際完工日') + 1).setValues([[done ? d : '']]);
     return {};
   },
-  /** 產生結算資料(管理者) */
   settle: function (q, role) {
     if (role !== 'admin') throw new Error('只有管理者可以產生結算資料');
     return makeSettlement_(str_(q.pid), str_(q.site));
@@ -754,7 +1378,18 @@ var ACTIONS = {
     if (hit) {
       for (var k in map) if (p[k] !== undefined) sh.getRange(hit._row, t.head.indexOf(map[k]) + 1, 1, 1).setValues([[p[k]]]);
       if (p.multi !== undefined) sh.getRange(hit._row, t.head.indexOf('開口契約') + 1, 1, 1).setValues([[p.multi ? '是' : '否']]);
+      if (p.machines !== undefined && t.head.indexOf('常用機具') >= 0) {
+        var mVal = Array.isArray(p.machines) ? p.machines.join('、') : str_(p.machines);
+        sh.getRange(hit._row, t.head.indexOf('常用機具') + 1, 1, 1).setValues([[mVal]]);
+      }
       if (p.status === '完工' && !str_(hit['完工日']) && p.end === undefined) sh.getRange(hit._row, t.head.indexOf('完工日') + 1, 1, 1).setValues([[today_()]]);
+      if (p.machines !== undefined) {
+        var projObj = projById_(id);
+        if (projObj && projObj.type !== '土方暫置' && projObj.type !== '機動修繕') {
+          var dsh = ss_().getSheetByName(DIARY_PREFIX + projObj.short);
+          if (dsh) { var sel = diarySel_(dsh, projObj); writeDiary_(projObj, sel.ym, sel.site); }
+        }
+      }
     } else {
       if (!str_(p.name)) throw new Error('請填工程名稱');
       id = id || 'p' + Utilities.getUuid().slice(0, 6);
@@ -772,7 +1407,7 @@ var ACTIONS = {
     return { id: f.getId(), url: 'https://drive.google.com/file/d/' + f.getId() + '/view' };
   }
 };
-/** 取得或建立資料夾;照片依「現場回報照片 / 工程 / 日期」分類 */
+
 function folder_(name, parent) {
   var it = parent ? parent.getFoldersByName(name) : DriveApp.getFoldersByName(name);
   return it.hasNext() ? it.next() : (parent ? parent.createFolder(name) : DriveApp.createFolder(name));
