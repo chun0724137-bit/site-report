@@ -4,11 +4,12 @@
  * 執行身分:我;存取權:所有人。通行碼在「設定」分頁。
  */
 var HEAD = {
-  '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型', '常用機具', '勾選方式', '工地負責人', '承攬廠商', '核定工期', '展延天數'],
+  '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型', '常用機具', '勾選方式', '工地負責人', '承攬廠商', '核定工期', '展延天數', '日誌第一聯', '日誌二聯'],
   '派工地點': ['工程代號', '地點', '狀態', '區域', '工作性質', '開工日', '預定完工日', '實際完工日', '派工工項'],
   '設定': ['類別', '值', '屬性'],
   '預定進度': ['工程簡稱', '版本', '生效日', '日期', '累計預定進度'],
-  '簽名': ['工程代號', '日期', '簽名人', '簽名圖', '簽名時間', '資料指紋', '登入者'],
+  '簽名': ['工程代號', '日期', '簽名人', '簽名圖', '簽名時間', '資料指紋', '登入者', '派工地點'],
+  '日誌勾選': ['工程代號', '派工地點', '日期', '勾選', '修改人', '修改時間'],
   '人員': ['姓名', '角色', '狀態', 'PIN雜湊', '鹽', '最後登入', '備註'],
   '操作紀錄': ['時間', '人員', '角色', '動作', '內容'],
   '每日回報': ['回報編號', '日期', '工程代號', '工程', '派工地點', '上午天氣', '下午天氣', '回報人', '技術工', '普通工', '體力工', '義交', '工作項目', '人員出工與加班', '機具', '施工項目', '出土', '材料與物料', '取樣', '備註', '明日預定', '現場照片', '修繕地點', '未施工原因', '送出時間', '最後修改人', '修改時間', '修改前內容', '原始資料JSON']
@@ -518,7 +519,7 @@ function projects_() {
       place: str_(r['施工地點']), agency: str_(r['機關名稱']), diaryMode: str_(r['日誌方式']), ch: [date_(r['第一次變更日']), date_(r['第二次變更日'])],
       type: rawType || (isMulti ? '開口契約' : '一般'),
       machines: machs,
-      tick: str_(r['勾選方式']) || '手勾', signer: str_(r['工地負責人']), company: str_(r['承攬廠商']), approved: num_(r['核定工期']), ext: num_(r['展延天數']) || 0
+      tick: str_(r['勾選方式']) || '手勾', layout1: str_(r['日誌第一聯']) || '當日', layout2: str_(r['日誌二聯']) || '不附', signer: str_(r['工地負責人']), company: str_(r['承攬廠商']), approved: num_(r['核定工期']), ext: num_(r['展延天數']) || 0
     };
   }).filter(function (p) { return p.id; }).sort(function (a, b) { return a.order - b.order; });
 }
@@ -1464,17 +1465,24 @@ function accountsList_() {
     };
   }).filter(Boolean);
 }
+/** 日誌四、五項的手動勾選:{ 工程(@派工單)|日期: {s4,e1,e2,e3} } */
+function tickRows_() {
+  var out = {};
+  read_('日誌勾選').rows.forEach(function (r) { try { out[sigKey_(str_(r['工程代號']), str_(r['派工地點']), date_(r['日期']))] = JSON.parse(str_(r['勾選'])); } catch (e) { } });
+  return out;
+}
 function sigRows_() {
   var latest = {};
   read_('簽名').rows.forEach(function (r) {
-    var k = str_(r['工程代號']) + '|' + date_(r['日期']);
-    latest[k] = { pid: str_(r['工程代號']), date: date_(r['日期']), signer: str_(r['簽名人']), img: str_(r['簽名圖']), at: dt_(r['簽名時間']), fp: str_(r['資料指紋']), by: str_(r['登入者']) };
+    var st = str_(r['派工地點']), k = sigKey_(str_(r['工程代號']), st, date_(r['日期']));
+    latest[k] = { pid: str_(r['工程代號']), site: st, date: date_(r['日期']), signer: str_(r['簽名人']), img: str_(r['簽名圖']), at: dt_(r['簽名時間']), fp: str_(r['資料指紋']), by: str_(r['登入者']) };
   });
   return latest;
 }
+function sigKey_(pid, site, date) { return pid + (site ? '@' + site : '') + '|' + date; }
 function staleList_(reports, from) {
   var sig = sigRows_(), out = [], by = {};
-  reports.forEach(function (r) { var k = r.pid + '|' + r.date; (by[k] = by[k] || []).push(r); });
+  reports.forEach(function (r) { [sigKey_(r.pid, '', r.date), sigKey_(r.pid, r.site, r.date)].forEach(function (k, i) { if (i && !r.site) return; (by[k] = by[k] || []).push(r); }); });
   Object.keys(sig).forEach(function (k) {
     var s = sig[k]; if (s.date.slice(0, 7) < from) return;
     if (fpOf_(by[k] || []) !== s.fp) out.push([s.pid, s.date, s.signer]);
@@ -1514,17 +1522,29 @@ function actualAt_(items, p, date, cum) {
   return total ? done / total : 0;
 }
 var WEEK_ = ['日', '一', '二', '三', '四', '五', '六'];
-function diaryMonth_(pid, ym) {
+function diaryMonth_(pid, ym, site) {
   var p = null; projects_().forEach(function (x) { if (x.id === pid) p = x; });
   if (!p) throw new Error('找不到工程');
-  var all = reports_('0000-00', '9999-99', false).reports.filter(function (r) { return r.pid === pid; });
+  site = p.multi ? str_(site) : '';
+  var all = reports_('0000-00', '9999-99', false).reports.filter(function (r) { return r.pid === pid && (!site || r.site === site); });
   var byDate = {}; all.forEach(function (r) { (byDate[r.date] = byDate[r.date] || []).push(r); });
   var dates = Object.keys(byDate).sort();
-  var start = p.start || dates[0] || (ym + '-01');
+  var info = {}; if (site) sites_().forEach(function (x) { if (x[0] === pid && x[1] === site) info = x[3] || {}; });
+  var start = (site ? info.start : p.start) || dates[0] || (ym + '-01');
   var items = itemsFull_(pid), itemBy = {}; items.forEach(function (it) { itemBy[it.code] = it; });
-  var machCols = diaryMachColsFor_(p), sig = sigRows_(), vers = p.multi ? [] : planVers_(p);
+  var pp = p;
+  if (site) {   // 派工單:只列派工工項,契約數量用派工量,進度依這張派工單的完成金額
+    var disp = ((dispatch_()[pid] || {})[site]) || [];
+    items = disp.map(function (x) { var it = itemBy[x[0]] || { code: x[0], name: x[0], unit: '', price: null, cat: '', mode: '數量', basis: '' };
+      return { code: x[0], name: it.name, unit: it.unit, price: it.price, q: [x[1] || 0], cat: it.cat, mode: it.mode === '依大項百分比' ? '數量' : it.mode, basis: it.basis, prog: true, base: 0 }; });
+    itemBy = {}; items.forEach(function (it) { itemBy[it.code] = it; });
+    pp = { ch: [], multi: true };
+  }
+  var machCols = diaryMachColsFor_(p), sig = sigRows_(), ticks = tickRows_(), vers = p.multi ? [] : planVers_(p);
   var lastDay = Utilities.formatDate(new Date(new Date(ym.slice(0, 4), Number(ym.slice(5, 7)), 0).getTime()), tz_(), 'yyyy-MM-dd');
-  var endDate = p.end || (p.approved ? addDays_(start, p.approved - 1 + (p.ext || 0)) : '');
+  var endDate = site ? (info.done || info.plan || '') : (p.end || (p.approved ? addDays_(start, p.approved - 1 + (p.ext || 0)) : ''));
+  var approved = site ? (endDate ? dayDiff_(start, endDate) + 1 : null) : p.approved, ext = site ? 0 : (p.ext || 0);
+  var itemList = items.map(function (it) { return { code: it.code, name: it.name, unit: it.unit, contract: qtyAt_(it, pp, lastDay) }; });
   var cum = {}, cc = { tech: 0, gen: 0, lab: 0 }, mc = {}, matc = {}, days = [];
   var cur = start < ym + '-01' ? start : ym + '-01';
   var stop = lastDay, tdy = today_(); if (stop > tdy) stop = tdy;
@@ -1551,16 +1571,18 @@ function diaryMonth_(pid, ym) {
     matOrder.forEach(function (m) { matc[m[0]] = (matc[m[0]] || 0) + dmat[m[0]]; });
     if (cur < ym + '-01') continue;
     var uniq = function (f) { var o = []; reps.forEach(function (r) { var v = str_(r[f]); if (v && o.indexOf(v) < 0) o.push(v); }); return o; };
-    var actual = actualAt_(items, p, cur, cum), planned = p.multi ? actual : plannedAt_(vers, cur);
-    var elapsed = dayDiff_(start, cur) + 1, remain = p.approved ? p.approved - elapsed + (p.ext || 0) : (endDate ? dayDiff_(cur, endDate) : null);
-    var sg = sig[pid + '|' + cur] || null, fp = fpOf_(reps);
+    var actual = actualAt_(items, pp, cur, cum), planned = p.multi ? actual : plannedAt_(vers, cur);
+    var elapsed = dayDiff_(start, cur) + 1, remain = approved ? approved - elapsed + ext : (endDate ? dayDiff_(cur, endDate) : null);
+    var sk = sigKey_(pid, site, cur), sg = sig[sk] || null, fp = fpOf_(reps);
     days.push({
       date: cur, wk: WEEK_[new Date(cur + 'T00:00:00').getDay()], has: reps.length > 0, worked: worked.length > 0,
       am: uniq('am')[0] || '', pm: uniq('pm')[0] || '', nowork: uniq('nowork').join('、'),
       items: order.map(function (code) {
         var it = itemBy[code], s = cum[code];
-        return { code: code, name: it ? it.name : code, unit: it ? it.unit : '', contract: it ? qtyAt_(it, p, cur) : null, today: dayQ[code], cum: (it ? it.base : 0) + (s ? s.q : 0), loc: (locs[code] || []).join('、') };
+        return { code: code, name: it ? it.name : code, unit: it ? it.unit : '', contract: it ? qtyAt_(it, pp, cur) : null, today: dayQ[code], cum: (it ? it.base : 0) + (s ? s.q : 0), loc: (locs[code] || []).join('、') };
       }),
+      allQ: itemList.map(function (x) { var it = itemBy[x.code], s = cum[x.code]; return [dayQ[x.code] || 0, r4_((it ? it.base || 0 : 0) + (s ? s.q : 0))]; }),
+      tick: ticks[sk] || null,
       mats: matOrder.map(function (m) { return { name: m[1], unit: m[2], today: dmat[m[0]], cum: matc[m[0]] }; }),
       matsText: uniq('materials').join('；'),
       crew: { tech: [crew.tech, cc.tech], gen: [crew.gen, cc.gen], lab: [crew.lab, cc.lab] },
@@ -1571,25 +1593,38 @@ function diaryMonth_(pid, ym) {
     });
   }
   return {
-    project: { id: p.id, name: p.name, short: p.short, multi: p.multi, company: p.company, approved: p.approved, ext: p.ext || 0, start: start, end: endDate, place: p.place, signer: p.signer, tick: p.tick },
-    month: ym, days: days
+    project: { id: p.id, name: site ? p.name + '｜' + site : p.name, short: site ? p.short + '_' + site : p.short, multi: p.multi, site: site, company: p.company, approved: approved, ext: ext, start: start, end: endDate, place: site || p.place, signer: p.signer, tick: p.tick, layout1: p.layout1, layout2: p.layout2 },
+    month: ym, days: days, itemList: itemList
   };
 }
 var ACTIONS = {
   diary: function (q) {
     var pid = str_(q.pid), ym = str_(q.month);
     if (!/^\d{4}-\d{2}$/.test(ym)) throw new Error('月份格式不正確');
-    return diaryMonth_(pid, ym);
+    return diaryMonth_(pid, ym, str_(q.site));
+  },
+  /** 日誌四、五項手動勾選(每天一筆,改了就覆蓋) */
+  saveTick: function (q) {
+    var pid = str_(q.pid), site = str_(q.site), d = str_(q.date), t = q.tick || {};
+    if (!pid || !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error('資料不完整');
+    var ok = { s4: ['有', '無'], e1: ['有', '無'], e2: ['有', '無', '無新進勞工'], e3: ['有', '無'] }, v = {};
+    Object.keys(ok).forEach(function (k) { if (ok[k].indexOf(str_(t[k])) >= 0) v[k] = str_(t[k]); });
+    var sh = sheet_('日誌勾選'), tb = read_('日誌勾選'), hit = null;
+    tb.rows.forEach(function (r) { if (str_(r['工程代號']) === pid && str_(r['派工地點']) === site && date_(r['日期']) === d) hit = r; });
+    if (hit) sh.getRange(hit._row, tb.head.indexOf('勾選') + 1, 1, 3).setValues([[JSON.stringify(v), str_(q._me), now_()]]);
+    else append_('日誌勾選', [{ '工程代號': pid, '派工地點': site, '日期': d, '勾選': JSON.stringify(v), '修改人': str_(q._me), '修改時間': now_() }]);
+    return { tick: v };
   },
   sign: function (q, role) {
     var pid = str_(q.pid), d = str_(q.date), img = str_(q.img), signer = str_(q.signer);
     if (!pid || !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error('資料不完整');
     if (!signer) throw new Error('請填簽名人姓名');
     if (img.indexOf('data:image/png;base64,') !== 0 || img.length > 45000) throw new Error('簽名圖不正確或太大,請重簽');
-    var reps = reports_('0000-00', '9999-99', false).reports.filter(function (r) { return r.pid === pid && r.date === d; });
+    var site = str_(q.site);
+    var reps = reports_('0000-00', '9999-99', false).reports.filter(function (r) { return r.pid === pid && r.date === d && (!site || r.site === site); });
     if (!reps.length) throw new Error('這天還沒有回報,不能簽名');
     var fp = fpOf_(reps);
-    append_('簽名', [{ '工程代號': pid, '日期': d, '簽名人': signer, '簽名圖': img, '簽名時間': now_(), '資料指紋': fp, '登入者': str_(q._me) }]);
+    append_('簽名', [{ '工程代號': pid, '派工地點': site, '日期': d, '簽名人': signer, '簽名圖': img, '簽名時間': now_(), '資料指紋': fp, '登入者': str_(q._me) }]);
     return { fp: fp };
   },
   importPlan: function (q, role) {
@@ -1785,7 +1820,7 @@ var ACTIONS = {
     if (role !== 'admin' && role !== 'office') throw new Error('只有管理者或內業可以管理工程');
     var p = q.project || {}, id = str_(p.id), t = read_('工程'), sh = sheet_('工程'), hit = null;
     t.rows.forEach(function (r) { if (str_(r['工程代號']) === id) hit = r; });
-    var map = { name: '工程名稱', short: '簡稱', status: '狀態', start: '開工日', end: '完工日', note: '備註', tick: '勾選方式', signer: '工地負責人', company: '承攬廠商', approved: '核定工期', ext: '展延天數' };
+    var map = { name: '工程名稱', short: '簡稱', status: '狀態', start: '開工日', end: '完工日', note: '備註', tick: '勾選方式', layout1: '日誌第一聯', layout2: '日誌二聯', signer: '工地負責人', company: '承攬廠商', approved: '核定工期', ext: '展延天數' };
     if (hit) {
       for (var k in map) if (p[k] !== undefined) sh.getRange(hit._row, t.head.indexOf(map[k]) + 1, 1, 1).setValues([[p[k]]]);
       if (p.multi !== undefined) sh.getRange(hit._row, t.head.indexOf('開口契約') + 1, 1, 1).setValues([[p.multi ? '是' : '否']]);
@@ -1812,19 +1847,73 @@ var ACTIONS = {
   upload: function (q) {
     var folder = folder_('現場回報照片', null);
     if (str_(q.project)) folder = folder_(safe_(q.project), folder);
+    if (str_(q.site)) folder = folder_(safe_(q.site), folder);   // 開口契約多一層派工單
     if (/^\d{4}-\d{2}-\d{2}$/.test(str_(q.date))) folder = folder_(str_(q.date), folder);
     var blob = Utilities.newBlob(Utilities.base64Decode(str_(q.data)), str_(q.mime) || 'image/jpeg', safe_(q.name) || ('photo_' + Date.now() + '.jpg'));
     var f = folder.createFile(blob); f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     return { id: f.getId(), url: 'https://drive.google.com/file/d/' + f.getId() + '/view' };
+  },
+  /** 照片打包下載:指定工程(派工單)與日期區間,依檔名規則打包成壓縮檔存到「照片下載」資料夾;照片太多自動拆成好幾包 */
+  photoZip: function (q) {
+    var pid = str_(q.pid), site = str_(q.site), from = str_(q.from), to = str_(q.to);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error('日期格式不正確');
+    var p = projById_(pid); if (!p) throw new Error('找不到工程');
+    var list = photoList_(p, site, from, to);
+    if (!list.length) return { files: [], count: 0 };
+    var out = photoZipFiles_(p, site, from, to, list);
+    return { files: out, count: list.length };
   }
 };
+/** 下載檔名:日期(不加 -)_[派工單_]照片說明;沒有說明用工項;太長截掉;同名加 _2、_3 */
+function photoName_(date, site, cap, fallback) {
+  var t = str_(cap).replace(/^【([^】]*)】/, '$1 ').replace(/^[0-9A-Za-z一二三四五六七八九十壹貳參肆伍陸柒捌玖拾]+(\.[0-9A-Za-z]+)+\s+/, '').replace(/｜/g, ' ').trim();
+  if (!t) t = str_(fallback);
+  if (!t) t = '現場照片';
+  t = t.replace(/[\\\/:*?"<>|\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 30).trim();
+  return [date.replace(/-/g, ''), site ? safe_(site) : '', t].filter(function (x) { return x; }).join('_');
+}
+function photoList_(p, site, from, to) {
+  var used = {}, out = [];
+  reports_(from.slice(0, 7), to.slice(0, 7), false).reports
+    .filter(function (r) { return r.pid === p.id && r.date >= from && r.date <= to && (!site || r.site === site); })
+    .sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; })
+    .forEach(function (r) {
+      var work = str_(r.work), item = (r.entries || []).map(function (e) { return e.name; }).filter(function (x) { return x; })[0] || '';
+      (r.photos || []).forEach(function (ph) {
+        var m = String(ph.url || '').match(/\/d\/([^/]+)/); if (!m) return;
+        var base = photoName_(r.date, p.multi ? r.site : '', ph.cap, work || item), name = base, k = 2;
+        while (used[name]) name = base + '_' + (k++);
+        used[name] = 1; out.push({ id: m[1], name: name + '.jpg' });
+      });
+    });
+  return out;
+}
+/** 打包:每包最多約 40MB 或 150 張;順便刪掉「照片下載」裡超過 1 天的舊壓縮檔 */
+function photoZipFiles_(p, site, from, to, list) {
+  var folder = folder_('照片下載', null), old = folder.getFiles(), limit = Date.now() - 86400000;
+  while (old.hasNext()) { var f0 = old.next(); if (f0.getDateCreated().getTime() < limit) f0.setTrashed(true); }
+  var title = safe_([p.short, site, from.replace(/-/g, '') + (from === to ? '' : '-' + to.replace(/-/g, ''))].filter(function (x) { return x; }).join('_'));
+  var packs = [], cur = [], size = 0;
+  list.forEach(function (x) {
+    var b; try { b = DriveApp.getFileById(x.id).getBlob().setName(x.name); } catch (err) { return; }
+    var n = b.getBytes().length;
+    if (cur.length && (size + n > 40 * 1024 * 1024 || cur.length >= 150)) { packs.push(cur); cur = []; size = 0; }
+    cur.push(b); size += n;
+  });
+  if (cur.length) packs.push(cur);
+  return packs.map(function (blobs, i) {
+    var nm = title + '_照片' + (packs.length > 1 ? '_第' + (i + 1) + '包' : '') + '.zip';
+    var z = folder.createFile(Utilities.zip(blobs, nm)); z.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return { name: nm, count: blobs.length, url: 'https://drive.google.com/uc?export=download&id=' + z.getId() };
+  });
+}
 
 function folder_(name, parent) {
   var it = parent ? parent.getFoldersByName(name) : DriveApp.getFoldersByName(name);
   return it.hasNext() ? it.next() : (parent ? parent.createFolder(name) : DriveApp.createFolder(name));
 }
 function safe_(v) { return str_(v).replace(/[\\\/:*?"<>|]/g, '_').slice(0, 80); }
-var WRITES = { sign: 1, importPlan: 1, saveAccount: 1, saveSiteItems: 1, report: 1, deleteReport: 1, addSite: 1, siteStatus: 1, settle: 1, setActive: 1, saveConfig: 1, saveProject: 1 };
+var WRITES = { saveTick: 1, sign: 1, importPlan: 1, saveAccount: 1, saveSiteItems: 1, report: 1, deleteReport: 1, addSite: 1, siteStatus: 1, settle: 1, setActive: 1, saveConfig: 1, saveProject: 1 };
 
 /* ===== 帳號與資安 ===== */
 var ROLE_MAP = { '管理者': 'admin', '現場': 'field', '內業': 'office', '老闆': 'office' };

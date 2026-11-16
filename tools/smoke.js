@@ -87,4 +87,15 @@ ok(Array.isArray(r.config.samples)&&r.config.samples.includes('CLSM')&&r.config.
 r=m.call({key:'field123',action:'report',data:{pid:'ntpu',date:'2026-11-08',by:'t',am:'雨',pm:'雨',nowork:'週日休假'}});ok(r.ok&&r.id,'未施工回報送出');
 r=m.call({key:'field123',action:'load',lite:true,from:ym,to:'9999-12'});const nw=r.reports.find(x=>x.date==='2026-11-08'&&x.pid==='ntpu');ok(nw&&nw.nowork==='週日休假','未施工原因可讀回');
 ok(m.call({key:'field123',action:'deleteReport',id}).ok===false,'現場不能刪除');ok(m.call({key:'admin123',action:'deleteReport',id}).ok,'管理者可刪除');
+// 照片打包下載
+{const d0=new Date(Date.now()+8*3600e3).toISOString().slice(0,10);
+r=m.call({key:'field123',action:'report',data:{pid:'ntpu',date:d0,by:'zip',am:'晴',pm:'晴',tech:1,work:'混凝土澆置',entries:[{code:'4.5',name:'路緣石',unit:'M',mode:'數量',qty:5}],photos:[{cap:'4.5 路緣石｜步道北側',url:'https://drive.google.com/file/d/P1/view'},{cap:'',url:'https://drive.google.com/file/d/P2/view'},{cap:'',url:'https://drive.google.com/file/d/P3/view'}]}});ok(r.ok,'送出含 3 張照片的回報');
+const z=m.call({key:'field123',action:'photoZip',pid:'ntpu',from:d0,to:d0});
+const names=z.ok&&z.files[0]?z.files[0].count:0;ok(z.ok&&z.files.length===1&&names>=3,'打包成 1 個壓縮檔');
+const zb=m.books;const zipped=m.g.__lastPath||'';ok(/照片下載\/三峽北大_\d{8}_照片\.zip$/.test(zipped),'壓縮檔存到「照片下載」資料夾:'+zipped.split('/').pop());
+const L=m.run("photoList_(projById_('ntpu'),'','"+d0+"','"+d0+"').map(function(x){return x.name})");const D=d0.replace(/-/g,'');
+ok(L.includes(D+'_路緣石 步道北側.jpg')&&L.includes(D+'_混凝土澆置.jpg')&&L.includes(D+'_混凝土澆置_2.jpg'),'檔名:有說明用說明、沒說明用工作說明、同名加 _2:'+L.slice(-3).join(' / '));
+r=m.call({key:'field123',action:'report',data:{pid:'yanggong1',site:'實踐國小',date:d0,by:'zip',work:'AC 刨除',photos:[{cap:'',url:'https://drive.google.com/file/d/P4/view'}]}});
+const L2=m.run("photoList_(projById_('yanggong1'),'實踐國小','"+d0+"','"+d0+"').map(function(x){return x.name})");ok(L2.includes(D+'_實踐國小_AC 刨除.jpg'),'開口契約檔名含派工單:'+L2[L2.length-1]);
+m.call({key:'field123',action:'upload',project:'115養工資本門(第1區)',site:'實踐國小',date:d0,name:'x.jpg',data:''});ok(/現場回報照片\/115養工資本門\(第1區\)\/實踐國小\/\d{4}-\d{2}-\d{2}\/x\.jpg$/.test(m.g.__lastPath),'照片資料夾:工程/派工單/日期');}
 console.log('全部通過');

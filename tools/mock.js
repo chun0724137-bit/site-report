@@ -35,10 +35,10 @@ function mk(){
       newDataValidation:()=>chain({build:()=>({})})},LockService:{getScriptLock:()=>({waitLock(){},releaseLock(){}})},
     ContentService:{createTextOutput:t=>({setMimeType(){return this},text:t}),MimeType:{JSON:'json'}},
     Utilities:{formatDate:(d,tz,f)=>{const t=new Date(d.getTime()+8*3600e3-0);const o={yyyy:t.getUTCFullYear(),MM:pad(t.getUTCMonth()+1),dd:pad(t.getUTCDate()),HH:pad(t.getUTCHours()),mm:pad(t.getUTCMinutes()),ss:pad(t.getUTCSeconds())};return f.replace(/yyyy|MM|dd|HH|mm|ss/g,m=>o[m])},
-      getUuid:()=>require('crypto').randomUUID(),base64Decode:s=>Buffer.from(s,'base64'),newBlob:(b,m,n)=>({b,m,n})},
+      getUuid:()=>require('crypto').randomUUID(),base64Decode:s=>Buffer.from(s,'base64'),zip:(blobs,n)=>({n,blobs}),DigestAlgorithm:{SHA_256:'sha256'},computeDigest:(a,x)=>[...require('crypto').createHash('sha256').update(String(x)).digest()].map(b=>b>127?b-256:b),newBlob:(b,m,n)=>({b,m,n})},
     UrlFetchApp:{fetch:()=>({getBlob:()=>({setName(n){return{n}}})})},ScriptApp:{getOAuthToken:()=>'TOKEN'},
-    DriveApp:(()=>{const mkf=(n,path)=>({n,path,kids:{},files:[],getFoldersByName(x){const k=this.kids[x];return{hasNext:()=>!!k,next:()=>k}},createFolder(x){return this.kids[x]=mkf(x,path+'/'+x)},createFile(b){this.files.push(b.n);g.__lastPath=this.path+'/'+b.n;return{getId:()=>'FAKEID',setSharing(){},getUrl:()=>'https://drive.google.com/'+b.n}}});const root=mkf('','');
-      return{getFoldersByName:x=>root.getFoldersByName(x),createFolder:x=>root.createFolder(x),getFileById:()=>({moveTo(){},setTrashed(){}}),Access:{},Permission:{},root}})(),console};
+    DriveApp:(()=>{const mkf=(n,path)=>({n,path,kids:{},files:[],getFoldersByName(x){const k=this.kids[x];return{hasNext:()=>!!k,next:()=>k}},createFolder(x){return this.kids[x]=mkf(x,path+'/'+x)},getFiles(){const fs=this.files.map(n=>({getDateCreated:()=>new Date(0),setTrashed(){}}));let i=0;return{hasNext:()=>i<fs.length,next:()=>fs[i++]}},createFile(b){this.files.push(b.n);g.__lastPath=this.path+'/'+b.n;return{getId:()=>'FAKEID',setSharing(){},getUrl:()=>'https://drive.google.com/'+b.n}}});const root=mkf('','');
+      return{getFoldersByName:x=>root.getFoldersByName(x),createFolder:x=>root.createFolder(x),getFileById:id=>{if(id==='MISSING')throw new Error('no file');return{moveTo(){},setTrashed(){},getBlob:()=>({n:'',setName(x){this.n=x;return this},getBytes:()=>new Array(1000)})}},Access:{},Permission:{},root}})(),console};
   vm.createContext(g);vm.runInContext(fs.readFileSync(__dirname+'/../backend/Code.gs','utf8'),g);
   vm.runInContext('setup()',g);
   const put=(n,rows)=>rows.forEach(r=>sheets[n].d.push(r.map(v=>v===null?'':v)));
