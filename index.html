@@ -15,16 +15,16 @@
 /* Layout: one-column phone app. Sticky project bar on top, four views switched by a bottom tab bar, big thumb-sized buttons. */
 :root{
   --bg:#eef0ee; --card:#ffffff; --ink:#1c2a33; --mute:#5f6e77; --line:#d3d9d6;
-  --accent:#0f6e6a; --accent-ink:#ffffff; --soft:#dcebe8; --yl:#fff6d6; --yl-line:#e9d48e; --warn:#b4530b; --warn-bg:#fbe9d2; --ok:#22703a; --ok-bg:#dff1e3;
+  --accent:#0f6e6a; --accent-ink:#ffffff; --soft:#dcebe8; --yl:#fff6d6; --yl-line:#e9d48e; --over:#fde4e4; --over-line:#efb0b0; --warn:#b4530b; --warn-bg:#fbe9d2; --ok:#22703a; --ok-bg:#dff1e3;
   --font:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
   --num:"SF Mono","Roboto Mono",ui-monospace,monospace;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#12191c; --card:#1c262b; --ink:#e6ecea; --mute:#9aa8ad; --line:#33424a;
-  --accent:#4fb8ae; --accent-ink:#082522; --soft:#213b3a; --yl:#3a3320; --yl-line:#6b5d2e; --warn:#f0a35a; --warn-bg:#43301a; --ok:#7fd096; --ok-bg:#1d3a26; color-scheme:dark}}
+  --accent:#4fb8ae; --accent-ink:#082522; --soft:#213b3a; --yl:#3a3320; --yl-line:#6b5d2e; --over:#432526; --over-line:#7a3d3f; --warn:#f0a35a; --warn-bg:#43301a; --ok:#7fd096; --ok-bg:#1d3a26; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#12191c; --card:#1c262b; --ink:#e6ecea; --mute:#9aa8ad; --line:#33424a;
-  --accent:#4fb8ae; --accent-ink:#082522; --soft:#213b3a; --yl:#3a3320; --yl-line:#6b5d2e; --warn:#f0a35a; --warn-bg:#43301a; --ok:#7fd096; --ok-bg:#1d3a26; color-scheme:dark}
+  --accent:#4fb8ae; --accent-ink:#082522; --soft:#213b3a; --yl:#3a3320; --yl-line:#6b5d2e; --over:#432526; --over-line:#7a3d3f; --warn:#f0a35a; --warn-bg:#43301a; --ok:#7fd096; --ok-bg:#1d3a26; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:16px;line-height:1.5}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--card)}
@@ -72,6 +72,7 @@ h2{font-size:14px;margin:0;color:var(--mute);font-weight:600;letter-spacing:.04e
 .qe{display:inline-flex;gap:4px;align-items:center;flex:0 0 auto;font-weight:700;white-space:nowrap}.qe input{width:78px;padding:4px 6px;text-align:right;font-size:15px}.qe input.s{width:56px}
 .qlist{max-height:55vh;overflow:auto;border:1px solid var(--line);border-radius:8px}
 tr.qtop td{font-weight:700;background:var(--soft)}tr.qcat td{font-weight:700;color:var(--accent);cursor:pointer}
+.item.over{background:var(--over);border-color:var(--over-line)}tr.over td{background:var(--over)}
 .item.yl{background:var(--yl);border-color:var(--yl-line)}.item.yl.sel{border-color:var(--accent)}
 .cath{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:10px 4px;font-weight:700;color:inherit;font-size:15px}
 .cath.on{color:var(--accent)}
@@ -173,7 +174,7 @@ img.th{width:44px;height:44px;object-fit:cover;border-radius:6px}
 
 <script>
 const $=(s,r=document)=>r.querySelector(s), h=(t,a={},...c)=>{const e=document.createElement(t);for(const k in a){if(k==="class")e.className=a[k];else if(k.startsWith("on"))e.addEventListener(k.slice(2),a[k]);else if(a[k]!==null&&a[k]!==undefined&&a[k]!==false)e.setAttribute(k,a[k]===true?"":a[k]);}for(const x of c.flat()){if(x===null||x===undefined||x===false)continue;e.append(x.nodeType?x:document.createTextNode(String(x)));}return e;};
-{const _ap=Element.prototype.append;Element.prototype.append=function(...c){return _ap.apply(this,c.filter(x=>x!==null&&x!==undefined&&x!==false))};}
+{const _ap=Element.prototype.append;Element.prototype.append=function(...c){return _ap.apply(this,c.filter(x=>x!==null&&x!==undefined&&x!==false))};const _rc=Element.prototype.replaceChildren;Element.prototype.replaceChildren=function(...c){return _rc.apply(this,c.filter(x=>x!==null&&x!==undefined&&x!==false))};}
 const ls={get(k,d){try{return localStorage.getItem(k)??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
 const WX=["晴","陰","雨"], METHODS=["測距儀","捲尺"], NOWORK_REASONS=["週日休假","雨天停工","國定假日","待料/停工"], DEFAULT_SAMPLES=["混凝土","鋼筋","CLSM","格柵"], CONCRETE_SPECS=["140kgf/cm2","210kgf/cm2","280kgf/cm2"], REBAR_SPECS=["D10(#3)","D13(#4)","D16(#5)","D19(#6)","D22(#7)","D25(#8)","D29(#9)","D32(#10)"], REMOVED_WORKS=["配管","配線","AC清運","AC破碎","路緣石施工"], DEFAULT_NOTES=["安衛所督導","專任工程人員督察","機關工督","監造技師督察"];
@@ -261,7 +262,7 @@ function viewReport(){const p=proj(),d=S.draft,out=[];const T=ptype(p),isSoil=T=
     const disp=p.multi&&d.site?((p.dispatch||{})[d.site]||[]):[],dq={};disp.forEach(x=>dq[x[0]]=x[1]);
     const act=(disp.length?disp.map(x=>p.items.find(i=>i.code===x[0])):(p.active||[]).map(c=>p.items.find(i=>i.code===c))).filter(i=>i&&i.mode!=="依大項百分比");
     const grid=h("div",{class:"items"});
-    act.forEach(it=>grid.append(h("button",{type:"button",class:"item"+(S.pick&&S.pick.code===it.code?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,cat:it.cat,qty:"",loc:"",method:"測距儀",photos:[]};render()}},
+    act.forEach(it=>grid.append(h("button",{type:"button",class:"item"+(isOver(p,it)?" over":"")+(S.pick&&S.pick.code===it.code?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,cat:it.cat,qty:"",loc:"",method:"測距儀",photos:[]};render()}},
       h("span",{class:"n"},it.name),h("span",{class:"q"},disp.length?it.code+(catTag(it)?"｜"+catTag(it):"")+"｜派工 "+fmt(dq[it.code])+" "+it.unit:itemStat(p,it)))));
     if(p.items.length&&(!disp.length||S.showAllDispItems))grid.append(h("button",{type:"button",class:"item yl"+(S.pick&&S.pick.code==="other"?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code==="other"?null:{code:"other",name:"",unit:"",qty:"",loc:"",method:"測距儀",photos:[]};S.search="";render()}},h("span",{class:"n"},"其他契約項目",h("span",{class:"pm"},S.pick&&S.pick.code==="other"?"－":"＋")),h("span",{class:"q"},"搜尋全部 "+p.items.length+" 項")));
     else if(disp.length)grid.append(h("button",{type:"button",class:"item yl",onclick:()=>{S.showAllDispItems=true;S.pick={code:"other",name:"",unit:"",qty:"",loc:"",method:"測距儀",photos:[]};S.search="";render()}},h("span",{class:"n"},"臨時加填派工單外工項",h("span",{class:"pm"},"＋")),h("span",{class:"q"},"目前已限定此派工單 "+disp.length+" 項")));
@@ -790,7 +791,7 @@ function viewWeeklyQty(p){
       const wDisp=p.multi&&g.site?((p.dispatch||{})[g.site]||[]):[];
       const act=(wDisp.length?wDisp.map(x=>p.items.find(i=>i.code===x[0])):(p.active||[]).map(c=>p.items.find(i=>i.code===c))).filter(i=>i&&i.mode!=="依大項百分比");
       const grid=h("div",{class:"items"});
-      act.forEach(it=>grid.append(h("button",{type:"button",class:"item"+(S.wkPick&&S.wkPick.code===it.code?" sel":""),onclick:()=>{S.wkPick=S.wkPick&&S.wkPick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,cat:it.cat,qty:"",loc:"",method:"測距儀",photos:[]};render()}},
+      act.forEach(it=>grid.append(h("button",{type:"button",class:"item"+(isOver(p,it)?" over":"")+(S.wkPick&&S.wkPick.code===it.code?" sel":""),onclick:()=>{S.wkPick=S.wkPick&&S.wkPick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,cat:it.cat,qty:"",loc:"",method:"測距儀",photos:[]};render()}},
         h("span",{class:"n"},it.name),h("span",{class:"q"},itemStat(p,it)))));
       if(p.items.length)grid.append(h("button",{type:"button",class:"item yl"+(S.wkPick&&S.wkPick.code==="other"?" sel":""),onclick:()=>{S.wkPick=S.wkPick&&S.wkPick.code==="other"?null:{code:"other",name:"",unit:"",qty:"",loc:"",method:"測距儀",photos:[]};S.search="";render()}},
         h("span",{class:"n"},"搜尋全部契約項目",h("span",{class:"pm"},S.wkPick&&S.wkPick.code==="other"?"－":"＋")),h("span",{class:"q"},"全部 "+p.items.length+" 項")));
@@ -1117,6 +1118,7 @@ function catTag(it){
   if(m&&!c.startsWith(m[1]+"."))return m[1]+"."+c;
   return c;
 }
+function isOver(p,it){return it&&it.mode!=='現場填百分比'&&Number(it.qty)>0&&doneQty(p,it)>Number(it.qty)+1e-9}
 function itemStat(p,it){const ct=catTag(it),head=it.code+(ct?" "+ct:"");if(it.mode==="現場填百分比")return head+"｜一式｜累計 "+fmt(ratioOf(p,it)*100)+"%";return head+"｜"+(it.qty===null||it.qty===undefined?"":"契約 "+fmt(it.qty)+" "+it.unit+"｜")+"累計 "+fmt(doneQty(p,it))}
 function progOf(p){let total=0,done=0;const cats={};p.items.forEach(it=>{if(!it.prog)return;const a=amt(it),d=doneAmt(p,it);total+=a;done+=d;const c=cats[it.cat]=cats[it.cat]||{name:it.cat,total:0,done:0};c.total+=a;c.done+=d});
   const sites={};if(p.multi)p.items.forEach(it=>{if(!it.prog||it.mode!=="數量")return;const s=(((p.sums||{})[it.code])||{}).s||{};Object.keys(s).forEach(k=>{sites[k]=(sites[k]||0)+(Number(it.price)||0)*s[k]})});
@@ -1183,7 +1185,7 @@ function qtyTableNode(p,t){const act=t.slice(1),by={};act.forEach(r=>by[r[0]]=r)
     const row=by[it.code];if(!row)return;const c=ck(it);
     if(c!==cat){cat=c;const f=!!S.qFold[c];tb.append(h("tr",{class:"qcat",role:"button",tabindex:"0","aria-expanded":String(!f),onclick:()=>{S.qFold[c]=!f;render()}},h("td",{colspan:"7"},(f?"▸ ":"▾ ")+c+"（"+cnt[c]+" 項）")))}
     if(S.qFold[c])return;
-    tb.append(h("tr",{},row.map((x,j)=>h("td",{class:j===1?"w":(j?"r":"")},x===null?"":(typeof x==="number"?fmt(x):x)))))});
+    tb.append(h("tr",{class:isOver(p,it)?"over":""},row.map((x,j)=>h("td",{class:j===1?"w":(j?"r":"")},x===null?"":(typeof x==="number"?fmt(x):x)))))});
   return h("table",{},h("thead",{},h("tr",{},t[0].map((x,i)=>h("th",{class:i?"r":""},x)))),tb)}
 function weekRange(ds){const d=new Date(ds+"T00:00:00"),w=(d.getDay()+6)%7,a=new Date(d),b=new Date(d);a.setDate(d.getDate()-w);b.setDate(a.getDate()+6);const f=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");return[f(a),f(b)]}
 function photoZipCard(p){const Z=S.zip=S.zip||{unit:"日",date:today(),site:""};const sec=h("section",{class:"card"},h("h2",{},"下載照片(自動命名,打包成壓縮檔)"));
@@ -1315,9 +1317,11 @@ function itemImportAdmin(p){
   }
   sec.append(msg);
   return sec}
-function projAdmin(){const sec=h("section",{class:"card"},h("h2",{},"工程管理"),h("p",{class:"note"},"完工的工程不會出現在現場選單,歷史資料仍保留。契約項目請到試算表「契約項目」分頁新增或修改。"));
-  S.projects.forEach(p=>{const s=h("select",{id:"st_"+p.id,"aria-label":(p.short||p.name)+"狀態"},["未開工","施工中","完工"].map(x=>h("option",{value:x},x)));s.value=p.status||"施工中";
-    s.addEventListener("change",async()=>{try{await S.db.doc("projects/"+p.id).update({status:s.value})}catch(e){S.err="狀態沒有存成功:"+e.message;render()}});sec.append(h("div",{class:"row"},h("span",{},p.short||p.name),s))});
+function projAdmin(){const sec=h("section",{class:"card"},h("h2",{},"工程管理"),h("p",{class:"note"},"改成「完工」的工程會收到下方「已完工」裡,現場選單不再出現,試算表的契約、日誌分頁也會隱藏(資料仍保留,改回施工中就會再出現)。契約項目可用上方「匯入契約項目」上傳。"));
+  const row=p=>{const s=h("select",{id:"st_"+p.id,"aria-label":(p.short||p.name)+"狀態"},["未開工","施工中","完工"].map(x=>h("option",{value:x},x)));s.value=p.status||"施工中";
+    s.addEventListener("change",async()=>{try{await S.db.doc("projects/"+p.id).update({status:s.value})}catch(e){S.err="狀態沒有存成功:"+e.message;render()}});return h("div",{class:"row"},h("span",{},p.short||p.name),s)};
+  const done=S.projects.filter(p=>p.status==="完工");S.projects.filter(p=>p.status!=="完工").forEach(p=>sec.append(row(p)));
+  if(done.length){sec.append(h("button",{type:"button",class:"cath"+(S.doneOpen?" on":""),"aria-expanded":String(!!S.doneOpen),onclick:()=>{S.doneOpen=!S.doneOpen;render()}},(S.doneOpen?"▾ ":"▸ ")+"已完工（"+done.length+" 個）"));if(S.doneOpen)done.forEach(p=>sec.append(row(p)))}
   const n=h("input",{id:"np_name",type:"text",placeholder:"工程名稱(全名)"}),sh=h("input",{id:"np_short",type:"text",placeholder:"選單簡稱"}),mu=h("input",{id:"np_multi",type:"checkbox"});
   sec.append(h("h2",{},"新增工程"),n,sh,h("label",{class:"chk",for:"np_multi"},mu,h("span",{},"開口契約(有多個派工地點)")),h("button",{type:"button",class:"btn primary",onclick:async()=>{if(!n.value.trim()){n.focus();return}try{await S.db.doc("projects/new").set({name:n.value.trim(),short:sh.value.trim(),multi:mu.checked,status:"未開工"})}catch(e){S.err="工程沒有新增成功:"+e.message;render()}}},"新增工程"));
   return sec}

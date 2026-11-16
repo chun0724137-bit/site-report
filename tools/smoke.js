@@ -119,4 +119,9 @@ const d=m.sheets['契約-標題測試'].d,mi=d[0].indexOf('計量方式');ok(d[1
 r=m.call({key:'admin123',action:'load'});ok(r.items[pid].length===1&&r.heads[pid].length===2&&r.heads[pid][1][2]===0,'載入:項目 1 個、標題 2 個');
 ok(m.run("itemsFull_('"+pid+"').length")===1,'日誌項目不含標題列');
 r=m.call({key:'admin123',action:'importItems',pid,mode:'change',n:1,date:'2026-11-05',items:[{code:'1.1',name:'施工測量',unit:'式',qty:1}]});ok(r.ok&&r.changed===1&&r.kept===0,'變更時略過標題列');}
+// 完工:契約、日誌分頁隱藏;改回施工中再顯示
+{ok(m.call({key:'admin123',action:'saveProject',project:{id:'tamsui',status:'施工中'}}).ok,'台北淡水 施工中');
+m.call({key:'admin123',action:'saveProject',project:{id:'ntpu',status:'完工'}});const sp=m.g.SpreadsheetApp.getActiveSpreadsheet();
+ok(sp.getSheetByName('契約-三峽北大').hidden===true&&sp.getSheetByName('日誌_三峽北大').hidden===true,'完工後契約、日誌分頁隱藏');
+m.call({key:'admin123',action:'saveProject',project:{id:'ntpu',status:'施工中'}});ok(sp.getSheetByName('契約-三峽北大').hidden===false,'改回施工中分頁再顯示');}
 console.log('全部通過');

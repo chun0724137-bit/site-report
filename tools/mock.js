@@ -15,7 +15,7 @@ function mk(){
     merge(){if(this.nr>1||this.nc>1)this.sh.merges.push([this.c,this.c+this.nc-1]);return chain(this)} breakApart(){this.sh.merges=[];return chain(this)}
     clearContent(){for(let i=0;i<this.nr;i++){const row=this.sh.d[this.r-1+i];if(row)for(let j=0;j<this.nc;j++)row[this.c-1+j]=''}return chain(this)}}
   class Sheet{constructor(n){this.n=n;this.d=[];this.merges=[];return chain(this)}
-    setFrozenColumns(n){if(this.merges.some(m=>m[0]<=n&&m[1]>n))throw new Error('很抱歉,你無法凍結僅包含部分合併儲存格的欄');return this} getName(){return this.n} setName(n){this.n=n;return this}
+    setFrozenColumns(n){if(this.merges.some(m=>m[0]<=n&&m[1]>n))throw new Error('很抱歉,你無法凍結僅包含部分合併儲存格的欄');return this} getName(){return this.n} hideSheet(){this.hidden=true;return this} showSheet(){this.hidden=false;return this} isSheetHidden(){return !!this.hidden} setName(n){this.n=n;return this}
     getDataRange(){return new Range(this,1,1,Math.max(this.getLastRow(),1),Math.max(this.getLastColumn(),1))}
     getLastRow(){let n=this.d.length;while(n>0&&!(this.d[n-1]||[]).some(v=>v!==''&&v!==undefined&&v!==null))n--;return n}
     getLastColumn(){return Math.max(0,...this.d.map(r=>{let n=r.length;while(n>0&&(r[n-1]===''||r[n-1]===undefined))n--;return n}))} getMaxRows(){return 1000} getMaxColumns(){return 50}

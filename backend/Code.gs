@@ -531,6 +531,13 @@ function extAt_(p, date) {
   (p.chExt || []).forEach(function (x, i) { if (x && p.ch[i] && (!date || date >= p.ch[i])) e += x; });
   return e;
 }
+/** 工程完工:把它的契約、日誌、土方月報分頁隱藏;改回施工中就再顯示 */
+function hideProjSheets_(short, hide) {
+  [ITEM_PREFIX, DIARY_PREFIX, SOIL_PREFIX].forEach(function (pre) {
+    var sh = ss_().getSheetByName(pre + short); if (!sh) return;
+    try { if (hide) sh.hideSheet(); else sh.showSheet(); } catch (e) { }
+  });
+}
 function projById_(id) { var out = null; projects_().forEach(function (p) { if (p.id === id || p.short === id || p.name === id) out = out || p; }); return out; }
 
 /** 契約分頁的大項/小項標題列(計量方式填「標題」):不計數量、金額 */
@@ -1839,6 +1846,7 @@ var ACTIONS = {
         var mVal = Array.isArray(p.machines) ? p.machines.join('、') : str_(p.machines);
         sh.getRange(hit._row, t.head.indexOf('常用機具') + 1, 1, 1).setValues([[mVal]]);
       }
+      if (p.status !== undefined) hideProjSheets_(str_(hit['簡稱']) || str_(hit['工程名稱']), p.status === '完工');
       if (p.status === '完工' && !str_(hit['完工日']) && p.end === undefined) sh.getRange(hit._row, t.head.indexOf('完工日') + 1, 1, 1).setValues([[today_()]]);
       if (p.machines !== undefined) {
         var projObj = projById_(id);
