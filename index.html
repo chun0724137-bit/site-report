@@ -28,7 +28,13 @@
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:16px;line-height:1.5}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--card)}
-.wrap{max-width:720px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:520px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));transition:max-width .18s ease}
+html[data-layout="desktop"] .wrap{max-width:1180px}
+@media (min-width:860px){
+  html[data-layout="desktop"] main{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+  html[data-layout="desktop"] main>.seg,html[data-layout="desktop"] main>.msg,html[data-layout="desktop"] main>.btn.block,html[data-layout="desktop"] main>.full-span,html[data-layout="desktop"] main>section.card:only-of-type{grid-column:1/-1}
+  html[data-layout="desktop"] .items{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
 header{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--card);border-bottom:1px solid var(--line)}
 header .wrap{display:flex;gap:10px;align-items:center;padding-block:10px}
 header b{font-size:15px;white-space:nowrap}
@@ -140,10 +146,10 @@ img.th{width:44px;height:44px;object-fit:cover;border-radius:6px}
 .lb-bar{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;width:100%;max-width:600px}
 </style>
 
-<header><div class="wrap"><b>現場回報</b><select id="proj" aria-label="工程"></select><button id="exitBoss" type="button" class="btn primary" hidden style="margin-left:auto;padding:8px 12px;font-size:14px">← 回到現場回報</button></div></header>
+<header><div class="wrap"><b>現場回報</b><select id="proj" aria-label="工程"></select><span style="flex:1"></span><button id="viewModeBtn" type="button" class="btn" style="padding:6px 10px;font-size:13px;white-space:nowrap" title="切換手機版 / 電腦版畫面">📱 手機版</button><button id="exitBoss" type="button" class="btn primary" hidden style="margin-left:6px;padding:8px 12px;font-size:14px">← 回到現場回報</button><button id="logout" type="button" class="btn" hidden style="margin-left:6px;padding:8px 12px;font-size:14px">登出</button></div></header>
 <div class="wrap"><main id="main"><section class="card"><p class="note" id="boot">讀取工程資料中…</p></section></main></div>
 <nav><div class="wrap">
-  <button data-v="report">回報</button><button data-v="log">紀錄</button><button data-v="all">總覽</button><button data-v="set">設定</button>
+  <button data-v="report">回報</button><button data-v="diary">日誌</button><button data-v="log">紀錄</button><button data-v="all">總覽</button><button data-v="set">設定</button>
 </div></nav>
 
 <script>
@@ -167,7 +173,7 @@ function stepper(label,key,o,cb){const d=o||S.draft;if(!d[key])d[key]=0;const ou
   const set=v=>{d[key]=Math.max(0,v);out.textContent=d[key];if(cb)cb()};
   return h("div",{class:"f"},label,h("div",{class:"stepper"},h("button",{type:"button","aria-label":label+"減一",onclick:()=>set(d[key]-1)},"−"),out,h("button",{type:"button","aria-label":label+"加一",onclick:()=>set(d[key]+1)},"+")));}
 function seg(opts,val,on){const box=h("div",{class:"seg"});opts.forEach(o=>box.append(h("button",{type:"button","aria-pressed":String(o===val),onclick:()=>{on(o);[...box.children].forEach(b=>b.setAttribute("aria-pressed",String(b.textContent===o)))}},o)));return box;}
-function txt(label,key,ph,area){const d=S.draft;const el=h(area?"textarea":"input",{id:"f_"+key,type:area?null:"text",placeholder:ph||""});el.value=d[key]||"";el.addEventListener("input",()=>{d[key]=el.value;if(key==="by")ls.set("by",el.value)});return h("label",{class:"f"},label,el);}
+function txt(label,key,ph,area){const d=S.draft;const el=h(area?"textarea":"input",{id:"f_"+key,type:area?null:"text",placeholder:ph||""});el.value=d[key]||"";if(key==="by"&&S.me){el.value=S.me;d[key]=S.me;el.readOnly=true}el.addEventListener("input",()=>{d[key]=el.value;if(key==="by")ls.set("by",el.value)});return h("label",{class:"f"},label,el);}
 
 function dupQtyEntries(pid,date,site,code,excludeRepId){
   if(!code||code==="-"||code==="other")return [];
@@ -237,7 +243,8 @@ function viewReport(){const p=proj(),d=S.draft,out=[];const T=ptype(p),isSoil=T=
     const grid=h("div",{class:"items"});
     act.forEach(it=>grid.append(h("button",{type:"button",class:"item"+(S.pick&&S.pick.code===it.code?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,cat:it.cat,qty:"",loc:"",method:"測距儀",photos:[]};render()}},
       h("span",{class:"n"},it.name),h("span",{class:"q"},disp.length?it.code+(catTag(it)?"｜"+catTag(it):"")+"｜派工 "+fmt(dq[it.code])+" "+it.unit:itemStat(p,it)))));
-    if(p.items.length)grid.append(h("button",{type:"button",class:"item"+(S.pick&&S.pick.code==="other"?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code==="other"?null:{code:"other",name:"",unit:"",qty:"",loc:"",method:"測距儀",photos:[]};S.search="";render()}},h("span",{class:"n"},"其他契約項目",h("span",{class:"pm"},S.pick&&S.pick.code==="other"?"－":"＋")),h("span",{class:"q"},"搜尋全部 "+p.items.length+" 項")));
+    if(p.items.length&&(!disp.length||S.showAllDispItems))grid.append(h("button",{type:"button",class:"item"+(S.pick&&S.pick.code==="other"?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code==="other"?null:{code:"other",name:"",unit:"",qty:"",loc:"",method:"測距儀",photos:[]};S.search="";render()}},h("span",{class:"n"},"其他契約項目",h("span",{class:"pm"},S.pick&&S.pick.code==="other"?"－":"＋")),h("span",{class:"q"},"搜尋全部 "+p.items.length+" 項")));
+    else if(disp.length)grid.append(h("button",{type:"button",class:"item",onclick:()=>{S.showAllDispItems=true;S.pick={code:"other",name:"",unit:"",qty:"",loc:"",method:"測距儀",photos:[]};S.search="";render()}},h("span",{class:"n"},"臨時加填派工單外工項",h("span",{class:"pm"},"＋")),h("span",{class:"q"},"目前已限定此派工單 "+disp.length+" 項")));
     const sec=h("section",{class:"card"},
       h("h2",{},"🛠 今日工作項目(多位工程師同日回報會自動合併)"),
       h("label",{class:"f"},"今日施作部位與工作說明(可直接打字或點下方常用詞)",wIn),
@@ -758,7 +765,8 @@ function viewWeeklyQty(p){
     const isAdding=S.wkRepId===g.key;
     eBox.append(h("button",{type:"button",class:"btn "+(isAdding?"":"primary"),onclick:()=>{S.wkRepId=isAdding?"":g.key;S.wkPick=null;S.search="";render()}},isAdding?"收起契約項目選單":"＋ 依這天回報填入契約數量"));
     if(isAdding){
-      const act=(p.active||[]).map(c=>p.items.find(i=>i.code===c)).filter(i=>i&&i.mode!=="依大項百分比");
+      const wDisp=p.multi&&g.site?((p.dispatch||{})[g.site]||[]):[];
+      const act=(wDisp.length?wDisp.map(x=>p.items.find(i=>i.code===x[0])):(p.active||[]).map(c=>p.items.find(i=>i.code===c))).filter(i=>i&&i.mode!=="依大項百分比");
       const grid=h("div",{class:"items"});
       act.forEach(it=>grid.append(h("button",{type:"button",class:"item"+(S.wkPick&&S.wkPick.code===it.code?" sel":""),onclick:()=>{S.wkPick=S.wkPick&&S.wkPick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,cat:it.cat,qty:"",loc:"",method:"測距儀",photos:[]};render()}},
         h("span",{class:"n"},it.name),h("span",{class:"q"},itemStat(p,it)))));
@@ -1120,6 +1128,14 @@ function siteAdmin(p){const sec=h("section",{class:"card"},h("h2",{},"派工地�
       row.append(h("label",{class:"f"},"完工日期",di),h("div",{class:"row"},h("button",{type:"button",class:"btn",onclick:()=>{S.siteAsk="";render()}},"取消"),h("button",{type:"button",class:"btn primary",disabled:S.busy,onclick:()=>setSite(p,s.name,"完工",di.value)},"確認完工")))}
     else row.append(h("div",{class:"row"},done?h("button",{type:"button",class:"btn",disabled:S.busy,onclick:()=>setSite(p,s.name,"施工中")},"恢復施工"):h("button",{type:"button",class:"btn primary",onclick:()=>{S.siteAsk=k;S.siteDone="";render()}},"分案完工"),
       h("button",{type:"button",class:"btn",disabled:S.busy,onclick:()=>settle(p,s.name)},S.busy&&S.settling===k?"產生中…":"產生結算資料")));
+    const curDisp=((p.dispatch||{})[s.name]||[]);
+    const isEditDisp=S.siteDispOpen===k;
+    row.append(h("div",{class:"row"},h("button",{type:"button",class:"btn"+(isEditDisp?" primary":""),onclick:()=>{
+      if(isEditDisp){S.siteDispOpen="";render();return}
+      const m={};curDisp.forEach(([c,q])=>m[c]=q||"");
+      S.siteDispOpen=k;S.siteDispMap=m;S.siteDispQ="";render();
+    }},isEditDisp?"收起派工單工項設定":"📋 設定此派工單施工工項（"+(curDisp.length?"已限定 "+curDisp.length+" 項":"未限定，顯示預設大按鈕")+"）")));
+    if(isEditDisp)row.append(siteDispEditor(p,s.name));
     if(S.siteDone===k)row.append(h("div",{class:"msg ok"},"已設為完工。要結算的話,按上面的「產生結算資料」。"));
     if(S.settled&&S.settled.k===k)row.append(h("div",{class:"msg ok"},"已產生「"+S.settled.name+"」,存在雲端硬碟「結算資料」資料夾。 ",h("a",{href:S.settled.url,target:"_blank",rel:"noopener"},"開啟檔案")));
     sec.append(row)});
@@ -1148,19 +1164,19 @@ function viewPeople(){const out=[],mo=S.month,rs=rowsFor("",mo);const ym=mo.spli
 
 function viewSet(){const p=proj(),out=[];const act=new Set(p.active||[]);
   const sec=h("section",{class:"card"},h("h2",{},"本週施工中的項目｜"+(p.short||p.name)),h("p",{class:"note"},"勾選的項目會變成「回報」頁的大按鈕。建議維持 5 到 10 項。"));
-  if(!S.canWrite)sec.append(h("div",{class:"msg warn"},"名單與大按鈕只有管理者可以修改。請用管理者通行碼登入。"));
+  if(!S.canWrite)sec.append(h("div",{class:"msg warn"},"名單與大按鈕只有管理者可以修改。請用管理者帳號登入。"));
   (p.cats||[]).forEach(c=>{const firstIt=p.items.find(i=>i.cat===c.code);sec.append(h("div",{class:"cat"},catTag(firstIt)||c.name));p.items.filter(i=>i.cat===c.code).forEach(it=>{const cb=h("input",{type:"checkbox",id:"a_"+it.code,disabled:!S.canWrite});cb.checked=act.has(it.code);
     cb.addEventListener("change",async()=>{cb.checked?act.add(it.code):act.delete(it.code);const next=p.items.filter(i=>act.has(i.code)).map(i=>i.code);try{await S.db.doc("projects/"+p.id).update({active:next})}catch(e){S.err="清單沒有存成功。";render()}});
     sec.append(h("label",{class:"chk",for:"a_"+it.code},cb,h("span",{},it.code+" "+it.name+"("+fmt(it.qty)+" "+it.unit+")")))})});
   if(!p.items.length)sec.append(h("p",{class:"note"},"這個工程還沒有匯入契約項目。"));
-  out.push(sec);if(S.admin&&p.multi)out.push(siteAdmin(p));if(S.admin)out.push(projAdmin());
+  out.push(sec);if(!["土方暫置","機動修繕"].includes(ptype(p)))out.push(diarySetAdmin(p));if(S.canOffice&&p.multi)out.push(siteAdmin(p));if(S.admin)out.push(projAdmin());
   const sp=v=>[...new Set(v.split(/[、,，\n]/).map(s=>s.trim()).filter(Boolean))];
   const pmInput=h("textarea",{id:"f_pmach",disabled:!S.canWrite,placeholder:"留空則使用下方的共用機具清單；若在試算表「日誌_"+(p.short||p.name)+"」修改重要事項的機具標題(如把破碎機改成壓路機)也會自動同步到這裡"});
   pmInput.value=(p.machines||[]).join("、");
   out.push(h("section",{class:"card"},h("h2",{},"本工程專屬機具｜"+(p.short||p.name)),h("p",{class:"note"},"可針對此工程設定專屬機具（例：怪手:80型/120型、壓路機、傾卸貨車）。您也可以直接在 Google 試算表「日誌_"+(p.short||p.name)+"」下方的「重要事項」把機具欄標題改掉（如破碎機改壓路機），前端按鈕會自動跟著變動！"),pmInput,h("button",{type:"button",class:"btn primary",disabled:!S.canWrite,onclick:async()=>{try{await S.db.doc("projects/"+p.id).update({machines:sp(pmInput.value)});S.flash="已儲存「"+(p.short||p.name)+"」專屬機具。";render()}catch(e){S.err="機具沒有存成功。";render()}}},"儲存本工程機具")));
   const ta=h("textarea",{id:"f_roster",disabled:!S.canWrite});ta.value=S.roster.join("、");const tc=h("input",{id:"f_crews",type:"text",disabled:!S.canWrite});tc.value=S.crews.join("、");const tm=h("textarea",{id:"f_mach",disabled:!S.canWrite});tm.value=S.machines.join("、");const tw=h("textarea",{id:"f_works",disabled:!S.canWrite});tw.value=S.works.join("、");const tdd=h("input",{id:"f_dests",type:"text",disabled:!S.canWrite});tdd.value=S.dests.join("、");const ts=h("textarea",{id:"f_samples",disabled:!S.canWrite});ts.value=(S.samples||DEFAULT_SAMPLES).join("、");
   out.push(h("section",{class:"card"},h("h2",{},"名單設定(所有工程共用)"),h("p",{class:"note"},"用頓號或換行分隔。也可直接在 Google 試算表「設定」分頁新增類別「取樣」，前端按鈕會自動同步增加。"),ta,h("label",{class:"f"},"小工班(會帶人,回報時填人數)",tc),h("label",{class:"f"},"機具清單",tm),h("label",{class:"f"},"出土去處",tdd),h("label",{class:"f"},"常用工作名稱(現場統一用語)",tw),h("label",{class:"f"},"🧪 常用取樣項目(可在試算表「設定」新增類別「取樣」)",ts),h("button",{type:"button",class:"btn primary",disabled:!S.canWrite,onclick:async()=>{const names=[...new Set(ta.value.split(/[、,，\n]/).map(s=>s.trim()).filter(Boolean))];const cr=[...new Set(tc.value.split(/[、,，\n]/).map(s=>s.trim()).filter(Boolean))].filter(n=>names.includes(n));try{await S.db.doc("config/roster").set({workers:names,crews:cr,machines:sp(tm.value),dests:sp(tdd.value),works:sp(tw.value),samples:sp(ts.value)})}catch(e){S.err="名單沒有存成功。";render()}}},"儲存名單")));
-  if(S.g)out.push(h("button",{type:"button",class:"btn",onclick:()=>{ls.set("gkey","");G.key="";S.loaded=false;gate("")}},"更換通行碼(目前身分:"+(S.admin?"管理者":"現場")+")"));
+  if(S.g)out.push(h("div",{class:"msg"},"目前登入:"+(S.me||"通行碼")+"(身分:"+(S.role==="admin"?"管理者":S.role==="office"?"內業/老闆":"現場")+")"),(S.legacy||!S.me)?null:h("button",{type:"button",class:"btn",onclick:changePinUI},"變更我的 PIN"),h("button",{type:"button",class:"btn",onclick:logout},"登出"));
   return out;}
 
 function svgPhoto(title,sub,bg){
@@ -1187,26 +1203,292 @@ function demoData(){const mo=S.month,ym=mo.split("-").map(Number),nd=new Date(ym
       ];
       out.push({id:"demo"+d+"_"+pi,pid:p.id,site,date,by:"範例",am:"晴",pm:rnd()<0.2?"雨":"晴",nowork:"",tech:2,gen:2,lab:1,crew,crewOt,traffic:rnd()<0.3?1:0,ot:"",mach:rnd()<0.6?{"80型怪手":1}:{},machOther:"",soil,entries:[{code:"-",name:w1,unit:"式",qty:1,loc:"北側工區",method:"捲尺",photo:""},{code:"-",name:w2,unit:"",qty:"",loc:"",method:"",photo:""}],photos,materials:"",sample:"",notes:"",tomorrow:"",at:date+"T09:00:00Z"})})}
   return out}
-function render(){const main=$("#main");if(!S.loaded){return}
+// ==================== 施工日誌(簽名/PDF/Excel) ====================
+const DLAY={"widths": [10.625, 3.125, 5.0, 3.0, 5.75, 4.375, 2.5, 4.25, 4.0, 2.875, 5.125, 3.125, 12.0, 4.25, 2.375, 2.875, 13.0, 3.0, 4.375, 4.125, 3.125], "heights": [16.5, 15.0, 15.0, 30.0, 21.95, 21.95, 21.95, 21.95, 21.95, 18.0, 18.0, 18.0, 18.0, 18.0, 18.0, 18.0, 18.0, 18.0, 18.0, 18.0, 20.25, 18.0, 18.0, 18.0, 21.95, 21.95, 15.75, 15.75, 21.95, 21.95, 21.95, 21.95, 21.95, 44.45, 113.45, 24.95, 30.75, 51.0, 36.0], "cells": [{"r": 1, "c": 1, "rs": 1, "cs": 21, "v": "公共工程施工日誌", "b": [0, 0, 0, 0], "sz": 18.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 2, "c": 1, "rs": 1, "cs": 1, "v": "報表編號：", "b": [0, 0, 0, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 2, "c": 2, "rs": 1, "cs": 4, "v": "", "b": [0, 0, 0, 0], "sz": 10.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 2, "c": 6, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 0, 0], "sz": 12.0, "bold": false, "h": null, "va": null, "wrap": false}, {"r": 2, "c": 7, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 0, 0], "sz": 12.0, "bold": false, "h": null, "va": null, "wrap": false}, {"r": 2, "c": 8, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 0, 0], "sz": 12.0, "bold": false, "h": null, "va": null, "wrap": false}, {"r": 2, "c": 9, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 0, 0], "sz": 12.0, "bold": false, "h": null, "va": null, "wrap": false}, {"r": 2, "c": 10, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 0, 0], "sz": 12.0, "bold": false, "h": null, "va": null, "wrap": false}, {"r": 2, "c": 11, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 0, 0], "sz": 12.0, "bold": false, "h": null, "va": null, "wrap": false}, {"r": 2, "c": 12, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 0, 0], "sz": 12.0, "bold": false, "h": null, "va": null, "wrap": false}, {"r": 2, "c": 13, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 0, 0], "sz": 12.0, "bold": false, "h": null, "va": null, "wrap": false}, {"r": 2, "c": 14, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 0, 0], "sz": 12.0, "bold": false, "h": null, "va": null, "wrap": false}, {"r": 2, "c": 15, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 0, 0], "sz": 12.0, "bold": false, "h": null, "va": null, "wrap": false}, {"r": 2, "c": 16, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 0, 0], "sz": 12.0, "bold": false, "h": null, "va": null, "wrap": false}, {"r": 2, "c": 17, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 0, 0], "sz": 12.0, "bold": false, "h": null, "va": null, "wrap": false}, {"r": 2, "c": 18, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 0, 0], "sz": 12.0, "bold": false, "h": null, "va": null, "wrap": false}, {"r": 2, "c": 19, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 0, 0], "sz": 12.0, "bold": false, "h": null, "va": null, "wrap": false}, {"r": 2, "c": 20, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 0, 0], "sz": 12.0, "bold": false, "h": null, "va": null, "wrap": false}, {"r": 2, "c": 21, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 0, 0], "sz": 12.0, "bold": false, "h": null, "va": null, "wrap": false}, {"r": 3, "c": 1, "rs": 1, "cs": 1, "v": "本日天氣：", "b": [0, 0, 1, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 3, "c": 2, "rs": 1, "cs": 2, "v": "上午：", "b": [0, 0, 1, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 3, "c": 4, "rs": 1, "cs": 2, "v": "雨", "b": [0, 0, 1, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 3, "c": 6, "rs": 1, "cs": 2, "v": "下午：", "b": [0, 0, 1, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 3, "c": 8, "rs": 1, "cs": 2, "v": "雨", "b": [0, 0, 1, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 3, "c": 10, "rs": 1, "cs": 1, "v": "", "b": [0, 0, 1, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 3, "c": 11, "rs": 1, "cs": 3, "v": "填表日期：", "b": [0, 0, 1, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 3, "c": 14, "rs": 1, "cs": 5, "v": "2026-11-01", "b": [0, 0, 1, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 3, "c": 19, "rs": 1, "cs": 3, "v": 46327, "b": [0, 0, 1, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 4, "c": 1, "rs": 1, "cs": 1, "v": "工程名稱：", "b": [0, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 4, "c": 2, "rs": 1, "cs": 10, "v": "臺北大學第二校門(警衛亭及校名柱工程)", "b": [0, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 4, "c": 12, "rs": 1, "cs": 2, "v": "承攬廠商名稱", "b": [0, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 4, "c": 14, "rs": 1, "cs": 8, "v": "松青營造有限公司", "b": [0, 1, 1, 1], "sz": 10.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 5, "c": 1, "rs": 1, "cs": 1, "v": "核定工期", "b": [1, 1, 0, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 5, "c": 2, "rs": 1, "cs": 2, "v": 180, "b": [0, 0, 0, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 5, "c": 4, "rs": 1, "cs": 1, "v": "天", "b": [0, 0, 0, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 5, "c": 5, "rs": 1, "cs": 3, "v": "累計工期", "b": [1, 1, 0, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 5, "c": 8, "rs": 1, "cs": 2, "v": 216, "b": [0, 0, 0, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 5, "c": 10, "rs": 1, "cs": 1, "v": "天", "b": [0, 0, 0, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 5, "c": 11, "rs": 1, "cs": 2, "v": "剩餘工期", "b": [1, 1, 0, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 5, "c": 13, "rs": 1, "cs": 1, "v": 51, "b": [0, 0, 0, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 5, "c": 14, "rs": 1, "cs": 1, "v": "天", "b": [1, 0, 0, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 5, "c": 15, "rs": 1, "cs": 5, "v": "工期展延天數", "b": [1, 1, 0, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 5, "c": 20, "rs": 1, "cs": 1, "v": 87, "b": [1, 0, 0, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 5, "c": 21, "rs": 1, "cs": 1, "v": "天", "b": [1, 1, 0, 0], "sz": 10.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 6, "c": 1, "rs": 1, "cs": 3, "v": "開工日期", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 6, "c": 4, "rs": 1, "cs": 7, "v": "2026-03-31", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 6, "c": 11, "rs": 1, "cs": 3, "v": "完工日期", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 6, "c": 14, "rs": 1, "cs": 8, "v": "2026-12-22", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 7, "c": 1, "rs": 1, "cs": 3, "v": "預定進度 %", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 7, "c": 4, "rs": 1, "cs": 7, "v": 0.6252, "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 7, "c": 11, "rs": 1, "cs": 3, "v": "實際進度 %", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 7, "c": 14, "rs": 1, "cs": 8, "v": 0.6579999999999999, "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 8, "c": 1, "rs": 1, "cs": 21, "v": "一、依施工計劃書執行按圖施工概況(含約定之重要施工項目及完成數量)", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 9, "c": 1, "rs": 1, "cs": 5, "v": "施工項目", "b": [0, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 9, "c": 6, "rs": 1, "cs": 1, "v": "單位", "b": [0, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 9, "c": 7, "rs": 1, "cs": 3, "v": "契約數量", "b": [0, 1, 1, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 9, "c": 10, "rs": 1, "cs": 3, "v": "本日完成數量", "b": [0, 1, 1, 0], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 9, "c": 13, "rs": 1, "cs": 1, "v": "累計完成數量", "b": [0, 0, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 9, "c": 14, "rs": 1, "cs": 8, "v": "備註", "b": [0, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 10, "c": 1, "rs": 1, "cs": 5, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 10, "c": 6, "rs": 1, "cs": 1, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 10, "c": 7, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 10, "c": 10, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 10, "c": 13, "rs": 1, "cs": 1, "v": "", "b": [1, 0, 1, 1], "sz": 11.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 10, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 11, "c": 1, "rs": 1, "cs": 5, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 11, "c": 6, "rs": 1, "cs": 1, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 11, "c": 7, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 11, "c": 10, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 11, "c": 13, "rs": 1, "cs": 1, "v": "", "b": [1, 0, 1, 1], "sz": 11.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 11, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 12, "c": 1, "rs": 1, "cs": 5, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 12, "c": 6, "rs": 1, "cs": 1, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 12, "c": 7, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 12, "c": 10, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 12, "c": 13, "rs": 1, "cs": 1, "v": "", "b": [1, 0, 1, 1], "sz": 11.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 12, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 13, "c": 1, "rs": 1, "cs": 5, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 13, "c": 6, "rs": 1, "cs": 1, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 13, "c": 7, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 13, "c": 10, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 13, "c": 13, "rs": 1, "cs": 1, "v": "", "b": [1, 0, 1, 1], "sz": 11.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 13, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 14, "c": 1, "rs": 1, "cs": 5, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 14, "c": 6, "rs": 1, "cs": 1, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 14, "c": 7, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 14, "c": 10, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 14, "c": 13, "rs": 1, "cs": 1, "v": "", "b": [1, 0, 1, 1], "sz": 11.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 14, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 15, "c": 1, "rs": 1, "cs": 5, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 15, "c": 6, "rs": 1, "cs": 1, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 15, "c": 7, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 15, "c": 10, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 15, "c": 13, "rs": 1, "cs": 1, "v": "", "b": [1, 0, 1, 1], "sz": 11.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 15, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 16, "c": 1, "rs": 1, "cs": 5, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 16, "c": 6, "rs": 1, "cs": 1, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 16, "c": 7, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 16, "c": 10, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 16, "c": 13, "rs": 1, "cs": 1, "v": "", "b": [1, 0, 1, 1], "sz": 11.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 16, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 17, "c": 1, "rs": 1, "cs": 5, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 17, "c": 6, "rs": 1, "cs": 1, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 17, "c": 7, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 17, "c": 10, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 17, "c": 13, "rs": 1, "cs": 1, "v": "", "b": [1, 0, 1, 1], "sz": 11.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 17, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 18, "c": 1, "rs": 1, "cs": 5, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 18, "c": 6, "rs": 1, "cs": 1, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 18, "c": 7, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 18, "c": 10, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 18, "c": 13, "rs": 1, "cs": 1, "v": "", "b": [1, 0, 1, 1], "sz": 11.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 18, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 19, "c": 1, "rs": 1, "cs": 5, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 19, "c": 6, "rs": 1, "cs": 1, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 19, "c": 7, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 19, "c": 10, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 19, "c": 13, "rs": 1, "cs": 1, "v": "", "b": [1, 0, 1, 1], "sz": 11.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 19, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 20, "c": 1, "rs": 1, "cs": 5, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 20, "c": 6, "rs": 1, "cs": 1, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 20, "c": 7, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 20, "c": 10, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 20, "c": 13, "rs": 1, "cs": 1, "v": "", "b": [1, 0, 1, 1], "sz": 11.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 20, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 21, "c": 1, "rs": 1, "cs": 5, "v": "", "b": [1, 1, 0, 1], "sz": 11.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 21, "c": 6, "rs": 1, "cs": 1, "v": "", "b": [1, 1, 0, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 21, "c": 7, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 0, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 21, "c": 10, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 0, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 21, "c": 13, "rs": 1, "cs": 1, "v": "", "b": [1, 0, 0, 1], "sz": 11.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 21, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 0, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 22, "c": 1, "rs": 1, "cs": 5, "v": "營造業專業工程特定施工項目", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 22, "c": 6, "rs": 1, "cs": 1, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 22, "c": 7, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 22, "c": 10, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 22, "c": 13, "rs": 1, "cs": 1, "v": "", "b": [1, 0, 1, 1], "sz": 11.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 22, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 23, "c": 1, "rs": 1, "cs": 5, "v": "A.", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 23, "c": 6, "rs": 1, "cs": 1, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 23, "c": 7, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 23, "c": 10, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 23, "c": 13, "rs": 1, "cs": 1, "v": "", "b": [1, 0, 1, 1], "sz": 11.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 23, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 24, "c": 1, "rs": 1, "cs": 5, "v": "B.", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 24, "c": 6, "rs": 1, "cs": 1, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 24, "c": 7, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 24, "c": 10, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 24, "c": 13, "rs": 1, "cs": 1, "v": "", "b": [1, 0, 1, 1], "sz": 11.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 24, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 25, "c": 1, "rs": 1, "cs": 21, "v": "二、工地材料管理概況(含約定之重要材料使用狀況及數量等)", "b": [0, 1, 1, 1], "sz": 8.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 26, "c": 1, "rs": 1, "cs": 4, "v": "材料名稱", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 26, "c": 5, "rs": 1, "cs": 1, "v": "單位", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 26, "c": 6, "rs": 1, "cs": 3, "v": "契約數量", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 26, "c": 9, "rs": 1, "cs": 3, "v": "本日進場數量", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 26, "c": 12, "rs": 1, "cs": 2, "v": "累計進場數量", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 26, "c": 14, "rs": 1, "cs": 8, "v": "備註", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 27, "c": 1, "rs": 1, "cs": 4, "v": "鋼筋，SD420W級", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 27, "c": 5, "rs": 1, "cs": 1, "v": "kg", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 27, "c": 6, "rs": 1, "cs": 3, "v": 18400, "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "right", "va": "center", "wrap": false}, {"r": 27, "c": 9, "rs": 1, "cs": 3, "v": 0, "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 27, "c": 12, "rs": 1, "cs": 2, "v": 19420, "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "right", "va": "center", "wrap": false}, {"r": 27, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 28, "c": 1, "rs": 1, "cs": 4, "v": "", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": true}, {"r": 28, "c": 5, "rs": 1, "cs": 1, "v": "", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 28, "c": 6, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "right", "va": "center", "wrap": false}, {"r": 28, "c": 9, "rs": 1, "cs": 3, "v": "", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 28, "c": 12, "rs": 1, "cs": 2, "v": "", "b": [1, 1, 1, 1], "sz": 11.0, "bold": false, "h": "right", "va": "center", "wrap": false}, {"r": 28, "c": 14, "rs": 1, "cs": 8, "v": "", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 29, "c": 1, "rs": 1, "cs": 21, "v": "三、工地人員及機具管理(含約定之出工人數及機具使用情形及數量)", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "left", "va": "center", "wrap": false}, {"r": 30, "c": 1, "rs": 1, "cs": 2, "v": "工別", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 30, "c": 3, "rs": 1, "cs": 4, "v": "本日人數", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 30, "c": 7, "rs": 1, "cs": 4, "v": "累計人數", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 30, "c": 11, "rs": 1, "cs": 3, "v": "機具名稱", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 30, "c": 14, "rs": 1, "cs": 5, "v": "本日使用數量", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 30, "c": 19, "rs": 1, "cs": 3, "v": "累計使用數量", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 31, "c": 1, "rs": 1, "cs": 2, "v": "技術工", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 31, "c": 3, "rs": 1, "cs": 1, "v": "工", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 31, "c": 4, "rs": 1, "cs": 3, "v": 1, "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 31, "c": 7, "rs": 1, "cs": 4, "v": 243, "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 31, "c": 11, "rs": 1, "cs": 3, "v": "挖土機", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 31, "c": 14, "rs": 1, "cs": 1, "v": "台", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 31, "c": 15, "rs": 1, "cs": 4, "v": 0, "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 31, "c": 19, "rs": 1, "cs": 3, "v": 39, "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 32, "c": 1, "rs": 1, "cs": 2, "v": "普通工", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 32, "c": 3, "rs": 1, "cs": 1, "v": "工", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 32, "c": 4, "rs": 1, "cs": 3, "v": 2, "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 32, "c": 7, "rs": 1, "cs": 4, "v": 215, "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 32, "c": 11, "rs": 1, "cs": 3, "v": "破碎機", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 32, "c": 14, "rs": 1, "cs": 1, "v": "台", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 32, "c": 15, "rs": 1, "cs": 4, "v": 0, "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 32, "c": 19, "rs": 1, "cs": 3, "v": 13, "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 33, "c": 1, "rs": 1, "cs": 2, "v": "體力工", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 33, "c": 3, "rs": 1, "cs": 1, "v": "工", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 33, "c": 4, "rs": 1, "cs": 3, "v": 0, "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 33, "c": 7, "rs": 1, "cs": 4, "v": 31, "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 33, "c": 11, "rs": 1, "cs": 3, "v": "傾卸貨車", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 33, "c": 14, "rs": 1, "cs": 1, "v": "台", "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 33, "c": 15, "rs": 1, "cs": 4, "v": 0, "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 33, "c": 19, "rs": 1, "cs": 3, "v": 7, "b": [1, 1, 1, 1], "sz": 8.0, "bold": false, "h": "center", "va": "center", "wrap": false}, {"r": 34, "c": 1, "rs": 1, "cs": 21, "v": "四、本日施工項目是否有須依「營造業專業工程特定施工項目應置之技術士總類、比率或人數標準表」規定應設置技術士之專業工程□有■無(此項如勾選\"有\"，則應填寫後附「公共工程施工日誌之技術士簽章表」)", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": null, "va": "center", "wrap": true}, {"r": 35, "c": 1, "rs": 1, "cs": 21, "v": "五、工地勞工安全衛生事項之督導、公共環境與安全之維護及其他工地行政事務：工地職業安全衛生事項之督導、公共環境與安全之維護及其他工地行政事務：\n  (ㄧ)施工前檢查事項：\n   1.實施勤前教育(含工地預防災變及危害告知)：□有 □無\n   2.確認新進勞工是否提報勞工保險(或其他商業保險)資料及安全衛生教育訓練紀錄：□有 □無□無新進勞工\n   3.檢查勞工個人防護具：□有 □無\n  (二)其他事項：", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": null, "va": "center", "wrap": true}, {"r": 36, "c": 1, "rs": 1, "cs": 21, "v": "六、施工取樣試驗紀錄：", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": null, "va": "center", "wrap": false}, {"r": 37, "c": 1, "rs": 1, "cs": 21, "v": "七、通知協力廠商辦理事項：", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": null, "va": "center", "wrap": true}, {"r": 38, "c": 1, "rs": 1, "cs": 21, "v": "八、重要事項紀錄（含主辦機關及監造單位指示、工地遇緊急異常狀況及需解決施工技術問題之通報處理情形、施工要徑、進度落後原因及因應對策、本日是否由專任工程人員督察按圖施工、解決施工技術問題等）：本日無施工,", "b": [1, 1, 1, 1], "sz": 10.0, "bold": false, "h": null, "va": "center", "wrap": true}, {"r": 39, "c": 1, "rs": 1, "cs": 21, "v": "工地負責人：", "b": [0, 0, 0, 0], "sz": 8.0, "bold": false, "h": "left", "va": "center", "wrap": false}]};
+const dTpl={};DLAY.cells.forEach(c=>{dTpl[c.r+","+c.c]=c});
+function dRoc(s){const m=String(s||"").match(/^(\d{4})-(\d{2})-(\d{2})/);return m?(Number(m[1])-1911)+"年"+Number(m[2])+"月"+Number(m[3])+"日":""}
+function dPct(v){return v===null||v===undefined?"":(Math.round(v*10000)/100).toFixed(2)+"%"}
+function dNum(v){if(v===null||v===undefined||v==="")return"";const n=Math.round(Number(v)*100)/100;return isNaN(n)?String(v):n}
+function diaryModel(P,d){
+  const items=d.items||[];const mats=(d.mats&&d.mats.length)?d.mats:(d.matsText?[{name:d.matsText,unit:"",today:"",cum:"",text:1}]:[]);
+  const exI=Math.max(0,items.length-12),exM=Math.max(0,mats.length-2);
+  const sh=r=>r+(r>21?exI:0)+(r>28?exM:0);
+  const cells=[],heights=[];
+  const clone=(c,r)=>Object.assign({},c,{r,v:""});
+  DLAY.cells.forEach(c=>{cells.push(Object.assign({},c,{r:sh(c.r)}))});
+  for(let i=0;i<exI;i++)DLAY.cells.filter(c=>c.r===21).forEach(c=>cells.push(clone(c,22+i)));
+  for(let j=0;j<exM;j++)DLAY.cells.filter(c=>c.r===28).forEach(c=>cells.push(clone(c,29+exI+j)));
+  for(let r=1;r<=DLAY.heights.length;r++)heights[sh(r)-1]=DLAY.heights[r-1];
+  for(let i=0;i<exI;i++)heights[21+i]=DLAY.heights[20];
+  for(let j=0;j<exM;j++)heights[28+exI+j]=DLAY.heights[27];
+  const at=(r,c)=>cells.find(x=>x.r===r&&x.c===c);
+  const put=(r,c,v)=>{const x=at(r,c);if(x)x.v=v===null||v===undefined?"":v};
+  const clear=(r,cs)=>cs.forEach(c=>put(r,c,""));
+  put(3,4,d.am||"");put(3,8,d.pm||"");put(3,14,dRoc(d.date));put(4,2,P.name||"");put(4,14,P.company||"");
+  put(5,2,P.approved===null||P.approved===undefined?"":P.approved);put(5,8,d.elapsed);put(5,13,d.remain===null||d.remain===undefined?"":d.remain);put(5,20,P.ext||0);
+  put(6,4,dRoc(P.start));put(6,14,dRoc(P.end));put(7,4,dPct(d.planned));put(7,14,dPct(d.actual));
+  for(let r=10;r<=21+exI;r++)clear(r,[1,6,7,10,13,14]);
+  items.forEach((it,i)=>{const r=10+i;put(r,1,(it.code&&it.code!=="-"?it.code+" ":"")+it.name);put(r,6,it.unit||"");put(r,7,dNum(it.contract));put(r,10,dNum(it.today));put(r,13,dNum(it.cum));put(r,14,it.loc||"")});
+  const m0=27+exI;
+  for(let j=0;j<Math.max(2,mats.length);j++)clear(m0+j,[1,5,6,9,12,14]);
+  mats.forEach((m,j)=>{put(m0+j,1,m.name);put(m0+j,5,m.unit||"");if(!m.text){put(m0+j,9,dNum(m.today));put(m0+j,12,dNum(m.cum))}});
+  const c0=31+exI+exM,cr=[["tech"],["gen"],["lab"]];
+  cr.forEach((k,i)=>{const v=d.crew[k[0]]||[0,0];put(c0+i,4,v[0]);put(c0+i,7,v[1])});
+  (d.mach||[]).slice(0,3).forEach((m,i)=>{put(c0+i,11,m.name);put(c0+i,15,m.today);put(c0+i,19,m.cum)});
+  // 五、四
+  const a35=at(35+exI+exM,1);
+  if(a35&&P.tick==="自動"){const w=!!d.worked;a35.v=String(a35.v).split("\n").map(ln=>{const t=ln.trim();const i=ln.lastIndexOf("：");if(i<0)return ln;
+    if(/^1\./.test(t)||/^3\./.test(t))return ln.slice(0,i)+(w?"：■有 □無":"：□有 ■無");
+    if(/^2\./.test(t))return ln.slice(0,i)+(w?"：□有 □無■無新進勞工":"：□有 ■無□無新進勞工");return ln}).join("\n")}
+  const a36=at(36+exI+exM,1);if(a36)a36.v=a36.v+(d.sample||"");
+  const a38=at(38+exI+exM,1);if(a38){const lab=a38.v.slice(0,a38.v.lastIndexOf("：")+1);let body;
+    if(d.worked)body=[d.work,d.notes].filter(Boolean).join("；");
+    else body="本日無施工"+(d.nowork?"("+d.nowork+")":"")+(d.notes?"；"+d.notes:"");
+    a38.v=lab+body}
+  const sigRow=39+exI+exM,a39=at(sigRow,1);const signer=d.sig?d.sig.signer:(P.signer||"");if(a39)a39.v=a39.v+(d.sig?d.sig.signer:"");
+  return{cells,widths:DLAY.widths,heights,sig:d.sig&&d.sig.img&&!d.sig.stale?{img:d.sig.img,row:sigRow,signer:d.sig.signer,at:d.sig.at}:null,stale:!!(d.sig&&d.sig.stale),date:d.date,sheet:String(Number(d.date.slice(8,10)))}}
+function dEsc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+function dHtml(M){const rows={};M.cells.forEach(c=>{(rows[c.r]=rows[c.r]||[]).push(c)});const tw=M.widths.reduce((a,b)=>a+b,0);
+  let o='<table class="dt"><colgroup>'+M.widths.map(w=>'<col style="width:'+(w/tw*100).toFixed(3)+'%">').join("")+"</colgroup>";
+  for(let r=1;r<=M.heights.length;r++){o+='<tr style="height:'+((M.heights[r-1]||15)*1.33).toFixed(1)+'px">';
+    (rows[r]||[]).sort((a,b)=>a.c-b.c).forEach(c=>{const ha=c.h||(typeof c.v==="number"?"center":"left");
+      const st="border-width:"+c.b.map(x=>x?1:0).join("px ")+"px;border-style:solid;border-color:#000;font-size:"+((c.sz||11)*1.2).toFixed(1)+"px;"+(c.bold?"font-weight:700;":"")+"text-align:"+ha+";vertical-align:"+(c.va==="center"?"middle":c.va||"middle")+";white-space:pre-wrap;";
+      let inner=dEsc(c.v);
+      if(M.sig&&r===M.sig.row&&c.c===1)inner+='<img class="dsig" src="'+M.sig.img+'"><span class="dsg">簽名時間 '+dEsc(M.sig.at||"")+"</span>";
+      o+='<td colspan="'+c.cs+'" rowspan="'+c.rs+'" style="'+st+'">'+inner+"</td>"});o+="</tr>"}
+  return o+"</table>"}
+function dPrintDoc(models,title){
+  const pages=models.map(M=>'<div class="pg">'+(M.stale?'<div class="warn">此日誌簽名後已有修改,請重新簽名</div>':"")+dHtml(M)+"</div>").join("");
+  return '<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+dEsc(title)+'</title><style>@page{size:A4 portrait;margin:6mm}body{margin:0;background:#dde;font-family:"標楷體","DFKai-SB",serif}.bar{position:sticky;top:0;background:#fff;padding:10px;border-bottom:1px solid #aaa;z-index:9;font-family:sans-serif;font-size:15px}.bar button{padding:8px 14px;font-size:15px;margin-right:8px}.pg{width:720px;margin:10px auto;background:#fff;padding:0}.dt{border-collapse:collapse;table-layout:fixed;width:720px}.dt td{padding:1px 3px;overflow:hidden;word-break:break-all;line-height:1.25}.dsig{height:30px;vertical-align:middle;margin-left:10px}.dsg{font-size:9px;color:#444;margin-left:6px}.warn{color:#b00;font:14px sans-serif;padding:4px}@media print{body{background:#fff}.bar{display:none}.pg{margin:0;page-break-after:always;break-after:page;transform-origin:top left}.pg:last-child{page-break-after:auto}}</style><body><div class="bar"><button onclick="window.print()">列印 / 存成 PDF</button>共 '+models.length+' 頁。手機請按「列印」後,在預覽畫面用兩指放大並選「存成 PDF / 儲存到檔案」。</div>'+pages+'<script>function fit(){var H=1050,W=720;document.querySelectorAll(".pg").forEach(function(p){var t=p.querySelector(".dt");var k=Math.min(1,H/(p.scrollHeight||H));p.style.zoom=k})}window.addEventListener("beforeprint",fit);<\/script></body></html>'}
+function dOpenPrint(models,title){const html=dPrintDoc(models,title);const u=URL.createObjectURL(new Blob([html],{type:"text/html;charset=utf-8"}));const w=window.open(u,"_blank");if(!w){S.err="瀏覽器擋住了新視窗,請允許彈出視窗後再按一次。";render()}setTimeout(()=>URL.revokeObjectURL(u),120000)}
+// ---- XLSX ----
+function crc32(u8){if(!crc32.t){crc32.t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;crc32.t[n]=c>>>0}}let crc=-1;for(let i=0;i<u8.length;i++)crc=crc32.t[(crc^u8[i])&255]^(crc>>>8);return(crc^-1)>>>0}
+function zipStore(files){const enc=new TextEncoder(),parts=[],cd=[];let off=0;
+  files.forEach(f=>{const nm=enc.encode(f.name),crc=crc32(f.data),sz=f.data.length;
+    const lh=new DataView(new ArrayBuffer(30));lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);lh.setUint16(6,0x0800,true);lh.setUint16(12,0x21,true);lh.setUint32(14,crc,true);lh.setUint32(18,sz,true);lh.setUint32(22,sz,true);lh.setUint16(26,nm.length,true);
+    parts.push(new Uint8Array(lh.buffer),nm,f.data);
+    const ch=new DataView(new ArrayBuffer(46));ch.setUint32(0,0x02014b50,true);ch.setUint16(4,20,true);ch.setUint16(6,20,true);ch.setUint16(8,0x0800,true);ch.setUint16(14,0x21,true);ch.setUint32(16,crc,true);ch.setUint32(20,sz,true);ch.setUint32(24,sz,true);ch.setUint16(28,nm.length,true);ch.setUint32(42,off,true);
+    cd.push(new Uint8Array(ch.buffer),nm);off+=30+nm.length+sz});
+  const cs=cd.reduce((a,b)=>a+b.length,0),end=new DataView(new ArrayBuffer(22));end.setUint32(0,0x06054b50,true);end.setUint16(8,files.length,true);end.setUint16(10,files.length,true);end.setUint32(12,cs,true);end.setUint32(16,off,true);
+  return new Blob([...parts,...cd,new Uint8Array(end.buffer)],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})}
+function xCol(n){let s="";while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26)}return s}
+function xEsc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,"")}
+function buildXlsx(models){
+  const enc=new TextEncoder(),X='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  const fonts=[],fk={},borders=[{k:"0000"}],bk={"0000":0},xfs=[],xk={};
+  const fontId=(sz,b)=>{const k=sz+"|"+(b?1:0);if(!(k in fk)){fk[k]=fonts.length;fonts.push({sz,b})}return fk[k]};
+  const borderId=bits=>{const k=bits.join("");if(!(k in bk)){bk[k]=borders.length;borders.push({k})}return bk[k]};
+  const xf=(sz,b,bits,h,va,wrap)=>{const key=[fontId(sz||11,b),borderId(bits),h||"",va||"",wrap?1:0].join("|");if(!(key in xk)){xk[key]=xfs.length+1;xfs.push({f:fontId(sz||11,b),b:borderId(bits),h,va,wrap})}return xk[key]};
+  fontId(11,false);
+  const files=[],sheetsMeta=[],media=[];
+  models.forEach((M,si)=>{
+    const grid={},merges=[];const rowsMax=M.heights.length;
+    M.cells.forEach(c=>{
+      const hh=c.h||(typeof c.v==="number"?"center":"left"),vv=c.va==="center"?"center":(c.va||"center");
+      for(let i=0;i<c.rs;i++)for(let j=0;j<c.cs;j++){
+        const bits=[i===0?c.b[0]:0,j===c.cs-1?c.b[1]:0,i===c.rs-1?c.b[2]:0,j===0?c.b[3]:0];
+        const s=xf(c.sz,c.bold,bits,hh,vv,true);
+        grid[(c.r+i)+","+(c.c+j)]={s,v:(i===0&&j===0)?c.v:"",r:c.r+i,c:c.c+j}}
+      if(c.rs>1||c.cs>1)merges.push(xCol(c.c)+c.r+":"+xCol(c.c+c.cs-1)+(c.r+c.rs-1))});
+    let sd="";
+    for(let r=1;r<=rowsMax;r++){const rc=Object.values(grid).filter(g=>g.r===r).sort((a,b)=>a.c-b.c);
+      sd+='<row r="'+r+'" ht="'+(M.heights[r-1]||15)+'" customHeight="1">'+rc.map(g=>{const ref=xCol(g.c)+r;
+        if(g.v===""||g.v===null||g.v===undefined)return'<c r="'+ref+'" s="'+g.s+'"/>';
+        if(typeof g.v==="number")return'<c r="'+ref+'" s="'+g.s+'"><v>'+g.v+"</v></c>";
+        return'<c r="'+ref+'" s="'+g.s+'" t="inlineStr"><is><t xml:space="preserve">'+xEsc(g.v)+"</t></is></c>"}).join("")+"</row>"}
+    const cols=M.widths.map((w,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+w.toFixed(2)+'" customWidth="1"/>').join("");
+    const hasImg=!!M.sig;
+    const xml=X+'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>'+cols+"</cols><sheetData>"+sd+"</sheetData>"+(merges.length?'<mergeCells count="'+merges.length+'">'+merges.map(m=>'<mergeCell ref="'+m+'"/>').join("")+"</mergeCells>":"")+'<printOptions horizontalCentered="1"/><pageMargins left="0.2" right="0.2" top="0.2" bottom="0.2" header="0.1" footer="0.1"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="1"/>'+(hasImg?'<drawing r:id="rId1"/>':"")+"</worksheet>";
+    files.push({name:"xl/worksheets/sheet"+(si+1)+".xml",data:enc.encode(xml)});
+    if(hasImg){
+      const mi=media.length+1;const b64=M.sig.img.split(",")[1],bin=atob(b64),u8=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);media.push(u8);
+      files.push({name:"xl/worksheets/_rels/sheet"+(si+1)+".xml.rels",data:enc.encode(X+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing'+mi+'.xml"/></Relationships>')});
+      files.push({name:"xl/drawings/drawing"+mi+".xml",data:enc.encode(X+'<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:oneCellAnchor><xdr:from><xdr:col>5</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>'+(M.sig.row-1)+'</xdr:row><xdr:rowOff>30000</xdr:rowOff></xdr:from><xdr:ext cx="1143000" cy="381000"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="簽名"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1143000" cy="381000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>')});
+      files.push({name:"xl/drawings/_rels/drawing"+mi+".xml.rels",data:enc.encode(X+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image'+mi+'.png"/></Relationships>')});
+      files.push({name:"xl/media/image"+mi+".png",data:u8});sheetsMeta.push({si,drawing:mi})}
+    else sheetsMeta.push({si})});
+  const styles=X+'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="'+fonts.length+'">'+fonts.map(f=>'<font>'+(f.b?"<b/>":"")+'<sz val="'+f.sz+'"/><name val="標楷體"/><family val="1"/><charset val="136"/></font>').join("")+'</fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="'+borders.length+'">'+borders.map(b=>{const k=b.k,s=(i,n)=>k[i]==="1"?'<'+n+' style="thin"><color auto="1"/></'+n+'>':'<'+n+'/>';return"<border>"+s(3,"left")+s(1,"right")+s(0,"top")+s(2,"bottom")+"<diagonal/></border>"}).join("")+'</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="'+(xfs.length+1)+'"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+xfs.map(x=>'<xf numFmtId="0" fontId="'+x.f+'" fillId="0" borderId="'+x.b+'" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment'+(x.h?' horizontal="'+x.h+'"':"")+(x.va?' vertical="'+x.va+'"':"")+(x.wrap?' wrapText="1"':"")+"/></xf>").join("")+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  const n=models.length;
+  const ct=X+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+models.map((m,i)=>'<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join("")+sheetsMeta.filter(s=>s.drawing).map(s=>'<Override PartName="/xl/drawings/drawing'+s.drawing+'.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>').join("")+"</Types>";
+  const wb=X+'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'+models.map((m,i)=>'<sheet name="'+xEsc(m.sheet)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>').join("")+"</sheets></workbook>";
+  const wbr=X+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+models.map((m,i)=>'<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>').join("")+'<Relationship Id="rId'+(n+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+  const rels=X+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+  const all=[{name:"[Content_Types].xml",data:enc.encode(ct)},{name:"_rels/.rels",data:enc.encode(rels)},{name:"xl/workbook.xml",data:enc.encode(wb)},{name:"xl/_rels/workbook.xml.rels",data:enc.encode(wbr)},{name:"xl/styles.xml",data:enc.encode(styles)},...files];
+  return zipStore(all)}
+// ---- 簽名板 ----
+function openSignPad(day,P){return new Promise(res=>{
+  const nm=h("input",{type:"text",placeholder:"簽名人姓名"});nm.value=ls.get("signer_"+P.id,"")||P.signer||S.me||"";
+  const cv=h("canvas",{style:"touch-action:none;background:#fff;border:2px dashed #888;border-radius:8px;width:100%;height:38vh;display:block"});
+  const bd=h("div",{class:"lb-backdrop",style:"justify-content:flex-start;padding-top:max(14px,env(safe-area-inset-top))"});
+  let drawn=false,ctx;
+  const close=v=>{bd.remove();res(v)};
+  const size=()=>{const r=cv.getBoundingClientRect(),dpr=Math.max(1,window.devicePixelRatio||1);cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx=cv.getContext("2d");ctx.scale(dpr,dpr);ctx.lineWidth=2.6;ctx.lineCap="round";ctx.lineJoin="round";ctx.strokeStyle="#102a6b"};
+  let last=null;const pos=e=>{const r=cv.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}};
+  cv.addEventListener("pointerdown",e=>{e.preventDefault();cv.setPointerCapture(e.pointerId);last=pos(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(last.x+0.1,last.y+0.1);ctx.stroke();drawn=true});
+  cv.addEventListener("pointermove",e=>{if(!last)return;e.preventDefault();const p=pos(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p});
+  ["pointerup","pointercancel","pointerleave"].forEach(t=>cv.addEventListener(t,()=>{last=null}));
+  const err=h("div",{class:"msg warn",hidden:true});
+  const ok=()=>{const name=nm.value.trim();if(!name){err.hidden=false;err.textContent="請填簽名人姓名";return}if(!drawn){err.hidden=false;err.textContent="請先在框內簽名";return}
+    let w=360,hh=Math.round(360*cv.height/cv.width),out="";for(let k=0;k<3;k++){const t=document.createElement("canvas");t.width=w;t.height=hh;t.getContext("2d").drawImage(cv,0,0,w,hh);out=t.toDataURL("image/png");if(out.length<40000)break;w=Math.round(w*0.75);hh=Math.round(hh*0.75)}
+    ls.set("signer_"+P.id,name);close({signer:name,img:out})};
+  bd.append(h("div",{style:"width:100%;max-width:640px;color:#fff;font-size:17px;font-weight:700"},"簽名確認:"+P.short+" "+day.date+"(星期"+day.wk+")"),
+    h("div",{style:"width:100%;max-width:640px;color:#ddd;font-size:14px"},"請確認當日施工數量正確後,用手指在下方框內簽名。"),
+    h("label",{class:"f",style:"width:100%;max-width:640px;color:#fff"},"簽名人",nm),
+    h("div",{style:"width:100%;max-width:640px"},cv),err,
+    h("div",{class:"lb-bar"},h("button",{type:"button",class:"btn",onclick:()=>{ctx.clearRect(0,0,cv.width,cv.height);drawn=false}},"清除重簽"),h("button",{type:"button",class:"btn",onclick:()=>close(null)},"取消"),h("button",{type:"button",class:"btn primary",onclick:ok},"確認簽名")));
+  document.body.append(bd);size()})}
+// ---- 日誌頁 ----
+async function diaryLoad(force){const p=proj();if(!p)return;const key=p.id+"|"+S.dMonth;if(!force&&S.dData&&S.dData.key===key)return;if(S.dLoading===key)return;S.dLoading=key;
+  try{const j=await api("diary",{pid:p.id,month:S.dMonth});S.dData={key,j}}catch(e){S.err="日誌資料讀取失敗:"+e.message}S.dLoading="";render()}
+function diaryPrj(j){return Object.assign({},j.project,{signer:j.project.signer})}
+async function diarySign(day){const p=proj(),D=S.dData.j,P=diaryPrj(D);const r=await openSignPad(day,P);if(!r)return;
+  try{await api("sign",{pid:p.id,date:day.date,signer:r.signer,img:r.img});await diaryLoad(true);await reload(true)}catch(e){S.err="簽名沒有存成功:"+e.message;render()}}
+function diaryMonthBtns(D,P){const models=()=>D.days.map(d=>diaryModel(P,d));
+  return h("div",{class:"row"},h("button",{type:"button",class:"btn primary",onclick:()=>dOpenPrint(models(),P.short+" "+D.month+" 施工日誌")},"下載整月 PDF"),
+    h("button",{type:"button",class:"btn primary",onclick:async()=>{try{const b=buildXlsx(models());await S.dl.save({filename:P.short+"_"+D.month+"_施工日誌.xlsx",data:b})}catch(e){if(!(e&&e.code==="declined")){S.err="Excel 產生失敗:"+(e.message||e);render()}}}},"下載整月 Excel"))}
+function viewDiary(){const p=proj(),out=[];S.dMonth=S.dMonth||today().slice(0,7);
+  const mi=h("input",{type:"month",value:S.dMonth});mi.addEventListener("change",()=>{if(mi.value){S.dMonth=mi.value;S.dData=null;render()}});
+  const sec=h("section",{class:"card"},h("h2",{},"施工日誌|"+(p.short||p.name)),h("label",{class:"f"},"月份",mi));out.push(sec);diaryLoad();
+  const key=p.id+"|"+S.dMonth;
+  if(!S.dData||S.dData.key!==key){sec.append(h("p",{class:"note"},"讀取中…"));return out}
+  const D=S.dData.j,P=diaryPrj(D);
+  if(!D.project.start)sec.append(h("div",{class:"msg warn"},"這個工程還沒填開工日,工期與進度會不準。請內業或管理者到「設定」填寫。"));
+  if(!D.project.multi&&D.days.length&&D.days.every(d=>d.planned===null))sec.append(h("div",{class:"msg warn"},"還沒有上傳這個工程的預定進度,日誌的「預定進度」會是空白。請內業或管理者到「設定」上傳。"));
+    const curTick=P.tick||((p.short||p.name).includes("北大")?"手勾":"自動");
+  P.tick=curTick;
+  const tickRow=S.canOffice?h("div",{class:"f"},"日誌「四、五」項勾選方式（內業可直接切換）",seg(["手勾(如北大印空白框)","自動(依有無施工自動勾)"],curTick==="自動"?"自動(依有無施工自動勾)":"手勾(如北大印空白框)",async v=>{
+    const nv=v.startsWith("自動")?"自動":"手勾";
+    P.tick=nv;p.tick=nv;render();
+    try{await api("saveProject",{project:{id:p.id,tick:nv}})}catch(e){}
+  })):h("p",{class:"note"},"日誌「四、五」項勾選方式："+curTick);
+  sec.append(tickRow,diaryMonthBtns(D,P),h("p",{class:"note"},"簽名後 7 天內若回報被修改,該日會標示「待重簽」,PDF 與 Excel 不會帶出舊簽名。"));
+  const list=h("section",{class:"card"});
+  D.days.slice().reverse().forEach(d=>{const sg=d.sig;let st,cls;
+    if(!d.has){st="無回報";cls="note"}else if(!sg){st="未簽名";cls="note"}else if(sg.stale){st="⚠ 簽名後已修改,待重簽";cls="msg warn"}else{st="✅ 已簽名 "+sg.signer;cls="msg ok"}
+    list.append(h("div",{class:"row",style:"align-items:center;border-bottom:1px solid var(--line);padding:6px 0"},
+      h("div",{style:"flex:1;min-width:0"},h("b",{},d.date.slice(5)+"(週"+d.wk+")"),h("div",{class:cls,style:"padding:2px 6px;display:inline-block;margin-left:8px;font-size:13px"},st)),
+      d.has?h("button",{type:"button",class:"btn"+(!sg||sg.stale?" primary":""),onclick:()=>diarySign(d)},sg&&!sg.stale?"重簽":"簽名"):null,
+      h("button",{type:"button",class:"btn",onclick:()=>dOpenPrint([diaryModel(P,d)],P.short+" "+d.date+" 施工日誌")},"PDF")))});
+  if(!D.days.length)list.append(h("p",{class:"note"},"這個月份沒有資料。"));
+  out.push(list);return out}
+// ---- 管理者:日誌設定與預定進度上傳 ----
+function diarySetAdmin(p){const sec=h("section",{class:"card"},h("h2",{},"施工日誌設定|"+(p.short||p.name)));
+  if(!S.canOffice){sec.append(h("p",{class:"note"},"只有內業或管理者可以修改。"));return sec}
+  const f=(label,val,type)=>{const i=h("input",{type:type||"text"});i.value=val===null||val===undefined?"":val;return[h("label",{class:"f"},label,i),i]};
+  const [l1,co]=f("承攬廠商名稱",p.company),[l2,ap]=f("核定工期(天)",p.approved,"number"),[l3,ex]=f("工期展延天數(天)",p.ext||0,"number"),[l4,sg]=f("預設工地負責人(簽名人)",p.signer),[l5,st]=f("開工日期",p.start,"date"),[l6,en]=f("完工日期(留空則依核定工期推算)",p.end,"date");
+  const tk=h("select",{},["手勾","自動"].map(x=>h("option",{value:x},x)));tk.value=p.tick||"手勾";
+  const msg=h("div",{class:"msg ok",hidden:true});
+  sec.append(l1,h("div",{class:"row"},l2,l3),l4,h("div",{class:"row"},l5,l6),h("label",{class:"f"},"日誌「四、五」項勾選方式(手勾=印空白方框;自動=依有無施工自動勾)",tk),
+    h("button",{type:"button",class:"btn primary",onclick:async()=>{try{await api("saveProject",{project:{id:p.id,company:co.value.trim(),approved:ap.value===""?"":Number(ap.value),ext:ex.value===""?0:Number(ex.value),signer:sg.value.trim(),start:st.value,end:en.value,tick:tk.value}});S.dData=null;await reload(true);msg.hidden=false;msg.textContent="已儲存"}catch(e){S.err="沒有存成功:"+e.message;render()}}},"儲存日誌設定"),msg);
+  const fi=h("input",{type:"file",accept:".xlsx,.xls"}),pm=h("div",{class:"msg",hidden:true});
+  fi.addEventListener("change",async()=>{const file=fi.files[0];if(!file)return;pm.hidden=false;pm.className="msg";pm.textContent="讀取中…";
+    try{if(typeof XLSX==="undefined")throw new Error("Excel 讀取元件還在載入,請稍等幾秒再選一次");const wb=XLSX.read(await file.arrayBuffer(),{type:"array"});const ws=wb.Sheets["預定進度"]||wb.Sheets[wb.SheetNames[0]];
+      const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:""});const dt=v=>{if(typeof v==="number"&&v>20000&&v<90000){const o=XLSX.SSF.parse_date_code(v);return o.y+"-"+String(o.m).padStart(2,"0")+"-"+String(o.d).padStart(2,"0")}return String(v||"").trim().replace(/\//g,"-")};
+      const rows=aoa.slice(1).filter(r=>r[0]&&r[3]!==""&&r[4]!=="").map(r=>[String(r[0]).trim(),String(r[1]||"").trim(),dt(r[2]),dt(r[3]),typeof r[4]==="string"?(parseFloat(r[4])/(String(r[4]).includes("%")?100:1)):r[4]]);
+      if(!rows.length)throw new Error("沒有讀到資料列,請確認欄位順序:工程簡稱、版本、生效日、日期、累計預定進度");
+      const j=await api("importPlan",{rows});pm.className="msg ok";pm.textContent="已匯入 "+j.n+" 列(涵蓋 "+j.projects+" 個工程版本)。";S.dData=null}catch(e){pm.className="msg warn";pm.textContent="匯入失敗:"+e.message}fi.value=""});
+  sec.append(h("h2",{style:"margin-top:14px"},"預定進度上傳"),h("p",{class:"note"},"欄位:工程簡稱、版本、生效日、日期、累計預定進度(開口契約不用上傳)。同一個「工程簡稱+版本」重傳會整組覆蓋。展延或變更請新增一個版本並填新的生效日。"),fi,pm);
+  return sec}
+function siteDispEditor(p,siteName){
+  const m=S.siteDispMap||(S.siteDispMap={});
+  const box=h("div",{class:"sheet"},h("div",{class:"t"},"📍 「"+siteName+"」派工單施工工項設定"),
+    h("p",{class:"note"},"勾選這張派工單有的工項（也可上傳監造給的派工單 Excel 自動勾選）。儲存後，現場回報選「"+siteName+"」時就只會出現這些工項！"));
+  const fi=h("input",{type:"file",accept:".xlsx,.xls,.csv"});
+  const fmsg=h("div",{class:"msg ok",hidden:true});
+  fi.addEventListener("change",async()=>{
+    const file=fi.files[0];if(!file)return;
+    try{
+      if(typeof XLSX==="undefined")throw new Error("Excel 元件載入中，請稍候再試");
+      const wb=XLSX.read(await file.arrayBuffer(),{type:"array"});
+      let hitCnt=0;
+      wb.SheetNames.forEach(sn=>{
+        const aoa=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:""});
+        aoa.forEach(row=>{
+          const cells=row.map(x=>String(x||"").trim());
+          p.items.forEach(it=>{
+            if(it.mode==="依大項百分比")return;
+            if(cells[0]===it.code||cells.includes(it.code)||(it.name&&cells.some(c=>c&&c.length>=3&&(c===it.name||c.includes(it.name))))){
+              if(!(it.code in m)){m[it.code]="";hitCnt++}
+              const numCell=row.find((v,idx)=>idx>1&&typeof v==="number"&&v>0&&v!==it.price);
+              if(numCell&&!m[it.code])m[it.code]=numCell;
+            }
+          });
+        });
+      });
+      fmsg.hidden=false;fmsg.className=hitCnt?"msg ok":"msg warn";
+      fmsg.textContent=hitCnt?"已從 Excel 自動比對勾選 "+hitCnt+" 個工項！請確認下方勾選後按「儲存此派工單工項」。":"Excel 中沒有自動比對到相符的項次或名稱，請直接於下方手動勾選。";
+      render();
+    }catch(e){fmsg.hidden=false;fmsg.className="msg warn";fmsg.textContent="讀取失敗："+e.message}
+    fi.value="";
+  });
+  box.append(h("label",{class:"f"},"📤 上傳監造派工單 Excel 自動比對勾選(選填，也可直接下方手動勾選)",fi),fmsg);
+  const sIn=h("input",{type:"text",placeholder:"搜尋項次或工項名稱篩選…"});sIn.value=S.siteDispQ||"";
+  const list=h("div",{style:"max-height:320px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:6px;background:var(--card)"});
+  const drawList=()=>{
+    list.replaceChildren();
+    const q=(S.siteDispQ||"").trim();
+    p.items.forEach(it=>{
+      if(it.mode==="依大項百分比")return;
+      const ct=catTag(it);
+      if(q&&!(it.code.includes(q)||it.name.includes(q)||ct.includes(q)))return;
+      const checked=it.code in m;
+      const cb=h("input",{type:"checkbox"});cb.checked=checked;
+      const qIn=h("input",{type:"number",inputmode:"decimal",step:"any",placeholder:"派工量(選填)",style:"width:105px;padding:4px 6px;font-size:13px"});
+      qIn.value=m[it.code]||"";qIn.hidden=!checked;
+      cb.addEventListener("change",()=>{if(cb.checked){m[it.code]=qIn.value||"";qIn.hidden=false}else{delete m[it.code];qIn.hidden=true}});
+      qIn.addEventListener("input",()=>{if(it.code in m)m[it.code]=qIn.value});
+      list.append(h("div",{style:"display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--line)"},
+        h("label",{style:"display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer"},cb,h("span",{style:"font-size:14px"},it.code+(ct?" ("+ct+") ":" ")+it.name+" ["+it.unit+"]")),
+        qIn));
+    });
+  };
+  sIn.addEventListener("input",()=>{S.siteDispQ=sIn.value;drawList()});
+  drawList();
+  box.append(sIn,list,h("div",{class:"row"},
+    h("button",{type:"button",class:"btn",onclick:()=>{S.siteDispMap={};render()}},"全部取消(改回顯示全部)"),
+    h("button",{type:"button",class:"btn primary",disabled:S.busy,onclick:async()=>{
+      const items=Object.keys(m).map(code=>[code,Number(m[code])||0]);
+      S.busy=true;render();
+      try{await api("saveSiteItems",{pid:p.id,site:siteName,items});S.siteDispOpen="";await reload(true)}catch(e){S.err="派工單工項儲存失敗："+e.message}
+      S.busy=false;render();
+    }},"儲存此派工單工項")));
+  return box;
+}
+function applyLayoutMode(){
+  const mode=S.layoutMode||ls.get("layoutMode","mobile")||"mobile";
+  S.layoutMode=mode;
+  document.documentElement.dataset.layout=mode;
+  const btn=$("#viewModeBtn");
+  if(btn)btn.textContent=mode==="desktop"?"💻 電腦版 ⇄ 📱":"📱 手機版 ⇄ 💻";
+}
+function render(){applyLayoutMode();const main=$("#main");if(!S.loaded){return}
   const sel=$("#proj");{const ap=liveProjects();const sig=ap.map(p=>p.id+p.short).join("|");if(sel.dataset.sig!==sig){sel.dataset.sig=sig;sel.replaceChildren(...ap.map(p=>h("option",{value:p.id},p.short||p.name)))}}
   const p=proj();if(p){S.pid=p.id;sel.value=p.id}
   document.querySelectorAll("nav button").forEach(b=>b.setAttribute("aria-current",String(b.dataset.v===S.view)));
   $("nav").hidden=S.boss;sel.hidden=S.boss;$("header b").textContent=S.boss?"松青工程總覽":"現場回報";
-  const eb=$("#exitBoss");if(eb)eb.hidden=!S.boss;
+  const eb=$("#exitBoss");if(eb)eb.hidden=!S.boss;const lo=$("#logout");if(lo)lo.hidden=!G.key;
   if(S.demo)S.reports=demoData();
-  let out=[];if(S.err){out.push(h("div",{class:"msg warn"},S.err));S.err=""}
+    let out=[];if(S.err){out.push(h("div",{class:"msg warn full-span"},S.err));S.err=""}
+  if((S.stale||[]).length){
+    const tags=h("div",{class:"sug",style:"margin-top:6px"});
+    S.stale.forEach(([pid,dt,signer])=>{
+      const sp=S.projects.find(x=>x.id===pid);
+      tags.append(h("button",{type:"button",class:"tag on",onclick:()=>{S.pid=pid;ls.set("pid",pid);S.dMonth=dt.slice(0,7);S.dData=null;S.view="diary";render();window.scrollTo(0,0)}},(sp?sp.short||sp.name:pid)+" "+dt+(signer?"（原簽認:"+signer+"）":"")+" › 點此重簽/下載"));
+    });
+    out.push(h("div",{class:"msg warn full-span"},h("b",{},"🔔 有 "+S.stale.length+" 份已簽認日誌事後被修改，請點選重新簽認並下載更新版："),tags));
+  }
   if(S.g)S.g.ensure(S.month);
   if(/Line\//i.test(navigator.userAgent)&&["all","people","log"].includes(S.view))out.push(h("div",{class:"msg warn"},"您正在 LINE 內建的瀏覽器,無法下載 Excel。請按右下角「⋮」選「以預設瀏覽器開啟」,用 Safari 開啟後再下載。"));
   if(S.admin&&["all","people","log"].includes(S.view))out.push(S.demo?h("div",{class:"msg warn"},"目前顯示的是示意用的範例資料,不是實際紀錄。 ",h("button",{type:"button",class:"btn",onclick:()=>{S.demo=false;S.reports=S.real||[];render()}},"關閉示意")):h("button",{type:"button",class:"btn",onclick:()=>{S.demo=true;render()}},"看示意畫面(範例資料)"));
   if(!p){out.push(h("section",{class:"card"},h("p",{class:"note"},S.db?"還沒有建立任何工程。工程與契約項目建立後,這裡會出現回報畫面。":"無法連到資料庫,請登入 claude.ai 後重新開啟這個頁面。")))}
-  else out=out.concat(S.view==="prog"?viewProg():S.view==="people"?viewPeople():S.view==="log"?viewLog():S.view==="all"?viewAll():S.view==="set"?viewSet():viewReport());
+  else out=out.concat(S.view==="prog"?viewProg():S.view==="people"?viewPeople():S.view==="diary"?viewDiary():S.view==="log"?viewLog():S.view==="all"?viewAll():S.view==="set"?viewSet():viewReport());
   const lb=renderLightbox();if(lb)out.push(lb);
   main.replaceChildren(...out);if(S.view!=="report")S.flash="";}
 
 $("#proj").addEventListener("change",e=>{S.pid=e.target.value;S.logSite="";ls.set("pid",S.pid);S.pick=null;S.draft.site="";render()});
-$("#exitBoss").addEventListener("click",()=>{try{location.hash="report"}catch(e){}S.boss=false;S.view="report";render();window.scrollTo(0,0)});
-document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{S.view=b.dataset.v;S.pick=null;if(["report","log","all","set"].includes(S.view))try{location.hash=S.view==="set"?"items":S.view}catch(e){}render();window.scrollTo(0,0)}));
-function fromHash(){const v=location.hash.split("#").filter(Boolean).pop()||"";S.boss=v==="boss"||v==="people"||v==="progress";S.view=v==="people"?"people":v==="progress"?"prog":S.boss?"all":v==="items"?"set":["report","log","all"].includes(v)?v:"report"}
+$("#viewModeBtn").addEventListener("click",()=>{S.layoutMode=(S.layoutMode==="desktop"?"mobile":"desktop");ls.set("layoutMode",S.layoutMode);applyLayoutMode()});applyLayoutMode();$("#logout").addEventListener("click",()=>{if(confirm("確定要登出嗎?"))logout()});$("#exitBoss").addEventListener("click",()=>{try{location.hash="report"}catch(e){}S.boss=false;S.view="report";render();window.scrollTo(0,0)});
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{S.view=b.dataset.v;S.pick=null;if(["report","diary","log","all","set"].includes(S.view))try{location.hash=S.view==="set"?"items":S.view}catch(e){}render();window.scrollTo(0,0)}));
+function fromHash(){const v=location.hash.split("#").filter(Boolean).pop()||"";S.boss=v==="boss"||v==="people"||v==="progress";S.view=v==="people"?"people":v==="progress"?"prog":S.boss?"all":v==="items"?"set":["report","diary","log","all"].includes(v)?v:"report"}
 window.addEventListener("hashchange",()=>{fromHash();render()});fromHash();
 
 // ---- Google 試算表後台 ----
@@ -1217,11 +1499,11 @@ function prevMonth(m){const a=m.split("-").map(Number);const d=new Date(a[0],a[1
 async function api(action,body){let r;try{r=await fetch(G.url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(Object.assign({key:G.key,action},body||{}))})}catch(e){throw new Error("連不到後台,請檢查網路")}
   let j;try{j=await r.json()}catch(e){throw new Error("後台回應格式不對,請確認後台網址")}if(!j.ok)throw new Error(j.error||"後台錯誤");return j}
 function pushReports(){S.real=[...G.rep.values()];if(!S.demo)S.reports=S.real}
-function applyLoad(j){if(j.items)G.items=j.items;const sites={},info={};(j.sites||[]).forEach(s=>{const o=Object.assign({name:s[1],status:s[2]||"施工中"},s[3]||{});(info[s[0]]=info[s[0]]||[]).push(o);if(siteOpen(o))(sites[s[0]]=sites[s[0]]||[]).push(s[1])});
+function applyLoad(j){S.me=j.legacy?"":(j.me||"");S.legacy=!!j.legacy;S.role=j.role||"";if(S.me)ls.set("by",S.me);if(j.items)G.items=j.items;const sites={},info={};(j.sites||[]).forEach(s=>{const o=Object.assign({name:s[1],status:s[2]||"施工中"},s[3]||{});(info[s[0]]=info[s[0]]||[]).push(o);if(siteOpen(o))(sites[s[0]]=sites[s[0]]||[]).push(s[1])});
   S.projects=j.projects.map(a=>{const its=(G.items[a.id]||[]).map(x=>({code:x[0],name:x[1],unit:x[2],price:x[3],qty:x[4],cat:x[5]||"未分類",mode:x[6],basis:x[7],prog:x[8],base:x[9],on:x[10]}));const cats=[];its.forEach(i=>{if(!cats.some(c=>c.code===i.cat))cats.push({code:i.cat,name:i.cat})});
     return Object.assign({},a,{items:its,cats,active:its.filter(i=>i.on).map(i=>i.code),sites:sites[a.id]||[],siteInfo:info[a.id]||[],dispatch:(j.dispatch||{})[a.id]||{},sums:(j.sums||{})[a.id]||{},note:a.status==="未開工"?(a.note||"尚未開工"):""})});
   const c=j.config||{};S.roster=c.workers||[];S.crews=(c.crews||[]).filter(x=>x!=="菲吉");if((c.machines||[]).length){S.machines=c.machines.map(x=>String(x).replace(/^怪手/,"挖土機"));if(!S.machines.some(x=>x.startsWith("鏟裝機")))S.machines.push("鏟裝機")}S.works=(c.works||[]).filter(w=>!REMOVED_WORKS.includes(w));if((c.dests||[]).length)S.dests=c.dests;if((c.soilTypes||[]).length)S.soilTypes=c.soilTypes.map(x=>x==="垃圾"?"廢棄物":x);S.samples=(c.samples&&c.samples.length)?c.samples.filter(s=>!/^混凝土\s*(140|210|280)/.test(s)):DEFAULT_SAMPLES.slice();
-  S.admin=j.role==="admin";S.canWrite=S.admin;S.canEdit=S.admin;S.editDays=j.editDays||7;
+  S.admin=j.role==="admin";S.canOffice=S.admin||j.role==="office";S.canWrite=S.admin;S.canEdit=S.admin;S.editDays=j.editDays||7;S.stale=j.stale||[];
   const keep=new Map();G.rep.forEach((r,id)=>{if(r.date.slice(0,7)<j._from)keep.set(id,r)});j.reports.forEach(r=>keep.set(r.id,r));G.rep=keep;pushReports()}
 async function reload(lite){const from=G.from||prevMonth(today().slice(0,7));const j=await api("load",{from,to:"9999-12",lite:!!lite});j._from=from;G.from=from;applyLoad(j);try{const snap=Object.assign({},j,{items:G.items});ls.set("agy_cache_v2",JSON.stringify(snap))}catch(e){}S.loaded=true;render()}
 function setActiveLocal(pid,codes){(G.items[pid]||[]).forEach(x=>{x[10]=codes.includes(x[0])?1:0})}
@@ -1242,15 +1524,31 @@ function photoMeta(data,label,cDate,cSite){const p=proj()||{},d=S.draft||{},k=S.
 const gdl={save:async({filename,data})=>{const type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";const b=data instanceof Blob?data:new Blob([data],{type});
   if(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)&&navigator.canShare){try{const f=new File([b],filename,{type});if(navigator.canShare({files:[f]})){await navigator.share({files:[f]});return{status:"saved"}}}catch(e){if(e&&e.name==="AbortError")throw{code:"declined"}}}
   const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000);return{status:"saved"}}};
-function gate(msg){const main=$("#main");const needUrl=!(GAS_URL&&GAS_URL.indexOf("__")!==0);const u=h("input",{id:"g_url",type:"text",placeholder:"https://script.google.com/macros/s/…/exec"});u.value=G.url||"";const k=h("input",{id:"g_key",type:"text",autocomplete:"off",placeholder:"公司提供的通行碼"});
-  const go=async()=>{G.url=needUrl?u.value.trim():G.url;G.key=k.value.trim();if(!G.url||!G.key){gate("請填好再按進入。");return}main.replaceChildren(h("section",{class:"card"},h("p",{class:"note"},"連線中…")));
-    try{await reload(false);ls.set("gkey",G.key);if(needUrl)ls.set("gurl",G.url)}catch(e){gate(e.message==="auth"?"通行碼不正確,請再確認。":e.message)}};
-  main.replaceChildren(h("section",{class:"card"},h("h2",{},"第一次使用"),msg?h("div",{class:"msg warn"},msg):null,needUrl?h("label",{class:"f"},"後台網址",u):null,h("label",{class:"f"},"通行碼",k),h("button",{type:"button",class:"btn primary block",onclick:go},"進入")))}
+function logout(){ls.set("gkey","");ls.set("agy_cache_v2","");G.key="";S.loaded=false;S.me="";S.boss=false;try{location.hash=""}catch(e){}const lo=$("#logout");if(lo)lo.hidden=true;const eb=$("#exitBoss");if(eb)eb.hidden=true;gate("")}
+async function changePinUI(){const o=prompt("請輸入目前的 PIN");if(!o)return;const n=prompt("請輸入新的 PIN(4~20 碼)");if(!n)return;try{const j=await api("changePin",{oldPin:o,newPin:n});G.key=j.token;ls.set("gkey",G.key);alert("PIN 已更新")}catch(e){alert(e.message)}}
+function gate(msg,pre){const main=$("#main");const first=!!(pre&&pre.needSet);const needUrl=!(GAS_URL&&GAS_URL.indexOf("__")!==0);
+  const u=h("input",{id:"g_url",type:"text",placeholder:"https://script.google.com/macros/s/…/exec"});u.value=G.url||"";
+  const nm=h("input",{id:"g_name",type:"text",autocomplete:"username",placeholder:"您的姓名(需先由管理者建立)"});nm.value=first?pre.name:ls.get("by","");if(first)nm.readOnly=true;
+  const pn=h("input",{id:"g_pin",type:"password",autocomplete:"current-password",placeholder:"PIN 碼"});
+  const np=h("input",{id:"g_np",type:"password",autocomplete:"new-password",placeholder:"設定新 PIN(4~20 碼)"});
+  const np2=h("input",{id:"g_np2",type:"password",autocomplete:"new-password",placeholder:"再輸入一次新 PIN"});
+  const go=async()=>{G.url=needUrl?u.value.trim():G.url;const name=nm.value.trim(),pin=pn.value;
+    if(!G.url||!name||(first?!np.value:!pin)){gate("請填好再按進入。",pre);return}
+    const body={action:"login",name,pin};
+    if(first){if(np.value!==np2.value){gate("兩次輸入的新 PIN 不一致。",pre);return}body.newPin=np.value}
+    main.replaceChildren(h("section",{class:"card"},h("p",{class:"note"},"登入中…")));
+    try{const r=await fetch(G.url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body)});const j=await r.json();
+      if(!j.ok){if(j.error==="不支援的動作"&&pin){G.key=pin;ls.set("gkey",G.key);ls.set("by",name);if(needUrl)ls.set("gurl",G.url);await reload(false);return}gate(j.error||"登入失敗",pre);return}
+      if(j.needSetPin){gate("這是您第一次登入,請設定自己的 PIN(4~20 碼,請牢記)。",{name:j.name,needSet:true});return}
+      G.key=j.token;ls.set("gkey",G.key);ls.set("by",j.name);if(needUrl)ls.set("gurl",G.url);await reload(false)
+    }catch(e){gate(e.message&&e.message!=="Failed to fetch"?e.message:"連不到後台,請檢查網路",pre)}};
+  [pn,np2].forEach(x=>x.addEventListener("keydown",e=>{if(e.key==="Enter")go()}));
+  main.replaceChildren(h("section",{class:"card"},h("h2",{},"登入"),msg?h("div",{class:"msg warn"},msg):null,needUrl?h("label",{class:"f"},"後台網址",u):null,h("label",{class:"f"},"姓名",nm),first?h("label",{class:"f"},"新 PIN",np):h("label",{class:"f"},"PIN 碼",pn),first?h("label",{class:"f"},"確認新 PIN",np2):null,h("button",{type:"button",class:"btn primary block",onclick:go},first?"設定並進入":"登入")))}
 (async function boot(){S.g=G;S.db=gdb;S.dl=gdl;S.assets=gassets;S.user={};
   if(!G.url||!G.key){gate("");return}
   const rawCache=ls.get("agy_cache_v2","");
   if(rawCache){try{const cj=JSON.parse(rawCache);if(cj&&cj.projects){G.from=cj._from||prevMonth(today().slice(0,7));applyLoad(cj);S.loaded=true;render()}}catch(e){}}
-  try{await reload(false)}catch(e){if(!S.loaded)gate(e.message==="auth"?"通行碼已變更,請重新輸入。":e.message);else if(e.message==="auth"){ls.set("agy_cache_v2","");S.loaded=false;gate("通行碼已變更,請重新輸入。")}}
+  try{await reload(false)}catch(e){if(!S.loaded)gate(e.message==="auth"?"登入已失效或帳號已停用,請重新登入。":e.message);else if(e.message==="auth"){ls.set("agy_cache_v2","");S.loaded=false;gate("登入已失效或帳號已停用,請重新登入。")}}
 })();
 </script>
 

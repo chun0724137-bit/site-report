@@ -4,9 +4,13 @@
  * 執行身分:我;存取權:所有人。通行碼在「設定」分頁。
  */
 var HEAD = {
-  '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型', '常用機具'],
-  '派工地點': ['工程代號', '地點', '狀態', '區域', '工作性質', '開工日', '預定完工日', '實際完工日'],
+  '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型', '常用機具', '勾選方式', '工地負責人', '承攬廠商', '核定工期', '展延天數'],
+  '派工地點': ['工程代號', '地點', '狀態', '區域', '工作性質', '開工日', '預定完工日', '實際完工日', '派工工項'],
   '設定': ['類別', '值', '屬性'],
+  '預定進度': ['工程簡稱', '版本', '生效日', '日期', '累計預定進度'],
+  '簽名': ['工程代號', '日期', '簽名人', '簽名圖', '簽名時間', '資料指紋', '登入者'],
+  '人員': ['姓名', '角色', '狀態', 'PIN雜湊', '鹽', '最後登入', '備註'],
+  '操作紀錄': ['時間', '人員', '角色', '動作', '內容'],
   '每日回報': ['回報編號', '日期', '工程代號', '工程', '派工地點', '上午天氣', '下午天氣', '回報人', '技術工', '普通工', '體力工', '義交', '工作項目', '人員出工與加班', '機具', '施工項目', '出土', '材料與物料', '取樣', '備註', '明日預定', '現場照片', '修繕地點', '未施工原因', '送出時間', '最後修改人', '修改時間', '修改前內容', '原始資料JSON']
 };
 var ITEM_HEAD = ['項次', '項目', '單位', '單價', '原契約數量', '第一次變更數量', '第二次變更數量', '分類', '計量方式', '依據分類', '計入進度', '起算累計', '大按鈕', '第一次變更日', '第二次變更日'];
@@ -513,7 +517,8 @@ function projects_() {
       status: str_(r['狀態']) || '施工中', start: date_(r['開工日']), end: date_(r['完工日']), note: str_(r['備註']), order: num_(r['排序']) || 99,
       place: str_(r['施工地點']), agency: str_(r['機關名稱']), diaryMode: str_(r['日誌方式']), ch: [date_(r['第一次變更日']), date_(r['第二次變更日'])],
       type: rawType || (isMulti ? '開口契約' : '一般'),
-      machines: machs
+      machines: machs,
+      tick: str_(r['勾選方式']) || '手勾', signer: str_(r['工地負責人']), company: str_(r['承攬廠商']), approved: num_(r['核定工期']), ext: num_(r['展延天數']) || 0
     };
   }).filter(function (p) { return p.id; }).sort(function (a, b) { return a.order - b.order; });
 }
@@ -561,7 +566,26 @@ function sites_() {
   }).filter(function (s) { return s[0] && s[1]; });
 }
 
-function dispatch_() { return {}; }
+function dispatch_() {
+  var out = {};
+  read_('派工地點').rows.forEach(function (r) {
+    var pid = str_(r['工程代號']), site = str_(r['地點']), raw = str_(r['派工工項']);
+    if (!pid || !site || !raw) return;
+    var list = [];
+    if (raw.charAt(0) === '[') {
+      try { list = JSON.parse(raw) || []; } catch (e) { list = []; }
+    } else {
+      raw.split(/[、,，\n]/).forEach(function (part) {
+        var s = str_(part); if (!s) return;
+        var kv = s.split(/[:：]/);
+        var code = str_(kv[0]), q = kv.length > 1 ? (num_(kv[1]) || 0) : 0;
+        if (code) list.push([code, q]);
+      });
+    }
+    if (list.length) { out[pid] = out[pid] || {}; out[pid][site] = list; }
+  });
+  return out;
+}
 
 /** 回報(依月份範圍)與全期累計 — 直接從「每日回報」單一分頁讀取 */
 function reports_(from, to, wantSums) {
@@ -1412,7 +1436,158 @@ function menuSettle() {
   ui.showModalDialog(HtmlService.createHtmlOutput('<p style="font-family:sans-serif">已產生:' + esc(out.name) + '</p><p style="font-family:sans-serif"><a href="' + esc(out.url) + '" target="_blank">開啟檔案</a></p><p style="font-family:sans-serif;color:#666">檔案在雲端硬碟「結算資料」資料夾。' + esc(out.note || '') + '</p>').setWidth(380).setHeight(180), '結算資料');
 }
 
+
+/* ===== 施工日誌(簽名、預定進度、整月資料) ===== */
+function fpOf_(reps) {
+  var s = reps.slice().sort(function (a, b) { return a.id < b.id ? -1 : 1; }).map(function (r) { return JSON.stringify(r); }).join(';');
+  if (!s) return '';
+  return hex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s)).slice(0, 12);
+}
+function sigRows_() {
+  var latest = {};
+  read_('簽名').rows.forEach(function (r) {
+    var k = str_(r['工程代號']) + '|' + date_(r['日期']);
+    latest[k] = { pid: str_(r['工程代號']), date: date_(r['日期']), signer: str_(r['簽名人']), img: str_(r['簽名圖']), at: dt_(r['簽名時間']), fp: str_(r['資料指紋']), by: str_(r['登入者']) };
+  });
+  return latest;
+}
+function staleList_(reports, from) {
+  var sig = sigRows_(), out = [], by = {};
+  reports.forEach(function (r) { var k = r.pid + '|' + r.date; (by[k] = by[k] || []).push(r); });
+  Object.keys(sig).forEach(function (k) {
+    var s = sig[k]; if (s.date.slice(0, 7) < from) return;
+    if (fpOf_(by[k] || []) !== s.fp) out.push([s.pid, s.date, s.signer]);
+  });
+  return out;
+}
+function addDays_(d, n) { var t = new Date(d + 'T00:00:00'); t.setDate(t.getDate() + n); return Utilities.formatDate(t, tz_(), 'yyyy-MM-dd'); }
+function dayDiff_(a, b) { return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000); }
+function planVers_(p) {
+  var vers = {};
+  read_('預定進度').rows.forEach(function (r) {
+    var nm = str_(r['工程簡稱']); if (nm !== p.short && nm !== p.name) return;
+    var ver = str_(r['版本']) || '原計畫', v = vers[ver] = vers[ver] || { eff: date_(r['生效日']) || '0000-00-00', pts: [] };
+    var cum = num_(r['累計預定進度']); if (cum === null) return;
+    if (cum > 1) cum = cum / 100;
+    v.pts.push([date_(r['日期']), cum]);
+  });
+  var arr = Object.keys(vers).map(function (k) { vers[k].pts.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; }); return vers[k]; });
+  arr.sort(function (a, b) { return a.eff < b.eff ? -1 : 1; });
+  return arr;
+}
+function plannedAt_(vers, date) {
+  var use = null; vers.forEach(function (v) { if (v.eff <= date) use = v; });
+  if (!use) return null;
+  var val = 0, hit = false; use.pts.forEach(function (x) { if (x[0] <= date) { val = x[1]; hit = true; } });
+  return hit ? val : 0;
+}
+function actualAt_(items, p, date, cum) {
+  var arr = [], total = 0;
+  items.forEach(function (it) {
+    if (!it.prog || !it.price) return;
+    var q = qtyAt_(it, p, date); if (!q) return;
+    arr.push([it.code, it.name, it.unit, it.price, q, it.cat, it.mode, it.basis, true, it.base, 0]);
+  });
+  var done = 0;
+  arr.forEach(function (it) { var am = it[3] * it[4]; total += am; done += am * Math.min(1, ratio_(it, cum, arr)); });
+  return total ? done / total : 0;
+}
+var WEEK_ = ['日', '一', '二', '三', '四', '五', '六'];
+function diaryMonth_(pid, ym) {
+  var p = null; projects_().forEach(function (x) { if (x.id === pid) p = x; });
+  if (!p) throw new Error('找不到工程');
+  var all = reports_('0000-00', '9999-99', false).reports.filter(function (r) { return r.pid === pid; });
+  var byDate = {}; all.forEach(function (r) { (byDate[r.date] = byDate[r.date] || []).push(r); });
+  var dates = Object.keys(byDate).sort();
+  var start = p.start || dates[0] || (ym + '-01');
+  var items = itemsFull_(pid), itemBy = {}; items.forEach(function (it) { itemBy[it.code] = it; });
+  var machCols = diaryMachColsFor_(p), sig = sigRows_(), vers = p.multi ? [] : planVers_(p);
+  var lastDay = Utilities.formatDate(new Date(new Date(ym.slice(0, 4), Number(ym.slice(5, 7)), 0).getTime()), tz_(), 'yyyy-MM-dd');
+  var endDate = p.end || (p.approved ? addDays_(start, p.approved - 1 + (p.ext || 0)) : '');
+  var cum = {}, cc = { tech: 0, gen: 0, lab: 0 }, mc = {}, matc = {}, days = [];
+  var cur = start < ym + '-01' ? start : ym + '-01';
+  var stop = lastDay, tdy = today_(); if (stop > tdy) stop = tdy;
+  if (dates.length && dates[0] < cur) cur = dates[0];
+  for (var guard = 0; cur <= stop && guard < 1500; guard++, cur = addDays_(cur, 1)) {
+    var reps = byDate[cur] || [], worked = reps.filter(function (r) { return !r.nowork; });
+    var dayQ = {}, locs = {}, order = [], dm = {}, dmat = {}, matOrder = [];
+    var crew = { tech: 0, gen: 0, lab: 0 };
+    worked.forEach(function (r) {
+      crew.tech = Math.max(crew.tech, r.tech || 0); crew.gen = Math.max(crew.gen, r.gen || 0); crew.lab = Math.max(crew.lab, r.lab || 0);
+      Object.keys(r.mach || {}).forEach(function (k) { var b = machBaseName_(k); dm[b] = Math.max(dm[b] || 0, Number(r.mach[k]) || 0); });
+      (r.mats || []).forEach(function (m) { var k = str_(m.name) + '|' + str_(m.unit); if (!(k in dmat)) { dmat[k] = 0; matOrder.push([k, str_(m.name), str_(m.unit)]); } dmat[k] += Number(m.qty) || 0; });
+      r.entries.forEach(function (e) {
+        var code = e.code; if (!code || code === '-') return;
+        var q = num_(e.qty); if (q === null) return;
+        var s = cum[code] = cum[code] || { q: 0, p: null, pd: '' };
+        if (e.mode === '累計%' || e.mode === '現場填百分比') { s.p = q; s.pd = cur; }
+        else { s.q += q; dayQ[code] = (dayQ[code] || 0) + q; if (order.indexOf(code) < 0) order.push(code); }
+        if (e.loc) { locs[code] = locs[code] || []; if (locs[code].indexOf(e.loc) < 0) locs[code].push(e.loc); }
+      });
+    });
+    cc.tech += crew.tech; cc.gen += crew.gen; cc.lab += crew.lab;
+    machCols.forEach(function (n) { mc[n] = (mc[n] || 0) + (dm[n] || 0); });
+    matOrder.forEach(function (m) { matc[m[0]] = (matc[m[0]] || 0) + dmat[m[0]]; });
+    if (cur < ym + '-01') continue;
+    var uniq = function (f) { var o = []; reps.forEach(function (r) { var v = str_(r[f]); if (v && o.indexOf(v) < 0) o.push(v); }); return o; };
+    var actual = actualAt_(items, p, cur, cum), planned = p.multi ? actual : plannedAt_(vers, cur);
+    var elapsed = dayDiff_(start, cur) + 1, remain = p.approved ? p.approved - elapsed + (p.ext || 0) : (endDate ? dayDiff_(cur, endDate) : null);
+    var sg = sig[pid + '|' + cur] || null, fp = fpOf_(reps);
+    days.push({
+      date: cur, wk: WEEK_[new Date(cur + 'T00:00:00').getDay()], has: reps.length > 0, worked: worked.length > 0,
+      am: uniq('am')[0] || '', pm: uniq('pm')[0] || '', nowork: uniq('nowork').join('、'),
+      items: order.map(function (code) {
+        var it = itemBy[code], s = cum[code];
+        return { code: code, name: it ? it.name : code, unit: it ? it.unit : '', contract: it ? qtyAt_(it, p, cur) : null, today: dayQ[code], cum: (it ? it.base : 0) + (s ? s.q : 0), loc: (locs[code] || []).join('、') };
+      }),
+      mats: matOrder.map(function (m) { return { name: m[1], unit: m[2], today: dmat[m[0]], cum: matc[m[0]] }; }),
+      matsText: uniq('materials').join('；'),
+      crew: { tech: [crew.tech, cc.tech], gen: [crew.gen, cc.gen], lab: [crew.lab, cc.lab] },
+      mach: machCols.map(function (n) { return { name: n, today: dm[n] || 0, cum: mc[n] || 0 }; }),
+      sample: uniq('sample').join('；'), work: uniq('work').join('；'), notes: uniq('notes').join('；'), tomorrow: uniq('tomorrow').join('；'),
+      planned: planned, actual: actual, elapsed: elapsed, remain: remain,
+      fp: fp, sig: sg ? { signer: sg.signer, at: sg.at, img: sg.img, stale: sg.fp !== fp } : null
+    });
+  }
+  return {
+    project: { id: p.id, name: p.name, short: p.short, multi: p.multi, company: p.company, approved: p.approved, ext: p.ext || 0, start: start, end: endDate, place: p.place, signer: p.signer, tick: p.tick },
+    month: ym, days: days
+  };
+}
 var ACTIONS = {
+  diary: function (q) {
+    var pid = str_(q.pid), ym = str_(q.month);
+    if (!/^\d{4}-\d{2}$/.test(ym)) throw new Error('月份格式不正確');
+    return diaryMonth_(pid, ym);
+  },
+  sign: function (q, role) {
+    var pid = str_(q.pid), d = str_(q.date), img = str_(q.img), signer = str_(q.signer);
+    if (!pid || !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error('資料不完整');
+    if (!signer) throw new Error('請填簽名人姓名');
+    if (img.indexOf('data:image/png;base64,') !== 0 || img.length > 45000) throw new Error('簽名圖不正確或太大,請重簽');
+    var reps = reports_('0000-00', '9999-99', false).reports.filter(function (r) { return r.pid === pid && r.date === d; });
+    if (!reps.length) throw new Error('這天還沒有回報,不能簽名');
+    var fp = fpOf_(reps);
+    append_('簽名', [{ '工程代號': pid, '日期': d, '簽名人': signer, '簽名圖': img, '簽名時間': now_(), '資料指紋': fp, '登入者': str_(q._me) }]);
+    return { fp: fp };
+  },
+  importPlan: function (q, role) {
+    if (role !== 'admin' && role !== 'office') throw new Error('只有管理者或內業可以匯入預定進度');
+    var rows = q.rows || [], names = {}, add = [];
+    rows.forEach(function (r) {
+      var nm = str_(r[0]), ver = str_(r[1]) || '原計畫', d = date_(r[3]), cum = num_(r[4]);
+      if (!nm || !/^\d{4}-\d{2}-\d{2}$/.test(d) || cum === null) return;
+      names[nm + '|' + ver] = 1; add.push([nm, ver, date_(r[2]) || '', d, cum]);
+    });
+    if (!add.length) throw new Error('沒有讀到有效的資料列(需有工程簡稱、日期、累計預定進度)');
+    var sh = sheet_('預定進度'), t = read_('預定進度'), keep = [];
+    t.rows.forEach(function (r) { if (!names[str_(r['工程簡稱']) + '|' + (str_(r['版本']) || '原計畫')]) keep.push([str_(r['工程簡稱']), str_(r['版本']), date_(r['生效日']), date_(r['日期']), r['累計預定進度']]); });
+    var all = keep.concat(add), last = sh.getLastRow();
+    if (last > 1) sh.getRange(2, 1, last - 1, 5).clearContent();
+    sh.getRange(2, 3, all.length, 2).setNumberFormat('@');
+    sh.getRange(2, 1, all.length, 5).setValues(all);
+    return { n: add.length, projects: Object.keys(names).length };
+  },
   load: function (q, role, c) {
     if (!q.lite) {
       var s = ss_(), shSoil = s.getSheetByName('出土');
@@ -1432,10 +1607,11 @@ var ACTIONS = {
     }
     var r = reports_(str_(q.from) || '0000-00', str_(q.to) || '9999-99', true);
     var out = {
-      role: role, editDays: EDIT_DAYS, projects: projs, sites: sites_(), dispatch: {}, sums: r.sums, reports: r.reports,
+      role: role, editDays: EDIT_DAYS, projects: projs, sites: sites_(), dispatch: dispatch_(), sums: r.sums, reports: r.reports,
       config: { workers: c.workers, crews: c.crews, machines: c.machines, soilTypes: c.soilTypes, dests: c.dests, works: c.works, samples: c.samples }
     };
     if (!q.lite) out.items = its;
+    try { out.stale = staleList_(r.reports, str_(q.from) || '0000-00'); } catch (e2) { out.stale = []; }
     return out;
   },
   reports: function (q) { return { reports: reports_(str_(q.from) || '0000-00', str_(q.to) || '9999-99', false).reports }; },
@@ -1551,11 +1727,25 @@ var ACTIONS = {
     sh.getRange(2, 1, rows.length, 3).setValues(rows);
     return {};
   },
+  saveSiteItems: function (q, role) {
+    if (role !== 'admin' && role !== 'office') throw new Error('只有管理者或內業可以設定派工單工項');
+    var pid = str_(q.pid), site = str_(q.site), items = q.items || [];
+    if (!pid || !site) throw new Error('請指定工程與派工地點');
+    var sh = sheet_('派工地點'), t = read_('派工地點'), hit = null;
+    t.rows.forEach(function (r) { if (str_(r['工程代號']) === pid && str_(r['地點']) === site) hit = r; });
+    var val = items.map(function (x) { return Array.isArray(x) ? (x[1] ? x[0] + ':' + x[1] : x[0]) : str_(x); }).filter(Boolean).join('、');
+    if (hit) {
+      sh.getRange(hit._row, t.head.indexOf('派工工項') + 1, 1, 1).setValues([[val]]);
+    } else {
+      append_('派工地點', [{ '工程代號': pid, '地點': site, '狀態': '施工中', '派工工項': val }]);
+    }
+    return { ok: true };
+  },
   saveProject: function (q, role) {
-    if (role !== 'admin') throw new Error('只有管理者可以管理工程');
+    if (role !== 'admin' && role !== 'office') throw new Error('只有管理者或內業可以管理工程');
     var p = q.project || {}, id = str_(p.id), t = read_('工程'), sh = sheet_('工程'), hit = null;
     t.rows.forEach(function (r) { if (str_(r['工程代號']) === id) hit = r; });
-    var map = { name: '工程名稱', short: '簡稱', status: '狀態', start: '開工日', end: '完工日', note: '備註' };
+    var map = { name: '工程名稱', short: '簡稱', status: '狀態', start: '開工日', end: '完工日', note: '備註', tick: '勾選方式', signer: '工地負責人', company: '承攬廠商', approved: '核定工期', ext: '展延天數' };
     if (hit) {
       for (var k in map) if (p[k] !== undefined) sh.getRange(hit._row, t.head.indexOf(map[k]) + 1, 1, 1).setValues([[p[k]]]);
       if (p.multi !== undefined) sh.getRange(hit._row, t.head.indexOf('開口契約') + 1, 1, 1).setValues([[p.multi ? '是' : '否']]);
@@ -1594,18 +1784,120 @@ function folder_(name, parent) {
   return it.hasNext() ? it.next() : (parent ? parent.createFolder(name) : DriveApp.createFolder(name));
 }
 function safe_(v) { return str_(v).replace(/[\\\/:*?"<>|]/g, '_').slice(0, 80); }
-var WRITES = { report: 1, deleteReport: 1, addSite: 1, siteStatus: 1, settle: 1, setActive: 1, saveConfig: 1, saveProject: 1 };
+var WRITES = { sign: 1, importPlan: 1, saveSiteItems: 1, report: 1, deleteReport: 1, addSite: 1, siteStatus: 1, settle: 1, setActive: 1, saveConfig: 1, saveProject: 1 };
+
+/* ===== 帳號與資安 ===== */
+var ROLE_MAP = { '管理者': 'admin', '現場': 'field', '內業': 'office', '老闆': 'office' };
+var TOKEN_DAYS = 30, MAX_FAIL = 5, LOCK_SEC = 900;
+function secret_() {
+  var P = PropertiesService.getScriptProperties(), s = P.getProperty('AUTH_SECRET');
+  if (!s) { s = Utilities.getUuid() + Utilities.getUuid(); P.setProperty('AUTH_SECRET', s); }
+  return s;
+}
+function hex_(bytes) { return bytes.map(function (b) { return ('0' + (b < 0 ? b + 256 : b).toString(16)).slice(-2); }).join(''); }
+function hashPin_(pin, salt) { return hex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + '|' + pin + '|' + secret_())); }
+function people_() {
+  var rs = read_('人員').rows, out = [];
+  rs.forEach(function (r) {
+    var name = str_(r['姓名']); if (!name) return;
+    out.push({ row: r._row, name: name, role: ROLE_MAP[str_(r['角色'])] || 'field', active: str_(r['狀態']) !== '停用', hash: str_(r['PIN雜湊']), salt: str_(r['鹽']) });
+  });
+  return out;
+}
+function sign_(name, exp, hash) { return hex_(Utilities.computeHmacSha256Signature(name + '|' + exp + '|' + hash, secret_())); }
+function makeToken_(u) {
+  var exp = Date.now() + TOKEN_DAYS * 86400000;
+  return Utilities.base64EncodeWebSafe(Utilities.newBlob(u.name + '|' + exp).getBytes()) + '.' + sign_(u.name, exp, u.hash);
+}
+/** 回傳 {name, role, legacy} 或 null */
+function auth_(key, c, ppl) {
+  key = str_(key); if (!key) return null;
+  var hasAdmin = ppl.some(function (p) { return p.active && p.role === 'admin' && p.hash; });
+  if (key.indexOf('.') > 0) {
+    try {
+      var parts = key.split('.'), raw = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString().split('|');
+      var name = raw[0], exp = Number(raw[1]);
+      if (!exp || exp < Date.now()) return null;
+      var u = null; ppl.forEach(function (p) { if (p.name === name) u = p; });
+      if (!u || !u.active || !u.hash) return null;
+      if (sign_(name, exp, u.hash) !== parts[1]) return null;
+      return { name: u.name, role: u.role, legacy: false };
+    } catch (e) { return null; }
+  }
+  if (hasAdmin) return null;   // 已建立管理者帳號後,舊的共用通行碼自動失效
+  var lr = role_(key, c);
+  return lr ? { name: lr === 'admin' ? '管理者(通行碼)' : '現場(通行碼)', role: lr, legacy: true } : null;
+}
+function audit_(who, role, action, detail) {
+  try { append_('操作紀錄', [{ '時間': now_(), '人員': who, '角色': role, '動作': action, '內容': str_(detail).slice(0, 300) }]); } catch (e) { }
+}
+function validPin_(p) { return typeof p === 'string' && p.length >= 4 && p.length <= 20; }
+function login_(q) {
+  var name = str_(q.name), pin = String(q.pin === undefined || q.pin === null ? '' : q.pin), cache = CacheService.getScriptCache();
+  var failKey = 'fail_' + Utilities.base64EncodeWebSafe(name).slice(0, 60);
+  if (!name) return { ok: false, error: '請輸入姓名' };
+  if (Number(cache.get(failKey) || 0) >= MAX_FAIL) return { ok: false, error: '錯誤次數過多,請 15 分鐘後再試,或聯絡管理者' };
+  var ppl = people_(), u = null; ppl.forEach(function (p) { if (p.name === name) u = p; });
+  var bad = function () { cache.put(failKey, String(Number(cache.get(failKey) || 0) + 1), LOCK_SEC); audit_(name, '', '登入失敗', ''); return { ok: false, error: '姓名或 PIN 不正確' }; };
+  var hasAdmin = ppl.some(function (p) { return p.active && p.role === 'admin' && p.hash; });
+  if (!u && !hasAdmin) {
+    var lr = role_(pin, config_());
+    if (lr) {
+      cache.remove(failKey);
+      return { ok: true, token: pin, name: name, role: lr, legacy: true };
+    }
+  }
+  if (!u || !u.active) return bad();
+  var lock = LockService.getScriptLock(); lock.waitLock(25000);
+  try {
+    var sh = sheet_('人員'), head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(str_);
+    if (!u.hash) {   // 第一次登入:自行設定 PIN
+      if (!q.newPin) return { ok: true, needSetPin: true, name: u.name };
+      if (!validPin_(String(q.newPin))) return { ok: false, error: 'PIN 需 4 到 20 碼' };
+      var salt = Utilities.getUuid().slice(0, 8), h = hashPin_(String(q.newPin), salt);
+      sh.getRange(u.row, head.indexOf('PIN雜湊') + 1, 1, 2).setValues([[h, salt]]); u.hash = h; u.salt = salt;
+    } else if (hashPin_(pin, u.salt) !== u.hash) return bad();
+    cache.remove(failKey);
+    sh.getRange(u.row, head.indexOf('最後登入') + 1).setValue(now_());
+  } finally { lock.releaseLock(); }
+  audit_(u.name, u.role, '登入', '');
+  return { ok: true, token: makeToken_(u), name: u.name, role: u.role };
+}
+function changePin_(q, user) {
+  if (user.legacy) throw new Error('通行碼登入無法變更 PIN');
+  var u = null; people_().forEach(function (p) { if (p.name === user.name) u = p; });
+  if (!u || hashPin_(String(q.oldPin || ''), u.salt) !== u.hash) throw new Error('舊 PIN 不正確');
+  if (!validPin_(String(q.newPin || ''))) throw new Error('新 PIN 需 4 到 20 碼');
+  var sh = sheet_('人員'), head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(str_);
+  var salt = Utilities.getUuid().slice(0, 8);
+  sh.getRange(u.row, head.indexOf('PIN雜湊') + 1, 1, 2).setValues([[hashPin_(String(q.newPin), salt), salt]]);
+  audit_(u.name, u.role, '變更PIN', '');
+  var nu = { name: u.name, hash: hashPin_(String(q.newPin), salt) };
+  return { token: makeToken_(nu) };
+}
 
 function handle_(q) {
   try {
-    var c = config_(), role = role_(q.key, c);
-    if (!role) return { ok: false, error: 'auth' };
-    var fn = ACTIONS[str_(q.action)]; if (!fn) return { ok: false, error: '不支援的動作' };
+    var action = str_(q.action);
+    if (action === 'login') return login_(q);
+    var c = config_(), ppl = people_(), user = auth_(q.key, c, ppl);
+    if (!user) return { ok: false, error: 'auth' };
+    var role = user.role;
+    var fn = ACTIONS[action]; if (!fn && action !== 'changePin') return { ok: false, error: '不支援的動作' };
+    if (action === 'changePin') { var cp = changePin_(q, user); cp.ok = true; return cp; }
+    if (!user.legacy) {   // 回報人以登入者姓名為準,不可冒名
+      if (action === 'report' && q.data) q.data.by = user.name;
+      if (action === 'deleteReport') q.by = user.name;
+    }
     var lock = null;
-    if (WRITES[q.action]) { lock = LockService.getScriptLock(); lock.waitLock(25000); }
-    try { var out = fn(q, role, c) || {}; out.ok = true; return out; } finally { if (lock) lock.releaseLock(); }
+    if (WRITES[action]) { lock = LockService.getScriptLock(); lock.waitLock(25000); }
+    try {
+      q._me = user.name; var out = fn(q, role, c) || {}; out.ok = true; out.me = user.name; out.legacy = user.legacy;
+      if (WRITES[action]) audit_(user.name, role, action, str_(q.id) || str_(q.pid) || '');
+      return out;
+    } finally { if (lock) lock.releaseLock(); }
   } catch (err) { return { ok: false, error: String(err && err.message || err) }; }
 }
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 function doPost(e) { var b = {}; try { b = JSON.parse(e.postData.contents); } catch (err) { } return json_(handle_(b)); }
-function doGet(e) { var p = (e && e.parameter) || {}; if (!p.action) return json_({ ok: true, hello: '松青現場回報後台運作中' }); return json_(handle_(p)); }
+function doGet(e) { return json_({ ok: true, hello: '松青現場回報後台運作中' }); }
