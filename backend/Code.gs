@@ -1878,6 +1878,18 @@ var ACTIONS = {
     return { id: f.getId(), url: 'https://drive.google.com/file/d/' + f.getId() + '/view' };
   },
   /** 照片打包下載:指定工程(派工單)與日期區間,依檔名規則打包成壓縮檔存到「照片下載」資料夾;照片太多自動拆成好幾包 */
+  /** 直接把照片傳給 App(每次一批,base64),由 App 存到資料夾或分享;比打包壓縮檔快 */
+  photoFiles: function (q) {
+    var p = projById_(str_(q.pid)); if (!p) throw new Error('找不到工程');
+    var from = str_(q.from), to = str_(q.to) || from;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error('日期格式不正確');
+    var list = photoList_(p, p.multi ? str_(q.site) : '', from, to), off = Math.max(0, Number(q.offset) || 0), lim = Math.min(20, Math.max(1, Number(q.limit) || 10));
+    var files = list.slice(off, off + lim).map(function (x) {
+      try { var b = DriveApp.getFileById(x.id).getBlob(); return { name: x.name, mime: b.getContentType ? (b.getContentType() || 'image/jpeg') : 'image/jpeg', data: Utilities.base64Encode(b.getBytes()) }; }
+      catch (err) { return { name: x.name, error: '讀不到這張照片' }; }
+    });
+    return { total: list.length, offset: off, files: files };
+  },
   photoZip: function (q) {
     var pid = str_(q.pid), site = str_(q.site), from = str_(q.from), to = str_(q.to);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error('日期格式不正確');
@@ -1905,7 +1917,7 @@ function photoList_(p, site, from, to) {
       var work = str_(r.work), item = (r.entries || []).map(function (e) { return e.name; }).filter(function (x) { return x; })[0] || '';
       (r.photos || []).forEach(function (ph) {
         var m = String(ph.url || '').match(/\/d\/([^/]+)/); if (!m) return;
-        var base = photoName_(r.date, p.multi ? r.site : '', ph.cap, work || item), name = base, k = 2;
+        var base = photoName_(r.date, p.multi ? r.site : '', work, ph.cap || item), name = base, k = 2;
         while (used[name]) name = base + '_' + (k++);
         used[name] = 1; out.push({ id: m[1], name: name + '.jpg' });
       });
