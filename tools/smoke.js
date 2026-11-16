@@ -98,4 +98,25 @@ ok(L.includes(D+'_路緣石 步道北側.jpg')&&L.includes(D+'_混凝土澆置.j
 r=m.call({key:'field123',action:'report',data:{pid:'yanggong1',site:'實踐國小',date:d0,by:'zip',work:'AC 刨除',photos:[{cap:'',url:'https://drive.google.com/file/d/P4/view'}]}});
 const L2=m.run("photoList_(projById_('yanggong1'),'實踐國小','"+d0+"','"+d0+"').map(function(x){return x.name})");ok(L2.includes(D+'_實踐國小_AC 刨除.jpg'),'開口契約檔名含派工單:'+L2[L2.length-1]);
 m.call({key:'field123',action:'upload',project:'115養工資本門(第1區)',site:'實踐國小',date:d0,name:'x.jpg',data:''});ok(/現場回報照片\/115養工資本門\(第1區\)\/實踐國小\/\d{4}-\d{2}-\d{2}\/x\.jpg$/.test(m.g.__lastPath),'照片資料夾:工程/派工單/日期');}
+// 匯入契約項目:新工程 → 第一次變更(數量變動、新增項目、展延依變更日)
+{r=m.call({key:'admin123',action:'saveProject',project:{name:'測試匯入工程',short:'匯入測試',type:'一般',status:'未開工',start:'2026-11-01',approved:100}});ok(r.ok&&r.id,'新增工程');const pid=r.id;
+r=m.call({key:'admin123',action:'importItems',pid,mode:'new',items:[{code:'1.1',name:'施工測量',unit:'式',qty:1,price:1000,cat:'一般需求',mode:'現場填百分比'},{code:'2.1',name:'1.10 測試混凝土',unit:'M3',qty:10,price:4000,cat:'校名柱'},{code:'2.10',name:'模板',unit:'M2',qty:50,price:300,cat:'校名柱'}]});ok(r.ok&&r.added===3,'匯入 3 項到新工程');
+const cs=m.sheets['契約-匯入測試'].d;ok(cs[3][0]==='2.10'&&cs[3][4]===50,'項次 2.10 保持文字、數量寫入');
+ok(m.call({key:'admin123',action:'importItems',pid,mode:'new',items:[{code:'9',name:'x',unit:'式',qty:1}]}).ok===false,'已有項目時不勾取代會被擋');
+r=m.call({key:'admin123',action:'importItems',pid,mode:'change',n:1,date:'2026-11-05',ext:15,items:[{code:'2.1',name:'1.10 測試混凝土',unit:'M3',qty:12,price:4000},{code:'2.10',name:'模板',unit:'M2',qty:0},{code:'2.11',name:'新增路緣石',unit:'M',qty:30,price:500,cat:'校名柱'}]});
+ok(r.ok&&r.changed===2&&r.added===1&&r.kept===1,'變更:2 項變動、1 項新增、1 項未列維持');
+const hd=m.sheets['契約-匯入測試'].d[0],cq=hd.indexOf('第一次變更數量'),cs2=m.sheets['契約-匯入測試'].d;
+ok(cs2[1][cq]===1&&cs2[2][cq]===12&&cs2[3][cq]===0&&cs2[4][0]==='2.11'&&cs2[4][cq]===30&&cs2[4][4]==='','變更數量欄:未列維持 1、變動 12、刪除 0、新增 30');
+const pr=m.run("projById_('"+pid+"')");ok(pr.ch[0]==='2026-11-05'&&pr.chExt[0]===15,'工程分頁寫入變更日與展延 15 天');
+ok(m.run("extAt_(projById_('"+pid+"'),'2026-11-04')")===0&&m.run("extAt_(projById_('"+pid+"'),'2026-11-05')")===15,'展延天數從變更日才加上');
+r=m.call({key:'field123',action:'report',data:{pid,date:'2026-11-10',by:'t',am:'晴',pm:'晴',tech:1,entries:[{code:'2.1',name:'1.10 測試混凝土',unit:'M3',mode:'數量',qty:3}]}});ok(r.ok,'變更後回報');
+r=m.call({key:'admin123',action:'diary',pid,month:'2026-11'});const dd=r.days.find(x=>x.date==='2026-11-10'),d19=r.days.find(x=>x.date==='2026-11-04');
+ok(dd&&dd.ext===15&&dd.remain===100-10+15&&(!d19||d19.ext===0),'日誌:11/10 剩餘 '+(dd&&dd.remain)+' 天(含展延 15)');}
+// 大項/小項標題列:寫入契約分頁但不算項目
+{let r=m.call({key:'admin123',action:'saveProject',project:{name:'標題測試',short:'標題測試'}});const pid=r.id;
+r=m.call({key:'admin123',action:'importItems',pid,mode:'new',items:[{code:'一',name:'第二校門',head:1},{code:'1',name:'一般需求',head:2,cat:'一般需求'},{code:'1.1',name:'施工測量',unit:'式',qty:1,price:10,cat:'一般需求'}]});ok(r.ok&&r.added===1,'標題列寫入、只算 1 個項目');
+const d=m.sheets['契約-標題測試'].d,mi=d[0].indexOf('計量方式');ok(d[1][0]==='一'&&d[1][mi]==='標題'&&d[2][0]==='1'&&d[2][4]==='','大項、小項列存在且沒有數量');
+r=m.call({key:'admin123',action:'load'});ok(r.items[pid].length===1&&r.heads[pid].length===2&&r.heads[pid][1][2]===0,'載入:項目 1 個、標題 2 個');
+ok(m.run("itemsFull_('"+pid+"').length")===1,'日誌項目不含標題列');
+r=m.call({key:'admin123',action:'importItems',pid,mode:'change',n:1,date:'2026-11-05',items:[{code:'1.1',name:'施工測量',unit:'式',qty:1}]});ok(r.ok&&r.changed===1&&r.kept===0,'變更時略過標題列');}
 console.log('全部通過');

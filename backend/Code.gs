@@ -4,7 +4,7 @@
  * 執行身分:我;存取權:所有人。通行碼在「設定」分頁。
  */
 var HEAD = {
-  '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型', '常用機具', '勾選方式', '工地負責人', '承攬廠商', '核定工期', '展延天數', '日誌第一聯', '日誌二聯'],
+  '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型', '常用機具', '勾選方式', '工地負責人', '承攬廠商', '核定工期', '展延天數', '日誌第一聯', '日誌二聯', '第一次展延天數', '第二次展延天數'],
   '派工地點': ['工程代號', '地點', '狀態', '區域', '工作性質', '開工日', '預定完工日', '實際完工日', '派工工項'],
   '設定': ['類別', '值', '屬性'],
   '預定進度': ['工程簡稱', '版本', '生效日', '日期', '累計預定進度'],
@@ -519,20 +519,31 @@ function projects_() {
       place: str_(r['施工地點']), agency: str_(r['機關名稱']), diaryMode: str_(r['日誌方式']), ch: [date_(r['第一次變更日']), date_(r['第二次變更日'])],
       type: rawType || (isMulti ? '開口契約' : '一般'),
       machines: machs,
-      tick: str_(r['勾選方式']) || '手勾', layout1: str_(r['日誌第一聯']) || '當日', layout2: str_(r['日誌二聯']) || '不附', signer: str_(r['工地負責人']), company: str_(r['承攬廠商']), approved: num_(r['核定工期']), ext: num_(r['展延天數']) || 0
+      tick: str_(r['勾選方式']) || '手勾', layout1: str_(r['日誌第一聯']) || '當日', layout2: str_(r['日誌二聯']) || '不附', signer: str_(r['工地負責人']), company: str_(r['承攬廠商']), approved: num_(r['核定工期']), ext: num_(r['展延天數']) || 0,
+      chExt: [num_(r['第一次展延天數']) || 0, num_(r['第二次展延天數']) || 0]
     };
   }).filter(function (p) { return p.id; }).sort(function (a, b) { return a.order - b.order; });
 }
 
+/** 某日適用的展延天數:一般展延 + 已過變更日的變更展延 */
+function extAt_(p, date) {
+  var e = p.ext || 0;
+  (p.chExt || []).forEach(function (x, i) { if (x && p.ch[i] && (!date || date >= p.ch[i])) e += x; });
+  return e;
+}
 function projById_(id) { var out = null; projects_().forEach(function (p) { if (p.id === id || p.short === id || p.name === id) out = out || p; }); return out; }
 
+/** 契約分頁的大項/小項標題列(計量方式填「標題」):不計數量、金額 */
+function isHead_(r) { return str_(r['計量方式']) === '標題'; }
+var HEADS_ = {};
 function items_() {
-  var out = {}, map = itemSheets_();
+  var out = {}, map = itemSheets_(); HEADS_ = {};
   Object.keys(map).forEach(function (pid) {
     var t = read_(map[pid]); var qcols = t.head.filter(function (hd) { return hd.indexOf('變更數量') >= 0; });
     out[pid] = [];
     t.rows.forEach(function (r) {
       var code = str_(r['項次']); if (!code) return;
+      if (isHead_(r)) { (HEADS_[pid] = HEADS_[pid] || []).push([code, str_(r['項目']), out[pid].length]); return; }
       var q = num_(r['原契約數量']); qcols.forEach(function (c) { var x = num_(r[c]); if (x !== null) q = x; });
       out[pid].push([code, str_(r['項目']), str_(r['單位']), num_(r['單價']), q, str_(r['分類']), str_(r['計量方式']) || '數量',
         str_(r['依據分類']), str_(r['計入進度']) !== '否', num_(r['起算累計']) || 0, str_(r['大按鈕']) === '是' ? 1 : 0]);
@@ -545,7 +556,7 @@ function items_() {
 function itemsFull_(pid, map) {
   var name = (map || itemSheets_())[pid]; if (!name) return [];
   var t = read_(name), qcols = t.head.filter(function (hd) { return hd.indexOf('變更數量') >= 0; });
-  return t.rows.filter(function (r) { return str_(r['項次']); }).map(function (r) {
+  return t.rows.filter(function (r) { return str_(r['項次']) && !isHead_(r); }).map(function (r) {
     return {
       code: str_(r['項次']), name: str_(r['項目']), unit: str_(r['單位']), price: num_(r['單價']),
       q: [num_(r['原契約數量'])].concat(qcols.map(function (c) { return num_(r[c]); })), cat: str_(r['分類']) || '未分類',
@@ -1542,7 +1553,7 @@ function diaryMonth_(pid, ym, site) {
   }
   var machCols = diaryMachColsFor_(p), sig = sigRows_(), ticks = tickRows_(), vers = p.multi ? [] : planVers_(p);
   var lastDay = Utilities.formatDate(new Date(new Date(ym.slice(0, 4), Number(ym.slice(5, 7)), 0).getTime()), tz_(), 'yyyy-MM-dd');
-  var endDate = site ? (info.done || info.plan || '') : (p.end || (p.approved ? addDays_(start, p.approved - 1 + (p.ext || 0)) : ''));
+  var endDate = site ? (info.done || info.plan || '') : (p.end || (p.approved ? addDays_(start, p.approved - 1 + extAt_(p, '')) : ''));
   var approved = site ? (endDate ? dayDiff_(start, endDate) + 1 : null) : p.approved, ext = site ? 0 : (p.ext || 0);
   var itemList = items.map(function (it) { return { code: it.code, name: it.name, unit: it.unit, contract: qtyAt_(it, pp, lastDay) }; });
   var cum = {}, cc = { tech: 0, gen: 0, lab: 0 }, mc = {}, matc = {}, days = [];
@@ -1572,10 +1583,10 @@ function diaryMonth_(pid, ym, site) {
     if (cur < ym + '-01') continue;
     var uniq = function (f) { var o = []; reps.forEach(function (r) { var v = str_(r[f]); if (v && o.indexOf(v) < 0) o.push(v); }); return o; };
     var actual = actualAt_(items, pp, cur, cum), planned = p.multi ? actual : plannedAt_(vers, cur);
-    var elapsed = dayDiff_(start, cur) + 1, remain = approved ? approved - elapsed + ext : (endDate ? dayDiff_(cur, endDate) : null);
+    var elapsed = dayDiff_(start, cur) + 1, extD = site ? 0 : extAt_(p, cur), remain = approved ? approved - elapsed + extD : (endDate ? dayDiff_(cur, endDate) : null);
     var sk = sigKey_(pid, site, cur), sg = sig[sk] || null, fp = fpOf_(reps);
     days.push({
-      date: cur, wk: WEEK_[new Date(cur + 'T00:00:00').getDay()], has: reps.length > 0, worked: worked.length > 0,
+      date: cur, wk: WEEK_[new Date(cur + 'T00:00:00').getDay()], has: reps.length > 0, worked: worked.length > 0, ext: extD,
       am: uniq('am')[0] || '', pm: uniq('pm')[0] || '', nowork: uniq('nowork').join('、'),
       items: order.map(function (code) {
         var it = itemBy[code], s = cum[code];
@@ -1666,7 +1677,7 @@ var ACTIONS = {
       role: role, editDays: EDIT_DAYS, projects: projs, sites: sites_(), dispatch: dispatch_(), sums: r.sums, reports: r.reports,
       config: { workers: c.workers, crews: c.crews, machines: c.machines, soilTypes: c.soilTypes, dests: c.dests, works: c.works, samples: c.samples }
     };
-    if (!q.lite) out.items = its;
+    if (!q.lite) { out.items = its; out.heads = HEADS_; }
     try { out.stale = staleList_(r.reports, str_(q.from) || '0000-00'); out.sigs = sigSummary_(); out.accounts = accountsList_(); } catch (e2) { out.stale = []; out.sigs = {}; out.accounts = []; }
     return out;
   },
@@ -1679,7 +1690,7 @@ var ACTIONS = {
     if (id) {
       var old = null; read_('每日回報').rows.forEach(function (r) { if (str_(r['回報編號']) === id) old = r; });
       if (!old) throw new Error('找不到要修改的回報');
-      if (role !== 'admin' && daysAgo_(old['日期']) > EDIT_DAYS) throw new Error('超過 ' + EDIT_DAYS + ' 天的回報請由管理者修改');
+      if (role !== 'admin' && role !== 'office' && daysAgo_(old['日期']) > EDIT_DAYS) throw new Error('超過 ' + EDIT_DAYS + ' 天的回報請洽內業修改');
       var before = reports_('0000-00', '9999-99', false).reports.filter(function (x) { return x.id === id; })[0];
       sent = old['送出時間']; edited = now_(); editBy = str_(d.by); prevJson = JSON.stringify(before);
       deleteById_('每日回報', id);
@@ -1839,10 +1850,15 @@ var ACTIONS = {
     } else {
       if (!str_(p.name)) throw new Error('請填工程名稱');
       id = id || 'p' + Utilities.getUuid().slice(0, 6);
-      append_('工程', [{ '工程代號': id, '工程名稱': str_(p.name), '簡稱': str_(p.short) || str_(p.name), '開口契約': p.multi ? '是' : '否', '狀態': str_(p.status) || '未開工', '開工日': str_(p.start), '完工日': '', '備註': str_(p.note), '排序': t.rows.length + 1 }]);
+      append_('工程', [{ '工程代號': id, '工程名稱': str_(p.name), '簡稱': str_(p.short) || str_(p.name), '開口契約': p.multi ? '是' : '否', '狀態': str_(p.status) || '未開工', '開工日': str_(p.start), '完工日': '', '備註': str_(p.note), '排序': t.rows.length + 1, '工程類型': str_(p.type), '核定工期': num_(p.approved) === null ? '' : num_(p.approved), '承攬廠商': str_(p.company) }]);
       sheet_(ITEM_PREFIX + (str_(p.short) || str_(p.name)));
     }
     return { id: id };
+  },
+  /** 上傳預算書/詳細價目表(mode=new)或變更(mode=change)的契約項目 */
+  importItems: function (q, role) {
+    if (role !== 'admin' && role !== 'office') throw new Error('只有管理者或內業可以匯入契約項目');
+    return importItems_(q);
   },
   upload: function (q) {
     var folder = folder_('現場回報照片', null);
@@ -1913,7 +1929,7 @@ function folder_(name, parent) {
   return it.hasNext() ? it.next() : (parent ? parent.createFolder(name) : DriveApp.createFolder(name));
 }
 function safe_(v) { return str_(v).replace(/[\\\/:*?"<>|]/g, '_').slice(0, 80); }
-var WRITES = { saveTick: 1, sign: 1, importPlan: 1, saveAccount: 1, saveSiteItems: 1, report: 1, deleteReport: 1, addSite: 1, siteStatus: 1, settle: 1, setActive: 1, saveConfig: 1, saveProject: 1 };
+var WRITES = { importItems: 1, saveTick: 1, sign: 1, importPlan: 1, saveAccount: 1, saveSiteItems: 1, report: 1, deleteReport: 1, addSite: 1, siteStatus: 1, settle: 1, setActive: 1, saveConfig: 1, saveProject: 1 };
 
 /* ===== 帳號與資安 ===== */
 var ROLE_MAP = { '管理者': 'admin', '現場': 'field', '內業': 'office', '老闆': 'office' };
@@ -2030,3 +2046,70 @@ function handle_(q) {
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 function doPost(e) { var b = {}; try { b = JSON.parse(e.postData.contents); } catch (err) { } return json_(handle_(b)); }
 function doGet(e) { return json_({ ok: true, hello: '松青現場回報後台運作中' }); }
+
+/* ===== 契約項目匯入(新工程 / 變更) ===== */
+var CH_NAMES_ = ['一', '二'];
+function importItems_(q) {
+  var p = projById_(str_(q.pid)); if (!p) throw new Error('找不到工程');
+  var list = (q.items || []).map(function (x) {
+    return { code: str_(x.code), name: str_(x.name), unit: str_(x.unit), price: num_(x.price), qty: num_(x.qty), cat: str_(x.cat), mode: str_(x.mode), prog: x.prog !== false, head: !!x.head };
+  }).filter(function (x) { return x.code && x.name; });
+  if (str_(q.mode) === 'change') list = list.filter(function (x) { return !x.head; });
+  if (!list.length) throw new Error('沒有讀到契約項目');
+  var name = ITEM_PREFIX + p.short, sh = sheet_(name), t = read_(name), head = t.head;
+  var col = function (h) { var i = head.indexOf(h); if (i < 0) throw new Error('契約分頁缺少「' + h + '」欄'); return i; };
+  var blank = function () { return head.map(function () { return ''; }); };
+  var last = sh.getLastRow(), data = last > 1 ? sh.getRange(2, 1, last - 1, head.length).getValues() : [];
+  var out = { added: 0, changed: 0, kept: 0 };
+  if (str_(q.mode) !== 'change') {
+    if (t.rows.length && !q.replace) throw new Error('「' + name + '」已經有 ' + t.rows.length + ' 個項目;要整份取代請勾選「取代現有項目」');
+    data = list.map(function (x) {
+      var r = blank();
+      if (x.head) { r[col('項次')] = x.code; r[col('項目')] = x.name; r[col('分類')] = x.cat; r[col('計量方式')] = '標題'; return r; }
+      r[col('項次')] = x.code; r[col('項目')] = x.name; r[col('單位')] = x.unit; r[col('單價')] = x.price === null ? '' : x.price;
+      r[col('原契約數量')] = x.qty === null ? '' : x.qty; r[col('分類')] = x.cat;
+      r[col('計量方式')] = x.mode || '數量'; r[col('計入進度')] = x.prog ? '是' : '否';
+      return r;
+    });
+    if (last > 1) sh.getRange(2, 1, last - 1, head.length).clearContent();
+    out.added = list.filter(function (x) { return !x.head; }).length;
+  } else {
+    var n = Number(q.n) === 2 ? 2 : 1, d = str_(q.date);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error('請填變更日期');
+    var cq = col('第' + CH_NAMES_[n - 1] + '次變更數量'), cd = col('第' + CH_NAMES_[n - 1] + '次變更日');
+    var prevCols = ['原契約數量'].concat(n === 2 ? ['第一次變更數量'] : []).map(col);
+    var byCode = {}; list.forEach(function (x) { byCode[x.code] = x; });
+    var seen = {};
+    data.forEach(function (r) {
+      var code = str_(r[col('項次')]); if (!code || str_(r[col('計量方式')]) === '標題') return;
+      seen[code] = 1;
+      var x = byCode[code];
+      if (x) {
+        r[cq] = x.qty === null ? 0 : x.qty; out.changed++;
+        if (num_(r[col('單價')]) === null && x.price !== null) r[col('單價')] = x.price;
+      } else {   // 變更檔沒有列出的項目:維持變更前數量
+        var prev = ''; prevCols.forEach(function (c) { if (num_(r[c]) !== null) prev = r[c]; });
+        r[cq] = prev; out.kept++;
+      }
+    });
+    list.forEach(function (x) {
+      if (seen[x.code]) return;
+      var r = blank();
+      r[col('項次')] = x.code; r[col('項目')] = x.name; r[col('單位')] = x.unit; r[col('單價')] = x.price === null ? '' : x.price;
+      r[cq] = x.qty === null ? 0 : x.qty; r[col('分類')] = x.cat; r[col('計量方式')] = x.mode || '數量'; r[col('計入進度')] = x.prog ? '是' : '否';
+      data.push(r); out.added++;
+    });
+    if (data.length) data[0][cd] = d;
+    var pt = read_('工程'), psh = sheet_('工程');
+    pt.rows.forEach(function (r) {
+      if (str_(r['工程代號']) !== p.id) return;
+      psh.getRange(r._row, pt.head.indexOf('第' + CH_NAMES_[n - 1] + '次變更日') + 1).setNumberFormat('@').setValue(d);
+      psh.getRange(r._row, pt.head.indexOf('第' + CH_NAMES_[n - 1] + '次展延天數') + 1).setValue(num_(q.ext) || 0);
+    });
+  }
+  if (data.length) {
+    sh.getRange(2, 1, data.length, 1).setNumberFormat('@');
+    sh.getRange(2, 1, data.length, head.length).setValues(data);
+  }
+  return out;
+}
