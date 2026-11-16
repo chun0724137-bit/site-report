@@ -1189,7 +1189,7 @@ function qtyTableNode(p,t){const act=t.slice(1),by={};act.forEach(r=>by[r[0]]=r)
   return h("table",{},h("thead",{},h("tr",{},t[0].map((x,i)=>h("th",{class:i?"r":""},x)))),tb)}
 function weekRange(ds){const d=new Date(ds+"T00:00:00"),w=(d.getDay()+6)%7,a=new Date(d),b=new Date(d);a.setDate(d.getDate()-w);b.setDate(a.getDate()+6);const f=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");return[f(a),f(b)]}
 // 照片下載:電腦 Chrome/Edge 選資料夾直接存,檔名自動取好
-function b64File(f){const bin=atob(f.data),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new File([u],f.name,{type:f.mime||"image/jpeg"})}
+function b64File(f){const bin=atob(f.data),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);const fl=new File([u],f.name,{type:f.mime||"image/jpeg"});fl.folder=f.folder||"";return fl}
 async function photoFetchAll(p,site,a,b,onBatch,onProg){let off=0,total=null,n=0,bad=0;
   do{const j=await api("photoFiles",{pid:p.id,site,from:a,to:b,offset:off,limit:10});total=j.total;const fs=[];
     (j.files||[]).forEach(f=>{if(f.data)fs.push(b64File(f));else bad++});if(fs.length)await onBatch(fs);n+=(j.files||[]).length;off+=(j.files||[]).length;onProg(n,total);if(!(j.files||[]).length)break}while(off<total);
@@ -1205,13 +1205,13 @@ function photoZipCard(p){const Z=S.zip=S.zip||{unit:"日",date:today(),site:""};
   const btns=h("div",{class:"row"});
   if(canPick())btns.append(h("button",{type:"button",class:"btn primary",disabled:!!S.zipBusy,onclick:async()=>{const [a,b]=rng();let dir;
     try{dir=await window.showDirectoryPicker({mode:"readwrite"})}catch(e){return}
-    S.zipBusy=true;let saved=0;
-    try{const r=await photoFetchAll(p,site(),a,b,async fs=>{for(const f of fs){const fh=await dir.getFileHandle(f.name,{create:true});const w=await fh.createWritable();await w.write(f);await w.close();saved++}},(n,t)=>say("存檔中 "+n+" / "+t+" 張…"));
-      say(r.total?"✅ 已存 "+saved+" 張到「"+dir.name+"」資料夾"+(r.bad?"(有 "+r.bad+" 張讀不到)":"")+"。":(a+(a===b?"":" ~ "+b)+" 沒有照片。"),r.total?"ok":"warn")}
+    S.zipBusy=true;let saved=0;const subs={},fds=[];
+    try{const r=await photoFetchAll(p,site(),a,b,async fs=>{for(const f of fs){const sub=f.folder?(subs[f.folder]=subs[f.folder]||await dir.getDirectoryHandle(f.folder,{create:true})):dir;if(f.folder&&!fds.includes(f.folder))fds.push(f.folder);const fh=await sub.getFileHandle(f.name,{create:true});const w=await fh.createWritable();await w.write(f);await w.close();saved++}},(n,t)=>say("存檔中 "+n+" / "+t+" 張…"));
+      say(r.total?"✅ 已存 "+saved+" 張到「"+dir.name+"」"+(fds.length?"底下 "+fds.length+" 個資料夾("+fds.slice(0,3).join("、")+(fds.length>3?"…":"")+")":"資料夾")+(r.bad?"(有 "+r.bad+" 張讀不到)":"")+"。":(a+(a===b?"":" ~ "+b)+" 沒有照片。"),r.total?"ok":"warn")}
     catch(e){say("沒有存完:"+e.message+"(已存 "+saved+" 張)","warn")}S.zipBusy=false}},"💾 選資料夾,下載照片"));
   else btns.append(h("div",{class:"msg warn"},"這個瀏覽器不能選資料夾存檔,請用電腦的 Chrome 或 Edge 開啟。"));
   sec.append(h("div",{class:"row"},...row),btns,st);
-  sec.append(h("p",{class:"note"},"檔名:日期_"+(p.multi?"派工單_":"")+"今日工作項目(沒寫就用照片說明或工項),同一天多張加 _2、_3,例:20261116_"+(p.multi?"實踐國小_":"")+"AC刨除.jpg。"));
+  sec.append(h("p",{class:"note"},"每天"+(p.multi?"每張派工單":"")+"自動建一個資料夾:日期_"+(p.multi?"派工單_":"")+"今日工作項目,例:20261116_"+(p.multi?"實踐國小_":"")+"AC刨除。裡面的照片:現場有寫說明的用「日期_"+(p.multi?"派工單_":"")+"說明」,沒寫的用「資料夾名_1、_2…」。"));
   return sec}
 function viewPhotos(p,m,rs){const zc=photoZipCard(p);const sec=h("section",{class:"card"},h("h2",{},(p.short||p.name)+"｜照片總覽"),h("label",{class:"f"},"月份",m));let n=0;
   groupByDay(rs).forEach(g=>{g.ph=g.ph||g.photos||[];if(!g.ph.length)return;n+=g.ph.length;

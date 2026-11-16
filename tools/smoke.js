@@ -94,10 +94,11 @@ const z=m.call({key:'field123',action:'photoZip',pid:'ntpu',from:d0,to:d0});
 const names=z.ok&&z.files[0]?z.files[0].count:0;ok(z.ok&&z.files.length===1&&names>=3,'打包成 1 個壓縮檔');
 const zb=m.books;const zipped=m.g.__lastPath||'';ok(/照片下載\/三峽北大_\d{8}_照片\.zip$/.test(zipped),'壓縮檔存到「照片下載」資料夾:'+zipped.split('/').pop());
 const L=m.run("photoList_(projById_('ntpu'),'','"+d0+"','"+d0+"').map(function(x){return x.name})");const D=d0.replace(/-/g,'');
-ok(L.includes(D+'_混凝土澆置.jpg')&&L.includes(D+'_混凝土澆置_2.jpg')&&L.includes(D+'_混凝土澆置_3.jpg'),'檔名:日期_今日工作項目,同名加 _2、_3:'+L.slice(-3).join(' / '));
+const LF=m.run("photoList_(projById_('ntpu'),'','"+d0+"','"+d0+"').map(function(x){return x.folder})");
+const F=LF[LF.length-1];ok(L.includes(D+'_路緣石 步道北側.jpg')&&L.includes(F+'_1.jpg')&&L.includes(F+'_2.jpg')&&LF.every(f=>f===F)&&/^\d{8}_.*混凝土澆置$/.test(F),'資料夾「日期_工作項目」;有說明用說明、沒說明用 _1、_2:'+L.slice(-3).join(' / '));
 const pf=m.call({key:'field123',action:'photoFiles',pid:'ntpu',from:d0,to:d0,offset:0,limit:2});ok(pf.ok&&pf.total>=3&&pf.files.length===2&&pf.files[0].data&&/\.jpg$/.test(pf.files[0].name),'photoFiles 分批傳照片(共 '+pf.total+' 張,這批 2 張)');
 r=m.call({key:'field123',action:'report',data:{pid:'yanggong1',site:'實踐國小',date:d0,by:'zip',work:'AC 刨除',photos:[{cap:'',url:'https://drive.google.com/file/d/P4/view'}]}});
-const L2=m.run("photoList_(projById_('yanggong1'),'實踐國小','"+d0+"','"+d0+"').map(function(x){return x.name})");ok(L2.includes(D+'_實踐國小_AC 刨除.jpg'),'開口契約檔名含派工單:'+L2[L2.length-1]);
+const L2=m.run("photoList_(projById_('yanggong1'),'實踐國小','"+d0+"','"+d0+"').map(function(x){return x.name})");ok(L2.includes(D+'_實踐國小_AC 刨除_1.jpg'),'開口契約檔名含派工單:'+L2[L2.length-1]);
 m.call({key:'field123',action:'upload',project:'115養工資本門(第1區)',site:'實踐國小',date:d0,name:'x.jpg',data:''});ok(/現場回報照片\/115養工資本門\(第1區\)\/實踐國小\/\d{4}-\d{2}-\d{2}\/x\.jpg$/.test(m.g.__lastPath),'照片資料夾:工程/派工單/日期');}
 // 匯入契約項目:新工程 → 第一次變更(數量變動、新增項目、展延依變更日)
 {r=m.call({key:'admin123',action:'saveProject',project:{name:'測試匯入工程',short:'匯入測試',type:'一般',status:'未開工',start:'2026-11-01',approved:100}});ok(r.ok&&r.id,'新增工程');const pid=r.id;

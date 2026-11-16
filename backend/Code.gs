@@ -1885,8 +1885,8 @@ var ACTIONS = {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error('日期格式不正確');
     var list = photoList_(p, p.multi ? str_(q.site) : '', from, to), off = Math.max(0, Number(q.offset) || 0), lim = Math.min(20, Math.max(1, Number(q.limit) || 10));
     var files = list.slice(off, off + lim).map(function (x) {
-      try { var b = DriveApp.getFileById(x.id).getBlob(); return { name: x.name, mime: b.getContentType ? (b.getContentType() || 'image/jpeg') : 'image/jpeg', data: Utilities.base64Encode(b.getBytes()) }; }
-      catch (err) { return { name: x.name, error: '讀不到這張照片' }; }
+      try { var b = DriveApp.getFileById(x.id).getBlob(); return { name: x.name, folder: x.folder, mime: b.getContentType ? (b.getContentType() || 'image/jpeg') : 'image/jpeg', data: Utilities.base64Encode(b.getBytes()) }; }
+      catch (err) { return { name: x.name, folder: x.folder, error: '讀不到這張照片' }; }
     });
     return { total: list.length, offset: off, files: files };
   },
@@ -1908,20 +1908,41 @@ function photoName_(date, site, cap, fallback) {
   t = t.replace(/[\\\/:*?"<>|\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 30).trim();
   return [date.replace(/-/g, ''), site ? safe_(site) : '', t].filter(function (x) { return x; }).join('_');
 }
+/** 照片清單:每天(開口契約再分派工單)一個資料夾「日期_派工單_今日工作項目」;
+ *  現場有寫說明的照片用「日期_派工單_說明」,沒寫的用「資料夾名_序號(從 1 開始)」 */
+function photoClean_(t) { return str_(t).replace(/[\\\/:*?"<>|\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 30).trim(); }
 function photoList_(p, site, from, to) {
-  var used = {}, out = [];
+  var groups = {}, keys = [];
   reports_(from.slice(0, 7), to.slice(0, 7), false).reports
     .filter(function (r) { return r.pid === p.id && r.date >= from && r.date <= to && (!site || r.site === site); })
     .sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; })
     .forEach(function (r) {
-      var work = str_(r.work), item = (r.entries || []).map(function (e) { return e.name; }).filter(function (x) { return x; })[0] || '';
-      (r.photos || []).forEach(function (ph) {
-        var m = String(ph.url || '').match(/\/d\/([^/]+)/); if (!m) return;
-        var base = photoName_(r.date, p.multi ? r.site : '', work, ph.cap || item), name = base, k = 2;
-        while (used[name]) name = base + '_' + (k++);
-        used[name] = 1; out.push({ id: m[1], name: name + '.jpg' });
-      });
+      var st = p.multi ? str_(r.site) : '', k = r.date + '|' + st;
+      if (!groups[k]) { groups[k] = { date: r.date, site: st, works: [], photos: [] }; keys.push(k); }
+      var g = groups[k];
+      str_(r.work).split(/[、,，;；]/).map(str_).forEach(function (w) { if (w && g.works.indexOf(w) < 0) g.works.push(w); });
+      (r.photos || []).forEach(function (ph) { g.photos.push(ph); });
     });
+  var out = [];
+  keys.forEach(function (k) {
+    var g = groups[k]; if (!g.photos.length) return;
+    var work = photoClean_(g.works.join('、'));
+    var head = [g.date.replace(/-/g, ''), g.site ? safe_(g.site) : ''].filter(function (x) { return x; }).join('_');
+    var folder = work ? head + '_' + work : head, used = {}, seq = 0;
+    g.photos.forEach(function (ph) {
+      var m = String(ph.url || '').match(/\/d\/([^/]+)/); if (!m) return;
+      var cap = str_(ph.cap).replace(/^【([^】]*)】/, '$1 ').replace(/^[0-9A-Za-z一二三四五六七八九十壹貳參肆伍陸柒捌玖拾]+(\.[0-9A-Za-z]+)+\s+/, '').replace(/｜/g, ' ');
+      cap = photoClean_(cap);
+      var name;
+      if (cap && cap !== '現場照片' && cap !== work) {
+        var base = head + '_' + cap, n = 2; name = base;
+        while (used[name]) name = base + '_' + (n++);
+      } else {
+        do { name = folder + '_' + (++seq); } while (used[name]);
+      }
+      used[name] = 1; out.push({ id: m[1], name: name + '.jpg', folder: folder });
+    });
+  });
   return out;
 }
 /** 打包:每包最多約 40MB 或 150 張;順便刪掉「照片下載」裡超過 1 天的舊壓縮檔 */
