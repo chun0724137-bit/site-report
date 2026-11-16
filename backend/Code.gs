@@ -333,7 +333,7 @@ function formatDailySummaries_(d, materialsStr) {
   });
 
   var sList = (d.soil || []).map(function (e) {
-    return (e.src ? e.src + '｜' : '') + (e.type || '') + (e.dest ? '→' + e.dest : '') + ' ' + (e.trucks || 0) + '台(' + (e.total || 0) + '米)';
+    return (e.src ? e.src + '｜' : '') + (e.type || '') + (e.dest ? '→' + e.dest : '') + ' ' + (e.trucks || 0) + '台(' + (e.total || 0) + '米)' + (e.note ? '｜' + e.note : '');
   });
 
   var matParts = [];
@@ -972,7 +972,7 @@ function writeOutSoilSheet_(ym, ctx) {
     (r.soil || []).forEach(function (e) {
       var tr = Number(e.trucks) || 0, tot = Number(e.total) || 0, tp = str_(e.type) || '未填', dst = str_(e.dest);
       if (inM) {
-        monthRows.push([r.date, '星期' + WD_[new Date(r.date + 'T00:00:00').getDay()], pName, r.site || '', tp, dst, tr, Number(e.per) || '', r4_(tot), e.src || '']);
+        monthRows.push([r.date, '星期' + WD_[new Date(r.date + 'T00:00:00').getDay()], pName, r.site || '', tp, dst, tr, Number(e.per) || '', r4_(tot), [e.src, e.note].filter(Boolean).join('｜')]);
       }
       var k = pName + '@@' + tp;
       if (!sumMap[k]) { sumMap[k] = { p: pName, t: tp, mTr: 0, mVol: 0, cTr: 0, cVol: 0, dests: {} }; sumOrder.push(k); }
@@ -995,7 +995,7 @@ function writeOutSoilSheet_(ym, ctx) {
   r3[0] = '一、本月出土明細（' + y + ' 年 ' + mo + ' 月）';
   r3[11] = '二、各案工程出土總計（截至 ' + y + ' 年 ' + mo + ' 月）';
   var r4 = blank();
-  ['日期', '星期', '工程', '派工地點', '土質', '去處', '車次(台)', '每台(米)', '合計(米)', '來源工程'].forEach(function (h, i) { r4[i] = h; });
+  ['日期', '星期', '工程', '派工地點', '土質', '去處', '車次(台)', '每台(米)', '合計(米)', '位置/備註'].forEach(function (h, i) { r4[i] = h; });
   ['工程', '土質', '本月車次', '本月米數', '累計總車次', '累計總米數', '去處'].forEach(function (h, i) { r4[11 + i] = h; });
   rows.push(r1, r2, r3, r4);
 
@@ -1660,7 +1660,7 @@ var ACTIONS = {
       };
     });
     var normSoil = (d.soil || []).map(function (e) {
-      return { type: str_(e.type), dest: str_(e.dest), trucks: num_(e.trucks) || 0, per: num_(e.per) || 0, total: num_(e.total) || 0, src: str_(e.src) };
+      return { type: str_(e.type), dest: str_(e.dest), trucks: num_(e.trucks) || 0, per: num_(e.per) || 0, total: num_(e.total) || 0, src: str_(e.src), note: str_(e.note) };
     });
     var normMats = (d.mats || []).filter(function (x) { return x && str_(x.name); }).map(function (x) {
       return { name: str_(x.name), qty: num_(x.qty) === null ? '' : num_(x.qty), unit: str_(x.unit) };

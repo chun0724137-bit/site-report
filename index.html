@@ -142,11 +142,12 @@ img.th{width:44px;height:44px;object-fit:cover;border-radius:6px}
 .dbody{display:flex;flex-direction:column;gap:12px;padding:14px;border:2px solid var(--accent);border-top:0;border-radius:0 0 12px 12px;margin-top:-10px;background:var(--card)}
 .wo-card{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--soft)}
 .lb-backdrop{position:fixed;inset:0;z-index:99;background:rgba(0,0,0,.88);display:flex;flex-direction:column;justify-content:center;align-items:center;padding:16px;gap:12px;color:#fff}
+.lb-backdrop input,.lb-backdrop select,.lb-backdrop textarea,.lb-backdrop .btn:not(.primary){color:#1c2a33;background:#fff}
 .lb-backdrop img{max-width:100%;max-height:72vh;object-fit:contain;border-radius:8px;background:#111}
 .lb-bar{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;width:100%;max-width:600px}
 </style>
 
-<header><div class="wrap"><b>現場回報</b><select id="proj" aria-label="工程"></select><span style="flex:1"></span><button id="viewModeBtn" type="button" class="btn" style="padding:6px 10px;font-size:13px;white-space:nowrap" title="切換手機版 / 電腦版畫面">📱 手機版</button><button id="exitBoss" type="button" class="btn primary" hidden style="margin-left:6px;padding:8px 12px;font-size:14px">← 回到現場回報</button><button id="logout" type="button" class="btn" hidden style="margin-left:6px;padding:8px 12px;font-size:14px">登出</button></div></header>
+<header><div class="wrap"><b>現場回報</b><select id="proj" aria-label="工程"></select><span style="flex:1"></span><button id="viewModeBtn" type="button" class="btn" style="padding:6px 10px;font-size:13px;white-space:nowrap" title="切換手機版 / 電腦版畫面">📱 手機版</button><button id="exitBoss" type="button" class="btn primary" hidden style="margin-left:6px;padding:8px 12px;font-size:14px">← 回到現場回報</button><button id="logout" type="button" class="btn" hidden style="margin-left:6px;padding:6px 10px;font-size:13px;white-space:nowrap">登出</button></div></header>
 <div class="wrap"><main id="main"><section class="card"><p class="note" id="boot">讀取工程資料中…</p></section></main></div>
 <nav><div class="wrap">
   <button data-v="report">回報</button><button data-v="diary">日誌</button><button data-v="log">紀錄</button><button data-v="all">總覽</button><button data-v="set">設定</button>
@@ -318,8 +319,9 @@ function soilSection(p){const d=S.draft,k=S.soil,isSoil=ptype(p)==="土方暫置
       h("div",{class:"f"},isSoil?"種類":"土質",seg(kinds,k.type,v=>{k.type=v;k.manualPer=false;if(isSoil)k.dest=v==="廢棄物"?"廢清處理":"台北港";else if(v==="廢棄物")k.dest="";syncB5Port();render()})),
       noDest?h("div",{class:"f"},"去處",h("span",{class:"note",style:"padding:10px 0"},"廢棄物免選去處")):h("div",{class:"f"},"去處",seg(dests,k.dest,v=>{k.dest=v;k.manualPer=false;syncB5Port();tot.textContent=sum()}))),
     h("div",{class:"row"},stepper("車次(台)","trucks",k,()=>{syncB5Port();tot.textContent=sum()}),inp("s_per","每台(米)","per","0",true)),
-    h("div",{class:"row"},tot,h("button",{type:"button",class:"btn",onclick:()=>{const n=Number(k.trucks);if(!k.type||(!noDest&&!k.dest)){tot.textContent=!k.type?"請先點選土質":"請先點選去處";return}if(isSoil&&!k.src){tot.textContent="請先選來源工地";return}if(!(n>0)){tot.textContent="請按 + 填車次";return}const isB5Port=k.type==="B5"&&k.dest==="台北港";const totM=isB5Port?(Number(k.per)||0):Math.round(n*(Number(k.per)||0)*100)/100;const perM=isB5Port?(n>0?Math.round((totM/n)*100)/100:12):(Number(k.per)||0);d.soil.push({type:k.type.trim(),dest:noDest?"":k.dest.trim(),src:isSoil?k.src:"",trucks:n,per:perM,total:totM});S.soil={src:k.src,type:k.type,trucks:"",per:isB5Port?"":k.per,dest:noDest?"":k.dest,manualPer:false};render()}},"加入出土")));
-  d.soil.forEach((e,i)=>sec.append(h("div",{class:"entry"},h("span",{},(e.src?e.src+"｜":"")+(e.type||"未填土質")+(e.dest?"→"+e.dest:"")),h("b",{},fmt(e.trucks)+" 台"+(e.total?" / "+fmt(e.total)+" 米":"")),h("button",{type:"button","aria-label":"刪除這一筆出土",onclick:()=>{d.soil.splice(i,1);render()}},"×"))));
+    inp("s_note","出土位置 / 備註(選填)","note","例:AC、新海路150號前",false),
+    h("div",{class:"row"},tot,h("button",{type:"button",class:"btn",onclick:()=>{const n=Number(k.trucks);if(!k.type||(!noDest&&!k.dest)){tot.textContent=!k.type?"請先點選土質":"請先點選去處";return}if(isSoil&&!k.src){tot.textContent="請先選來源工地";return}if(!(n>0)){tot.textContent="請按 + 填車次";return}const isB5Port=k.type==="B5"&&k.dest==="台北港";const totM=isB5Port?(Number(k.per)||0):Math.round(n*(Number(k.per)||0)*100)/100;const perM=isB5Port?(n>0?Math.round((totM/n)*100)/100:12):(Number(k.per)||0);d.soil.push({type:k.type.trim(),dest:noDest?"":k.dest.trim(),src:isSoil?k.src:"",trucks:n,per:perM,total:totM,note:(k.note||"").trim()});S.soil={src:k.src,type:k.type,trucks:"",per:isB5Port?"":k.per,dest:noDest?"":k.dest,note:"",manualPer:false};render()}},"加入出土")));
+  d.soil.forEach((e,i)=>sec.append(h("div",{class:"entry"},h("span",{},(e.src?e.src+"｜":"")+(e.type||"未填土質")+(e.dest?"→"+e.dest:"")+(e.note?"｜📍 "+e.note:"")),h("b",{},fmt(e.trucks)+" 台"+(e.total?" / "+fmt(e.total)+" 米":"")),h("button",{type:"button","aria-label":"刪除這一筆出土",onclick:()=>{d.soil.splice(i,1);render()}},"×"))));
   return sec}
 function notesField(){
   const d=S.draft,p=proj();
@@ -883,8 +885,8 @@ function rHeadcount(r){
   return Math.max(c,t);
 }
 function machText(r){const m=r.mach||{};const a=Object.keys(m).map(n=>{const u=machUnitOf(n);return u?u.name+" "+fmt(m[n])+" "+u.unit:n+" "+m[n]});if(r.machOther)a.push(r.machOther);return a.join("、")}
-function soilText(r){return (r.soil||[]).map(e=>(e.src?e.src+" ":"")+(e.type||"")+" "+fmt(e.trucks)+" 台"+(e.total?"("+fmt(e.total)+" 米)":"")+(e.dest?"→"+e.dest:"")).join("、")}
-function soilAoA(rs){const a=[["日期","工地","土質","車次(台)","每台(米)","合計(米)","去處"]];[...rs].reverse().forEach(r=>{const p=S.projects.find(x=>x.id===r.pid);(r.soil||[]).forEach(e=>a.push([r.date,projName(r),e.type,e.trucks,e.per||null,e.total||null,e.dest]))});return a}
+function soilText(r){return (r.soil||[]).map(e=>(e.src?e.src+" ":"")+(e.type||"")+" "+fmt(e.trucks)+" 台"+(e.total?"("+fmt(e.total)+" 米)":"")+(e.dest?"→"+e.dest:"")+(e.note?"("+e.note+")":"")).join("、")}
+function soilAoA(rs){const a=[["日期","工地","土質","車次(台)","每台(米)","合計(米)","去處","位置/備註"]];[...rs].reverse().forEach(r=>{const p=S.projects.find(x=>x.id===r.pid);(r.soil||[]).forEach(e=>a.push([r.date,projName(r),e.type,e.trucks,e.per||null,e.total||null,e.dest,e.note||""]))});return a}
 function soilSumAoA(rs){const m={};rs.forEach(r=>{const p=S.projects.find(x=>x.id===r.pid);const pn=projName(r);(r.soil||[]).forEach(e=>{const k=pn+"@@"+(e.type||"未填");m[k]=m[k]||[0,0];m[k][0]+=Number(e.trucks)||0;m[k][1]+=Number(e.total)||0})});const a=[["工地","土質","車次(台)","米數"]];let t=0,v=0;Object.keys(m).sort().forEach(k=>{const x=k.split("@@");a.push([x[0],x[1],m[k][0],m[k][1]]);t+=m[k][0];v+=m[k][1]});a.push(["總計","",t,v]);return a}
 function crewText(r){const c=r.crew||{},ot=r.crewOt||{};const a=Object.keys(c).map(n=>n+(c[n]===1?"":" "+c[n])+(ot[n]?"(+"+ot[n]+"時)":""));const s=[];if(a.length)s.push("工人:"+a.join("、"));const ota=Object.keys(ot).filter(n=>ot[n]&&!c[n]).map(n=>n+" +"+ot[n]+"時");if(ota.length)s.push("加班:"+ota.join("、"));if(r.traffic)s.push("義交 "+r.traffic);if(r.ot)s.push("備註:"+r.ot);return s.join("｜")}
 function crewAoA(rs){const names=[...S.roster];rs.forEach(r=>Object.keys(r.crew||{}).forEach(n=>{if(!names.includes(n))names.push(n)}));const a=[["日期","工地",...names,"合計(工)","加班合計(時)","加班明細","義交","備註"]];[...rs].reverse().forEach(r=>{const v=names.map(n=>(r.crew||{})[n]??null);const ot=r.crewOt||{};const otSum=Object.values(ot).reduce((s,x)=>s+Number(x||0),0);const otDesc=Object.keys(ot).filter(n=>ot[n]).map(n=>n+"+"+ot[n]+"時").join("、");a.push([r.date,projName(r),...v,v.reduce((s,x)=>s+Number(x||0),0)||null,otSum||null,otDesc||"",r.traffic||null,r.ot||""])});return a}
@@ -1379,7 +1381,7 @@ function buildXlsx(models){
   return zipStore(all)}
 // ---- 簽名板 ----
 function openSignPad(day,P){return new Promise(res=>{
-  const nm=h("input",{type:"text",placeholder:"簽名人姓名"});nm.value=ls.get("signer_"+P.id,"")||P.signer||S.me||"";
+  const nm=h("input",{type:"text",placeholder:"簽名人姓名"});nm.value=S.me||ls.get("by","")||(S.draft&&S.draft.by)||ls.get("signer_"+P.id,"")||P.signer||"";
   const cv=h("canvas",{style:"touch-action:none;background:#fff;border:2px dashed #888;border-radius:8px;width:100%;height:38vh;display:block"});
   const bd=h("div",{class:"lb-backdrop",style:"justify-content:flex-start;padding-top:max(14px,env(safe-area-inset-top))"});
   let drawn=false,ctx;
