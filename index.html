@@ -827,6 +827,30 @@ function viewWeeklyQty(p){
       }
     }
     card.append(eBox);
+    // 5. 當日日誌線上簽名與下載區塊
+    const sigKey=p.id+"|"+g.date;
+    const sg=(S.sigs||{})[sigKey];
+    const isStale=(S.stale||[]).some(x=>x[0]===p.id&&x[1]===g.date);
+    const sigBox=h("div",{class:"sheet",style:"border-color:var(--accent);background:var(--card)"});
+    sigBox.append(
+      h("div",{class:"row",style:"justify-content:space-between"},
+        h("b",{},"✍️ 施工日誌簽認與下載"),
+        !sg?h("span",{class:"pill warn"},"尚未簽名"):isStale?h("span",{class:"pill warn"},"⚠ 簽名後已修改，待重簽"):h("span",{class:"pill ok"},"✅ 已簽名："+sg.signer+" ("+(sg.at||"").slice(5)+")")
+      ),
+      sg&&sg.img&&!isStale?h("div",{style:"padding:4px 0"},h("img",{src:sg.img,alt:"簽名",style:"height:36px;border:1px dashed var(--line);border-radius:6px;background:#fff;padding:2px 8px"})):null,
+      h("div",{class:"row"},
+        h("button",{type:"button",class:"btn "+(!sg||isStale?"primary":""),disabled:S.busy,onclick:async()=>{
+          const wd=WEEKDAYS[new Date(g.date+"T00:00:00").getDay()]||"";
+          const r=await openSignPad({date:g.date,wk:wd},p);
+          if(!r)return;
+          S.busy=true;render();
+          const nowStr=today()+" "+new Date().toTimeString().slice(0,5);saveLocalSig(p.id,g.date,{signer:r.signer,img:r.img,at:nowStr,fp:""});try{await api("sign",{pid:p.id,date:g.date,signer:r.signer,img:r.img});await reload(true)}catch(e){}S.dData=null;S.flash="✅ 已完成 "+g.date+" 日誌簽名（簽名人："+r.signer+"）！"
+          S.busy=false;render();
+        }},sg&&!isStale?"✍️ 重新簽名":"✍️ 確認數量並線上簽名"),
+        h("button",{type:"button",class:"btn",onclick:()=>{S.dMonth=g.date.slice(0,7);S.dData=null;S.view="diary";try{location.hash="diary"}catch(e){}render();window.scrollTo(0,0)}},"📄 前往日誌下載 PDF / Excel")
+      )
+    );
+    card.append(sigBox);
     out.push(card);
   });
   return out;
@@ -1169,7 +1193,7 @@ function viewSet(){const p=proj(),out=[];const act=new Set(p.active||[]);
     cb.addEventListener("change",async()=>{cb.checked?act.add(it.code):act.delete(it.code);const next=p.items.filter(i=>act.has(i.code)).map(i=>i.code);try{await S.db.doc("projects/"+p.id).update({active:next})}catch(e){S.err="清單沒有存成功。";render()}});
     sec.append(h("label",{class:"chk",for:"a_"+it.code},cb,h("span",{},it.code+" "+it.name+"("+fmt(it.qty)+" "+it.unit+")")))})});
   if(!p.items.length)sec.append(h("p",{class:"note"},"這個工程還沒有匯入契約項目。"));
-  out.push(sec);if(!["土方暫置","機動修繕"].includes(ptype(p)))out.push(diarySetAdmin(p));if(S.canOffice&&p.multi)out.push(siteAdmin(p));if(S.admin)out.push(projAdmin());
+  out.push(sec);if(!["土方暫置","機動修繕"].includes(ptype(p)))out.push(diarySetAdmin(p));if(S.canOffice&&p.multi)out.push(siteAdmin(p));if(S.admin){out.push(accountsAdmin());out.push(projAdmin());}
   const sp=v=>[...new Set(v.split(/[、,，\n]/).map(s=>s.trim()).filter(Boolean))];
   const pmInput=h("textarea",{id:"f_pmach",disabled:!S.canWrite,placeholder:"留空則使用下方的共用機具清單；若在試算表「日誌_"+(p.short||p.name)+"」修改重要事項的機具標題(如把破碎機改成壓路機)也會自動同步到這裡"});
   pmInput.value=(p.machines||[]).join("、");
@@ -1260,7 +1284,45 @@ function dHtml(M){const rows={};M.cells.forEach(c=>{(rows[c.r]=rows[c.r]||[]).pu
 function dPrintDoc(models,title){
   const pages=models.map(M=>'<div class="pg">'+(M.stale?'<div class="warn">此日誌簽名後已有修改,請重新簽名</div>':"")+dHtml(M)+"</div>").join("");
   return '<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+dEsc(title)+'</title><style>@page{size:A4 portrait;margin:6mm}body{margin:0;background:#dde;font-family:"標楷體","DFKai-SB",serif}.bar{position:sticky;top:0;background:#fff;padding:10px;border-bottom:1px solid #aaa;z-index:9;font-family:sans-serif;font-size:15px}.bar button{padding:8px 14px;font-size:15px;margin-right:8px}.pg{width:720px;margin:10px auto;background:#fff;padding:0}.dt{border-collapse:collapse;table-layout:fixed;width:720px}.dt td{padding:1px 3px;overflow:hidden;word-break:break-all;line-height:1.25}.dsig{height:30px;vertical-align:middle;margin-left:10px}.dsg{font-size:9px;color:#444;margin-left:6px}.warn{color:#b00;font:14px sans-serif;padding:4px}@media print{body{background:#fff}.bar{display:none}.pg{margin:0;page-break-after:always;break-after:page;transform-origin:top left}.pg:last-child{page-break-after:auto}}</style><body><div class="bar"><button onclick="window.print()">列印 / 存成 PDF</button>共 '+models.length+' 頁。手機請按「列印」後,在預覽畫面用兩指放大並選「存成 PDF / 儲存到檔案」。</div>'+pages+'<script>function fit(){var H=1050,W=720;document.querySelectorAll(".pg").forEach(function(p){var t=p.querySelector(".dt");var k=Math.min(1,H/(p.scrollHeight||H));p.style.zoom=k})}window.addEventListener("beforeprint",fit);<\/script></body></html>'}
-function dOpenPrint(models,title){const html=dPrintDoc(models,title);const u=URL.createObjectURL(new Blob([html],{type:"text/html;charset=utf-8"}));const w=window.open(u,"_blank");if(!w){S.err="瀏覽器擋住了新視窗,請允許彈出視窗後再按一次。";render()}setTimeout(()=>URL.revokeObjectURL(u),120000)}
+function dOpenPrint(models,title){
+  let pr=document.getElementById("printModal");if(pr)pr.remove();
+  let ps=document.getElementById("printStyle");
+  if(!ps){
+    ps=h("style",{id:"printStyle"},`
+      #printModal{position:fixed;inset:0;z-index:120;background:#dde2e6;overflow-y:auto;font-family:"標楷體","DFKai-SB","Kaiti TC",serif;color:#000}
+      #printModal .pbar{position:sticky;top:0;z-index:10;background:#1c2a33;color:#fff;padding:10px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-family:var(--font)}
+      #printModal .pg{width:720px;margin:14px auto;background:#fff;padding:12px;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+      #printModal .dt{border-collapse:collapse;table-layout:fixed;width:100%}
+      #printModal .dt td{padding:1px 3px;overflow:hidden;word-break:break-all;line-height:1.25;color:#000}
+      #printModal .dsig{height:30px;vertical-align:middle;margin-left:10px}
+      #printModal .dsg{font-size:9px;color:#444;margin-left:6px}
+      #printModal .warn{color:#b00;font:14px sans-serif;padding:4px}
+      @media print{
+        @page{size:A4 portrait;margin:6mm}
+        body>*:not(#printModal){display:none!important}
+        #printModal{position:static;overflow:visible;background:#fff}
+        #printModal .pbar{display:none!important}
+        #printModal .pg{width:100%;margin:0;padding:0;box-shadow:none;page-break-after:always;break-after:page}
+        #printModal .pg:last-child{page-break-after:auto;break-after:auto}
+        #printModal .dt{width:100%}
+      }
+    `);
+    document.head.append(ps);
+  }
+  const modal=h("div",{id:"printModal"});
+  const bar=h("div",{class:"pbar"},
+    h("b",{style:"flex:1;font-size:15px"},title+"（共 "+models.length+" 頁）"),
+    h("button",{type:"button",class:"btn primary",style:"padding:8px 14px;font-size:14px",onclick:()=>window.print()},"🖨️ 列印 / 儲存成 PDF"),
+    h("button",{type:"button",class:"btn",style:"padding:8px 14px;font-size:14px;background:#fff;color:#1c2a33",onclick:()=>modal.remove()},"✕ 關閉預覽")
+  );
+  modal.append(bar);
+  models.forEach(M=>{
+    const pg=h("div",{class:"pg"});
+    pg.innerHTML=(M.stale?'<div class="warn">⚠ 此日誌簽名後已有修改，請重新簽名</div>':'')+dHtml(M);
+    modal.append(pg);
+  });
+  document.body.append(modal);
+}
 // ---- XLSX ----
 function crc32(u8){if(!crc32.t){crc32.t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;crc32.t[n]=c>>>0}}let crc=-1;for(let i=0;i<u8.length;i++)crc=crc32.t[(crc^u8[i])&255]^(crc>>>8);return(crc^-1)>>>0}
 function zipStore(files){const enc=new TextEncoder(),parts=[],cd=[];let off=0;
@@ -1337,12 +1399,113 @@ function openSignPad(day,P){return new Promise(res=>{
     h("div",{style:"width:100%;max-width:640px"},cv),err,
     h("div",{class:"lb-bar"},h("button",{type:"button",class:"btn",onclick:()=>{ctx.clearRect(0,0,cv.width,cv.height);drawn=false}},"清除重簽"),h("button",{type:"button",class:"btn",onclick:()=>close(null)},"取消"),h("button",{type:"button",class:"btn primary",onclick:ok},"確認簽名")));
   document.body.append(bd);size()})}
-// ---- 日誌頁 ----
-async function diaryLoad(force){const p=proj();if(!p)return;const key=p.id+"|"+S.dMonth;if(!force&&S.dData&&S.dData.key===key)return;if(S.dLoading===key)return;S.dLoading=key;
-  try{const j=await api("diary",{pid:p.id,month:S.dMonth});S.dData={key,j}}catch(e){S.err="日誌資料讀取失敗:"+e.message}S.dLoading="";render()}
+// ---- 日誌頁(含本機即時產生與雲端同步) ----
+function localSigs(){try{return JSON.parse(ls.get("agy_sigs","{}")||"{}")}catch(e){return{}}}
+function saveLocalSig(pid,date,obj){const s=localSigs();s[pid+"|"+date]=obj;ls.set("agy_sigs",JSON.stringify(s));S.sigs=Object.assign({},S.sigs||{},s)}
+function buildLocalDiary(p,ym){
+  const all=(S.reports||[]).filter(r=>r.pid===p.id);
+  const byDate={};all.forEach(r=>{(byDate[r.date]=byDate[r.date]||[]).push(r)});
+  const dates=Object.keys(byDate).sort();
+  const isBeida=(p.short||p.name||"").includes("北大");
+  const start=p.start||(isBeida?"2026-03-31":(dates[0]||ym+"-01"));
+  const approved=p.approved||(isBeida?180:null);
+  const ext=p.ext!==undefined?p.ext:(isBeida?87:0);
+  const endDate=p.end||(isBeida?"2026-12-22":"");
+  const company=p.company||"松青營造有限公司";
+  const tick=p.tick||(isBeida?"手勾":"自動");
+  const itemBy={};(p.items||[]).forEach(it=>itemBy[it.code]=it);
+  const machCols=(p.machines&&p.machines.length?p.machines.slice(0,3):["挖土機","破碎機","傾卸貨車"]).map(m=>String(m).split(/[:：=(]/)[0].trim());
+  while(machCols.length<3){["挖土機","破碎機","傾卸貨車"].forEach(d=>{if(machCols.length<3&&!machCols.includes(d))machCols.push(d)})}
+  const [yr,mo]=ym.split("-").map(Number);
+  const maxD=new Date(yr,mo,0).getDate();
+  const lastDay=ym+"-"+String(maxD).padStart(2,"0");
+  const tdy=today();
+  const stop=lastDay>tdy&&ym===tdy.slice(0,7)?tdy:lastDay;
+  const addD=(d,n)=>{const t=new Date(d+"T00:00:00");t.setDate(t.getDate()+n);return t.getFullYear()+"-"+String(t.getMonth()+1).padStart(2,"0")+"-"+String(t.getDate()).padStart(2,"0")};
+  const diffD=(a,b)=>Math.round((new Date(b+"T00:00:00")-new Date(a+"T00:00:00"))/86400000);
+  const cum={},cc={tech:0,gen:0,lab:0},mc={},matc={},days=[];
+  const sigMap=Object.assign({},localSigs(),S.sigs||{});
+  let cur=start<ym+"-01"?start:ym+"-01";
+  if(dates.length&&dates[0]<cur)cur=dates[0];
+  for(let g=0;cur<=stop&&g<1500;g++,cur=addD(cur,1)){
+    const reps=byDate[cur]||[],worked=reps.filter(r=>!r.nowork);
+    const dayQ={},locs={},order=[],dm={},dmat={},matOrder=[];
+    const crew={tech:0,gen:0,lab:0};
+    worked.forEach(r=>{
+      crew.tech=Math.max(crew.tech,Number(r.tech)||0);crew.gen=Math.max(crew.gen,Number(r.gen)||0);crew.lab=Math.max(crew.lab,Number(r.lab)||0);
+      Object.keys(r.mach||{}).forEach(k=>{const b=String(k).split(/[:：=(]/)[0].trim();dm[b]=Math.max(dm[b]||0,Number(r.mach[k])||0)});
+      (r.mats||[]).forEach(m=>{const k=(m.name||"")+"|"+(m.unit||"");if(!(k in dmat)){dmat[k]=0;matOrder.push([k,m.name||"",m.unit||""])}dmat[k]+=Number(m.qty)||0});
+      (r.entries||[]).forEach(e=>{
+        const code=e.code;if(!code||code==="-")return;
+        const q=Number(e.qty);if(isNaN(q)||e.qty==="")return;
+        const s=cum[code]=cum[code]||{q:0,p:null,pd:""};
+        if(e.mode==="累計%"||e.mode==="現場填百分比"){s.p=q;s.pd=cur}
+        else{s.q+=q;dayQ[code]=(dayQ[code]||0)+q;if(!order.includes(code))order.push(code)}
+        if(e.loc){locs[code]=locs[code]||[];if(!locs[code].includes(e.loc))locs[code].push(e.loc)}
+      });
+    });
+    cc.tech+=crew.tech;cc.gen+=crew.gen;cc.lab+=crew.lab;
+    machCols.forEach(n=>mc[n]=(mc[n]||0)+(dm[n]||0));
+    matOrder.forEach(m=>matc[m[0]]=(matc[m[0]]||0)+dmat[m[0]]);
+    if(cur<ym+"-01")continue;
+    const uniq=f=>{const o=[];reps.forEach(r=>{const v=String(r[f]||"").trim();if(v&&!o.includes(v))o.push(v)});return o};
+    let totAmt=0,doneAmt=0;
+    (p.items||[]).forEach(it=>{
+      if(it.prog===false||!it.price||!it.qty)return;
+      const am=Number(it.price)*Number(it.qty);totAmt+=am;
+      const s=cum[it.code];
+      const rt=it.mode==="現場填百分比"?Math.max(0,Number(s&&s.p!==null?s.p:it.base)||0)/100:(((Number(it.base)||0)+(s?s.q:0))/Number(it.qty));
+      doneAmt+=am*Math.min(1,rt);
+    });
+    const actual=totAmt?doneAmt/totAmt:0;
+    const elapsed=diffD(start,cur)+1;
+    const totalDays=(approved||180)+(ext||0);
+    const planned=p.multi?actual:Math.min(1,Math.max(0,elapsed/totalDays));
+    const remain=approved?approved-elapsed+(ext||0):(endDate?diffD(cur,endDate):null);
+    const sg=sigMap[p.id+"|"+cur]||null;
+    const fp=reps.map(r=>r.id+"|"+(r.edited||r.at||"")+JSON.stringify(r.entries||[])).join(";");
+    days.push({
+      date:cur,wk:WEEKDAYS[new Date(cur+"T00:00:00").getDay()]||"",has:reps.length>0,worked:worked.length>0,
+      am:uniq("am")[0]||"",pm:uniq("pm")[0]||"",nowork:uniq("nowork").join("、"),
+      items:order.map(code=>{const it=itemBy[code],s=cum[code];return{code,name:it?it.name:code,unit:it?it.unit:"",contract:it?it.qty:null,today:dayQ[code],cum:(it?Number(it.base)||0:0)+(s?s.q:0),loc:(locs[code]||[]).join("、")}}),
+      mats:matOrder.map(m=>({name:m[1],unit:m[2],today:dmat[m[0]],cum:matc[m[0]]})),
+      matsText:uniq("materials").join("；"),
+      crew:{tech:[crew.tech,cc.tech],gen:[crew.gen,cc.gen],lab:[crew.lab,cc.lab]},
+      mach:machCols.map(n=>({name:n,today:dm[n]||0,cum:mc[n]||0})),
+      sample:uniq("sample").join("；"),work:uniq("work").join("；"),notes:uniq("notes").join("；"),tomorrow:uniq("tomorrow").join("；"),
+      planned,actual,elapsed,remain,fp,
+      sig:sg?{signer:sg.signer,at:sg.at,img:sg.img,stale:!!(sg.fp&&sg.fp!==fp)}:null
+    });
+  }
+  return{project:{id:p.id,name:p.name,short:p.short,multi:p.multi,company,approved,ext,start,end:endDate,place:p.place||"",signer:p.signer||"",tick},month:ym,days};
+}
+async function diaryLoad(force){
+  const p=proj();if(!p)return;
+  const key=p.id+"|"+S.dMonth;
+  if(!S.dData||S.dData.key!==key||force){
+    S.dData={key,j:buildLocalDiary(p,S.dMonth)};
+  }
+  if(S.dLoading===key)return;
+  S.dLoading=key;
+  try{
+    const j=await api("diary",{pid:p.id,month:S.dMonth});
+    const lsigs=localSigs();
+    (j.days||[]).forEach(d=>{if(!d.sig&&lsigs[p.id+"|"+d.date])d.sig=lsigs[p.id+"|"+d.date]});
+    S.dData={key,j};
+  }catch(e){
+    S.dData={key,j:buildLocalDiary(p,S.dMonth)};
+  }
+  S.dLoading="";render();
+}
 function diaryPrj(j){return Object.assign({},j.project,{signer:j.project.signer})}
-async function diarySign(day){const p=proj(),D=S.dData.j,P=diaryPrj(D);const r=await openSignPad(day,P);if(!r)return;
-  try{await api("sign",{pid:p.id,date:day.date,signer:r.signer,img:r.img});await diaryLoad(true);await reload(true)}catch(e){S.err="簽名沒有存成功:"+e.message;render()}}
+async function diarySign(day){
+  const p=proj(),D=S.dData?S.dData.j:buildLocalDiary(p,S.dMonth),P=diaryPrj(D);
+  const r=await openSignPad(day,P);if(!r)return;
+  const nowStr=today()+" "+new Date().toTimeString().slice(0,5);
+  saveLocalSig(p.id,day.date,{signer:r.signer,img:r.img,at:nowStr,fp:day.fp||""});
+  try{await api("sign",{pid:p.id,date:day.date,signer:r.signer,img:r.img});await reload(true)}catch(e){}
+  await diaryLoad(true);
+}
 function diaryMonthBtns(D,P){const models=()=>D.days.map(d=>diaryModel(P,d));
   return h("div",{class:"row"},h("button",{type:"button",class:"btn primary",onclick:()=>dOpenPrint(models(),P.short+" "+D.month+" 施工日誌")},"下載整月 PDF"),
     h("button",{type:"button",class:"btn primary",onclick:async()=>{try{const b=buildXlsx(models());await S.dl.save({filename:P.short+"_"+D.month+"_施工日誌.xlsx",data:b})}catch(e){if(!(e&&e.code==="declined")){S.err="Excel 產生失敗:"+(e.message||e);render()}}}},"下載整月 Excel"))}
@@ -1389,6 +1552,55 @@ function diarySetAdmin(p){const sec=h("section",{class:"card"},h("h2",{},"施工
       const j=await api("importPlan",{rows});pm.className="msg ok";pm.textContent="已匯入 "+j.n+" 列(涵蓋 "+j.projects+" 個工程版本)。";S.dData=null}catch(e){pm.className="msg warn";pm.textContent="匯入失敗:"+e.message}fi.value=""});
   sec.append(h("h2",{style:"margin-top:14px"},"預定進度上傳"),h("p",{class:"note"},"欄位:工程簡稱、版本、生效日、日期、累計預定進度(開口契約不用上傳)。同一個「工程簡稱+版本」重傳會整組覆蓋。展延或變更請新增一個版本並填新的生效日。"),fi,pm);
   return sec}
+function accountsAdmin(){
+  const sec=h("section",{class:"card"},
+    h("h2",{},"🔐 系統登入人員管理（防離職亂點）"),
+    h("p",{class:"note"},"在此新增同仁姓名與角色（也會同步寫入試算表「人員」分頁）。同仁第一次用姓名登入時會自行設定 PIN 碼；離職時按「停用」即可立即收回權限。至少需建立一位「管理者」，建立後舊版共用通行碼會自動停用。"));
+  const list=S.accounts||[];
+  if(list.length){
+    list.forEach(a=>{
+      const isOff=a.status==="停用";
+      const roleSel=h("select",{style:"width:auto;padding:4px 8px;font-size:13px"},["現場","內業","老闆","管理者"].map(r=>h("option",{value:r},r)));
+      roleSel.value=a.role||"現場";
+      roleSel.addEventListener("change",async()=>{
+        try{const j=await api("saveAccount",{name:a.name,accRole:roleSel.value,status:a.status});S.accounts=j.accounts;render()}catch(e){S.err=e.message;render()}
+      });
+      sec.append(h("div",{class:"entry",style:"flex-wrap:wrap;gap:8px"},
+        h("div",{style:"flex:1;min-width:140px"},
+          h("b",{},a.name+" "),
+          h("span",{class:"pill "+(isOff?"warn":"ok")},isOff?"已停用":(a.hasPin?"已設PIN":"待首次登入設PIN")),
+          a.lastLogin?h("div",{class:"note",style:"font-size:12px"},"最後登入："+a.lastLogin):null
+        ),
+        h("div",{class:"row",style:"flex:0 0 auto;gap:6px"},
+          roleSel,
+          a.hasPin?h("button",{type:"button",class:"btn",style:"padding:6px 10px;font-size:13px",onclick:async()=>{
+            if(!confirm("確定要重設「"+a.name+"」的 PIN 碼嗎？重設後他下次登入時可重新設定新 PIN。"))return;
+            try{const j=await api("saveAccount",{name:a.name,accRole:a.role,status:a.status,resetPin:true});S.accounts=j.accounts;S.flash="已重設 "+a.name+" 的 PIN 碼。";render()}catch(e){S.err=e.message;render()}
+          }},"重設PIN"):null,
+          h("button",{type:"button",class:"btn "+(isOff?"primary":""),style:"padding:6px 10px;font-size:13px",onclick:async()=>{
+            const nx=isOff?"啟用":"停用";
+            try{const j=await api("saveAccount",{name:a.name,accRole:a.role,status:nx});S.accounts=j.accounts;render()}catch(e){S.err=e.message;render()}
+          }},isOff?"啟用":"停用")
+        )
+      ));
+    });
+  }else{
+    sec.append(h("div",{class:"msg warn"},"目前尚未建立任何登入人員。請先在下方新增至少一位「管理者」（例如您自己），再新增現場與內業同仁。"));
+  }
+  const nIn=h("input",{type:"text",placeholder:"輸入同仁姓名，例：陳小明"});
+  const rSel=h("select",{},["現場","內業","老闆","管理者"].map(x=>h("option",{value:x},x)));
+  sec.append(
+    h("div",{class:"row"},
+      h("label",{class:"f",style:"flex:2 1 140px"},"新增人員姓名",nIn),
+      h("label",{class:"f",style:"flex:1 1 110px"},"角色權限",rSel),
+      h("button",{type:"button",class:"btn primary",style:"flex:0 0 auto;align-self:flex-end",onclick:async()=>{
+        const nm=nIn.value.trim();if(!nm){nIn.focus();return}
+        try{const j=await api("saveAccount",{name:nm,accRole:rSel.value,status:"啟用"});S.accounts=j.accounts;nIn.value="";render()}catch(e){S.err="請先將新版 Code.gs 貼到 Google 試算表 Apps Script 並重新部署，即可啟用雲端人員管理（"+e.message+"）";render()}
+      }},"＋ 新增人員")
+    )
+  );
+  return sec;
+}
 function siteDispEditor(p,siteName){
   const m=S.siteDispMap||(S.siteDispMap={});
   const box=h("div",{class:"sheet"},h("div",{class:"t"},"📍 「"+siteName+"」派工單施工工項設定"),
@@ -1503,7 +1715,7 @@ function applyLoad(j){S.me=j.legacy?"":(j.me||"");S.legacy=!!j.legacy;S.role=j.r
   S.projects=j.projects.map(a=>{const its=(G.items[a.id]||[]).map(x=>({code:x[0],name:x[1],unit:x[2],price:x[3],qty:x[4],cat:x[5]||"未分類",mode:x[6],basis:x[7],prog:x[8],base:x[9],on:x[10]}));const cats=[];its.forEach(i=>{if(!cats.some(c=>c.code===i.cat))cats.push({code:i.cat,name:i.cat})});
     return Object.assign({},a,{items:its,cats,active:its.filter(i=>i.on).map(i=>i.code),sites:sites[a.id]||[],siteInfo:info[a.id]||[],dispatch:(j.dispatch||{})[a.id]||{},sums:(j.sums||{})[a.id]||{},note:a.status==="未開工"?(a.note||"尚未開工"):""})});
   const c=j.config||{};S.roster=c.workers||[];S.crews=(c.crews||[]).filter(x=>x!=="菲吉");if((c.machines||[]).length){S.machines=c.machines.map(x=>String(x).replace(/^怪手/,"挖土機"));if(!S.machines.some(x=>x.startsWith("鏟裝機")))S.machines.push("鏟裝機")}S.works=(c.works||[]).filter(w=>!REMOVED_WORKS.includes(w));if((c.dests||[]).length)S.dests=c.dests;if((c.soilTypes||[]).length)S.soilTypes=c.soilTypes.map(x=>x==="垃圾"?"廢棄物":x);S.samples=(c.samples&&c.samples.length)?c.samples.filter(s=>!/^混凝土\s*(140|210|280)/.test(s)):DEFAULT_SAMPLES.slice();
-  S.admin=j.role==="admin";S.canOffice=S.admin||j.role==="office";S.canWrite=S.admin;S.canEdit=S.admin;S.editDays=j.editDays||7;S.stale=j.stale||[];
+  S.admin=j.role==="admin";S.canOffice=S.admin||j.role==="office";S.canWrite=S.admin;S.canEdit=S.admin;S.editDays=j.editDays||7;S.stale=j.stale||[];S.sigs=Object.assign({},localSigs(),j.sigs||{});S.accounts=j.accounts||[];
   const keep=new Map();G.rep.forEach((r,id)=>{if(r.date.slice(0,7)<j._from)keep.set(id,r)});j.reports.forEach(r=>keep.set(r.id,r));G.rep=keep;pushReports()}
 async function reload(lite){const from=G.from||prevMonth(today().slice(0,7));const j=await api("load",{from,to:"9999-12",lite:!!lite});j._from=from;G.from=from;applyLoad(j);try{const snap=Object.assign({},j,{items:G.items});ls.set("agy_cache_v2",JSON.stringify(snap))}catch(e){}S.loaded=true;render()}
 function setActiveLocal(pid,codes){(G.items[pid]||[]).forEach(x=>{x[10]=codes.includes(x[0])?1:0})}

@@ -1443,6 +1443,27 @@ function fpOf_(reps) {
   if (!s) return '';
   return hex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s)).slice(0, 12);
 }
+function sigSummary_() {
+  var sig = sigRows_(), out = {};
+  Object.keys(sig).forEach(function (k) {
+    var s = sig[k];
+    out[k] = { signer: s.signer, at: s.at, fp: s.fp, img: s.img };
+  });
+  return out;
+}
+function accountsList_() {
+  return read_('人員').rows.map(function (r) {
+    var name = str_(r['姓名']); if (!name) return null;
+    return {
+      name: name,
+      role: str_(r['角色']) || '現場',
+      status: str_(r['狀態']) || '啟用',
+      hasPin: !!str_(r['PIN雜湊']),
+      lastLogin: dt_(r['最後登入']),
+      note: str_(r['備註'])
+    };
+  }).filter(Boolean);
+}
 function sigRows_() {
   var latest = {};
   read_('簽名').rows.forEach(function (r) {
@@ -1611,7 +1632,7 @@ var ACTIONS = {
       config: { workers: c.workers, crews: c.crews, machines: c.machines, soilTypes: c.soilTypes, dests: c.dests, works: c.works, samples: c.samples }
     };
     if (!q.lite) out.items = its;
-    try { out.stale = staleList_(r.reports, str_(q.from) || '0000-00'); } catch (e2) { out.stale = []; }
+    try { out.stale = staleList_(r.reports, str_(q.from) || '0000-00'); out.sigs = sigSummary_(); out.accounts = accountsList_(); } catch (e2) { out.stale = []; out.sigs = {}; out.accounts = []; }
     return out;
   },
   reports: function (q) { return { reports: reports_(str_(q.from) || '0000-00', str_(q.to) || '9999-99', false).reports }; },
@@ -1727,6 +1748,25 @@ var ACTIONS = {
     sh.getRange(2, 1, rows.length, 3).setValues(rows);
     return {};
   },
+  saveAccount: function (q, role) {
+    if (role !== 'admin') throw new Error('只有管理者可以管理登入人員');
+    var name = str_(q.name), accRole = str_(q.accRole) || '現場', status = str_(q.status) || '啟用', note = str_(q.note);
+    if (!name) throw new Error('請輸入人員姓名');
+    var sh = sheet_('人員'), t = read_('人員'), hit = null;
+    t.rows.forEach(function (r) { if (str_(r['姓名']) === name) hit = r; });
+    if (q.del && hit) {
+      sh.deleteRow(hit._row);
+      return { accounts: accountsList_() };
+    }
+    if (hit) {
+      sh.getRange(hit._row, t.head.indexOf('角色') + 1, 1, 2).setValues([[accRole, status]]);
+      if (q.note !== undefined) sh.getRange(hit._row, t.head.indexOf('備註') + 1, 1, 1).setValues([[note]]);
+      if (q.resetPin) sh.getRange(hit._row, t.head.indexOf('PIN雜湊') + 1, 1, 2).setValues([['', '']]);
+    } else {
+      append_('人員', [{ '姓名': name, '角色': accRole, '狀態': status, 'PIN雜湊': '', '鹽': '', '最後登入': '', '備註': note }]);
+    }
+    return { accounts: accountsList_() };
+  },
   saveSiteItems: function (q, role) {
     if (role !== 'admin' && role !== 'office') throw new Error('只有管理者或內業可以設定派工單工項');
     var pid = str_(q.pid), site = str_(q.site), items = q.items || [];
@@ -1784,7 +1824,7 @@ function folder_(name, parent) {
   return it.hasNext() ? it.next() : (parent ? parent.createFolder(name) : DriveApp.createFolder(name));
 }
 function safe_(v) { return str_(v).replace(/[\\\/:*?"<>|]/g, '_').slice(0, 80); }
-var WRITES = { sign: 1, importPlan: 1, saveSiteItems: 1, report: 1, deleteReport: 1, addSite: 1, siteStatus: 1, settle: 1, setActive: 1, saveConfig: 1, saveProject: 1 };
+var WRITES = { sign: 1, importPlan: 1, saveAccount: 1, saveSiteItems: 1, report: 1, deleteReport: 1, addSite: 1, siteStatus: 1, settle: 1, setActive: 1, saveConfig: 1, saveProject: 1 };
 
 /* ===== 帳號與資安 ===== */
 var ROLE_MAP = { '管理者': 'admin', '現場': 'field', '內業': 'office', '老闆': 'office' };
