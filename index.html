@@ -1188,47 +1188,30 @@ function qtyTableNode(p,t){const act=t.slice(1),by={};act.forEach(r=>by[r[0]]=r)
     tb.append(h("tr",{class:isOver(p,it)?"over":""},row.map((x,j)=>h("td",{class:j===1?"w":(j?"r":"")},x===null?"":(typeof x==="number"?fmt(x):x)))))});
   return h("table",{},h("thead",{},h("tr",{},t[0].map((x,i)=>h("th",{class:i?"r":""},x)))),tb)}
 function weekRange(ds){const d=new Date(ds+"T00:00:00"),w=(d.getDay()+6)%7,a=new Date(d),b=new Date(d);a.setDate(d.getDate()-w);b.setDate(a.getDate()+6);const f=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");return[f(a),f(b)]}
-// 照片下載:電腦 Chrome 選資料夾直接存;手機用分享選單(存相簿或傳 LINE);都不支援時才打包壓縮檔
+// 照片下載:電腦 Chrome/Edge 選資料夾直接存,檔名自動取好
 function b64File(f){const bin=atob(f.data),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new File([u],f.name,{type:f.mime||"image/jpeg"})}
 async function photoFetchAll(p,site,a,b,onBatch,onProg){let off=0,total=null,n=0,bad=0;
   do{const j=await api("photoFiles",{pid:p.id,site,from:a,to:b,offset:off,limit:10});total=j.total;const fs=[];
     (j.files||[]).forEach(f=>{if(f.data)fs.push(b64File(f));else bad++});if(fs.length)await onBatch(fs);n+=(j.files||[]).length;off+=(j.files||[]).length;onProg(n,total);if(!(j.files||[]).length)break}while(off<total);
   return{total,bad}}
 const canPick=()=>typeof window.showDirectoryPicker==="function";
-const canShareFiles=()=>{try{return !!(navigator.canShare&&navigator.canShare({files:[new File([new Uint8Array(1)],"t.jpg",{type:"image/jpeg"})]}))}catch(e){return false}};
 function photoZipCard(p){const Z=S.zip=S.zip||{unit:"日",date:today(),site:""};const sec=h("section",{class:"card"},h("h2",{},"下載照片(自動命名)"));
   const di=h("input",{type:Z.unit==="月"?"month":"date","aria-label":"日期"});di.value=Z.unit==="月"?Z.date.slice(0,7):Z.date;di.addEventListener("change",()=>{if(di.value)Z.date=Z.unit==="月"?di.value+"-01":di.value});
   const rng=()=>Z.unit==="日"?[Z.date,Z.date]:Z.unit==="週"?weekRange(Z.date):(()=>{const y=+Z.date.slice(0,4),mo=+Z.date.slice(5,7),nd=new Date(y,mo,0).getDate();return[Z.date.slice(0,7)+"-01",Z.date.slice(0,7)+"-"+String(nd).padStart(2,"0")]})();
-  const row=[h("div",{class:"f"},"範圍",seg(["日","週","月"],Z.unit,v=>{Z.unit=v;S.zipOut=null;S.shareSet=null;render()})),h("label",{class:"f"},Z.unit==="週"?"選這週的任一天":Z.unit==="月"?"月份":"日期",di)];
+  const row=[h("div",{class:"f"},"範圍",seg(["日","週","月"],Z.unit,v=>{Z.unit=v;render()})),h("label",{class:"f"},Z.unit==="週"?"選這週的任一天":Z.unit==="月"?"月份":"日期",di)];
   if(p.multi){const ss=h("select",{"aria-label":"派工單"},h("option",{value:""},"全部派工單"),(p.siteInfo||[]).filter(x=>x.status!=="結案").map(x=>h("option",{value:x.name},x.name)));ss.value=Z.site||"";ss.addEventListener("change",()=>{Z.site=ss.value});row.push(h("label",{class:"f"},"派工單",ss))}
   const st=h("div",{class:"msg",hidden:true}),site=()=>p.multi?Z.site:"";
   const say=(t,cls)=>{st.hidden=false;st.className="msg "+(cls||"");st.textContent=t};
   const btns=h("div",{class:"row"});
   if(canPick())btns.append(h("button",{type:"button",class:"btn primary",disabled:!!S.zipBusy,onclick:async()=>{const [a,b]=rng();let dir;
     try{dir=await window.showDirectoryPicker({mode:"readwrite"})}catch(e){return}
-    S.zipBusy=true;go.disabled=true;let saved=0;
+    S.zipBusy=true;let saved=0;
     try{const r=await photoFetchAll(p,site(),a,b,async fs=>{for(const f of fs){const fh=await dir.getFileHandle(f.name,{create:true});const w=await fh.createWritable();await w.write(f);await w.close();saved++}},(n,t)=>say("存檔中 "+n+" / "+t+" 張…"));
       say(r.total?"✅ 已存 "+saved+" 張到「"+dir.name+"」資料夾"+(r.bad?"(有 "+r.bad+" 張讀不到)":"")+"。":(a+(a===b?"":" ~ "+b)+" 沒有照片。"),r.total?"ok":"warn")}
-    catch(e){say("沒有存完:"+e.message+"(已存 "+saved+" 張)","warn")}S.zipBusy=false;go.disabled=false}},"💾 選資料夾直接存"));
-  if(canShareFiles())btns.append(h("button",{type:"button",class:"btn"+(canPick()?"":" primary"),disabled:!!S.zipBusy,onclick:async()=>{const [a,b]=rng();S.zipBusy=true;const all=[];
-    try{const r=await photoFetchAll(p,site(),a,b,async fs=>{all.push(...fs)},(n,t)=>say("讀取照片 "+n+" / "+t+" 張…"));
-      if(!all.length){say(a+(a===b?"":" ~ "+b)+" 沒有照片。","warn");S.zipBusy=false;return}
-      S.shareSet={files:all.slice(0,200),size:all.length>200?30:all.length,more:all.length>200};S.zipBusy=false;render()}
-    catch(e){say("讀取失敗:"+e.message,"warn");S.zipBusy=false}}},"📤 分享到相簿或 LINE"));
-  const go=h("button",{type:"button",class:"btn",disabled:!!S.zipBusy,onclick:async()=>{const [a,b]=rng();S.zipBusy=true;S.zipOut=null;render();
-    try{const j=await api("photoZip",{pid:p.id,site:site(),from:a,to:b});S.zipOut={a,b,files:j.files||[],count:j.count||0}}catch(e){S.err="打包沒有成功:"+e.message}S.zipBusy=false;render()}},S.zipBusy?"處理中…":"🗜 打包成壓縮檔(備用,較慢)");
-  btns.append(go);
+    catch(e){say("沒有存完:"+e.message+"(已存 "+saved+" 張)","warn")}S.zipBusy=false}},"💾 選資料夾,下載照片"));
+  else btns.append(h("div",{class:"msg warn"},"這個瀏覽器不能選資料夾存檔,請用電腦的 Chrome 或 Edge 開啟。"));
   sec.append(h("div",{class:"row"},...row),btns,st);
-  if(S.shareSet){const X=S.shareSet,n=X.files.length,parts=Math.ceil(n/X.size);
-    const box=h("div",{class:"sheet"},h("b",{},"已讀取 "+n+" 張照片"+(X.more?"(一次最多 200 張,請縮小範圍分次下載)":"")+"。"+(parts>1?"分成 "+parts+" 批,每批 "+X.size+" 張,請依序按下:":"按下面的按鈕分享:")));
-    for(let k=0;k<parts;k++){const fs=X.files.slice(k*X.size,(k+1)*X.size),done=(X.done||{})[k];
-      box.append(h("button",{type:"button",class:"btn "+(done?"":"primary"),onclick:async()=>{try{await navigator.share({files:fs,title:"現場照片"});X.done=Object.assign({},X.done,{[k]:1});render()}
-        catch(e){if(e&&e.name==="AbortError")return;if(X.size>30){S.shareSet={files:X.files,size:30,more:X.more};S.err="一次分享 "+fs.length+" 張失敗,已改成每批 30 張,請再按一次。";render()}else{S.err="分享失敗:"+(e&&e.message||e);render()}}}},
-        (done?"✓ ":"📤 ")+(parts>1?"第 "+(k+1)+" 批(":"分享 ")+fs.length+" 張"+(parts>1?")":"")))}
-    box.append(h("button",{type:"button",class:"btn",onclick:()=>{S.shareSet=null;render()}},"關閉"));sec.append(box)}
-  if(S.zipOut){const o=S.zipOut;if(!o.files.length)sec.append(h("div",{class:"msg warn"},o.a+(o.a===o.b?"":" ~ "+o.b)+" 沒有照片。"));
-    else{sec.append(h("div",{class:"msg ok"},"共 "+o.count+" 張"+(o.files.length>1?",照片較多,分成 "+o.files.length+" 包":"")+"。按下面的連結下載,存檔時可以自己選資料夾。"));o.files.forEach(f=>sec.append(h("a",{href:f.url,target:"_blank",rel:"noopener",class:"btn",style:"text-decoration:none;display:block;text-align:center"},"⬇ "+f.name+"("+f.count+" 張)")))}}
-  sec.append(h("p",{class:"note"},"檔名:日期_"+(p.multi?"派工單_":"")+"今日工作項目(沒寫就用照片說明或工項),同一天多張加 _2、_3,例:20261116_"+(p.multi?"實踐國小_":"")+"AC刨除.jpg。"+(canPick()?"電腦請用「選資料夾直接存」。":"")+(canShareFiles()?"手機用「分享」可選「儲存影像」存到相簿,或傳到 LINE。":"")+(!canPick()&&!canShareFiles()?"這個瀏覽器只能用壓縮檔;電腦建議改用 Chrome。":"")));
+  sec.append(h("p",{class:"note"},"檔名:日期_"+(p.multi?"派工單_":"")+"今日工作項目(沒寫就用照片說明或工項),同一天多張加 _2、_3,例:20261116_"+(p.multi?"實踐國小_":"")+"AC刨除.jpg。"));
   return sec}
 function viewPhotos(p,m,rs){const zc=photoZipCard(p);const sec=h("section",{class:"card"},h("h2",{},(p.short||p.name)+"｜照片總覽"),h("label",{class:"f"},"月份",m));let n=0;
   groupByDay(rs).forEach(g=>{g.ph=g.ph||g.photos||[];if(!g.ph.length)return;n+=g.ph.length;
