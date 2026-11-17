@@ -1810,7 +1810,15 @@ function accountsAdmin(){
       roleSel.addEventListener("change",async()=>{
         try{const j=await api("saveAccount",{name:a.name,accRole:roleSel.value,status:a.status});S.accounts=j.accounts;render()}catch(e){S.err=e.message;render()}
       });
+      const delBtn=h("button",{type:"button","aria-label":"刪除 "+a.name,title:"刪除這個人員",style:"flex:0 0 auto;padding:2px 6px",onclick:async()=>{
+        if(S.me&&a.name===S.me){alert("不能刪除自己目前登入的帳號。");return}
+        if(a.role==="管理者"&&!list.some(x=>x!==a&&x.role==="管理者"&&x.status!=="停用"&&x.hasPin)){alert("「"+a.name+"」是目前唯一可登入的管理者,不能刪除。請先建立另一位管理者並完成登入設 PIN。");return}
+        if(!confirm("是否確認刪除「"+a.name+"」?"))return;
+        if(!confirm("再次確認:刪除「"+a.name+"」後無法復原,他將不能再登入。\n(以前填的回報、簽名紀錄會保留)"))return;
+        try{const j=await api("saveAccount",{name:a.name,del:true});S.accounts=j.accounts;render()}catch(e){S.err="沒有刪除成功:"+e.message;render()}
+      }},"✕");
       sec.append(h("div",{class:"entry",style:"flex-wrap:wrap;gap:8px"},
+        delBtn,
         roleSel,
         h("div",{style:"flex:1;min-width:140px"},
           h("b",{},a.name+" "),
