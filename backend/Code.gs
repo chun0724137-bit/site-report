@@ -14,7 +14,7 @@ var HEAD = {
   '操作紀錄': ['時間', '人員', '角色', '動作', '內容'],
   '每日回報': ['回報編號', '日期', '工程代號', '工程', '派工地點', '上午天氣', '下午天氣', '回報人', '技術工', '普通工', '體力工', '義交', '工作項目', '人員出工與加班', '機具', '施工項目', '出土', '材料與物料', '取樣', '備註', '明日預定', '現場照片', '修繕地點', '未施工原因', '送出時間', '最後修改人', '修改時間', '修改前內容', '原始資料JSON']
 };
-var ITEM_HEAD = ['項次', '項目', '單位', '單價', '原契約數量', '第一次變更數量', '第二次變更數量', '分類', '計量方式', '依據分類', '計入進度', '起算累計', '大按鈕', '第一次變更日', '第二次變更日'];
+var ITEM_HEAD = ['項次', '項目', '單位', '單價', '原契約數量', '第一次變更數量', '第二次變更數量', '分類', '計量方式', '依據分類', '計入進度', '起算累計', '大按鈕', '第一次變更日', '第二次變更日', '變更新增'];
 var ITEM_PREFIX = '契約-';
 var DIARY_PREFIX = '日誌_';
 var OBSOLETE_SHEETS = ['契約-新店土尾', '契約-機動修繕類', '日誌_新店土尾', '日誌_機動修繕類', '派工數量', '照片', '物料', '修改紀錄', '施工項目', '機具'];
@@ -1827,10 +1827,12 @@ var ACTIONS = {
     var sh = sheet_('派工地點'), t = read_('派工地點'), hit = null;
     t.rows.forEach(function (r) { if (str_(r['工程代號']) === pid && str_(r['地點']) === site) hit = r; });
     var val = items.map(function (x) { return Array.isArray(x) ? (x[1] ? x[0] + ':' + x[1] : x[0]) : str_(x); }).filter(Boolean).join('、');
+    var extra = {}; [['area', '區域'], ['kind', '工作性質'], ['start', '開工日'], ['plan', '預定完工日']].forEach(function (k) { if (str_(q[k[0]])) extra[k[1]] = str_(q[k[0]]); });
     if (hit) {
       sh.getRange(hit._row, t.head.indexOf('派工工項') + 1, 1, 1).setValues([[val]]);
+      Object.keys(extra).forEach(function (h) { var c = t.head.indexOf(h); if (c >= 0) sh.getRange(hit._row, c + 1, 1, 1).setValues([[extra[h]]]); });
     } else {
-      append_('派工地點', [{ '工程代號': pid, '地點': site, '狀態': '施工中', '派工工項': val }]);
+      append_('派工地點', [Object.assign({ '工程代號': pid, '地點': site, '狀態': '施工中', '派工工項': val }, extra)]);
     }
     return { ok: true };
   },
@@ -1864,6 +1866,11 @@ var ACTIONS = {
     return { id: id };
   },
   /** 上傳預算書/詳細價目表(mode=new)或變更(mode=change)的契約項目 */
+  /** 復原(清除)第 N 次變更:清變更數量、刪除該次新增的項目、清變更日與展延 */
+  undoChange: function (q, role) {
+    if (role !== 'admin' && role !== 'office') throw new Error('只有管理者或內業可以復原變更');
+    return undoChange_(q);
+  },
   importItems: function (q, role) {
     if (role !== 'admin' && role !== 'office') throw new Error('只有管理者或內業可以匯入契約項目');
     return importItems_(q);
@@ -1970,7 +1977,7 @@ function folder_(name, parent) {
   return it.hasNext() ? it.next() : (parent ? parent.createFolder(name) : DriveApp.createFolder(name));
 }
 function safe_(v) { return str_(v).replace(/[\\\/:*?"<>|]/g, '_').slice(0, 80); }
-var WRITES = { importItems: 1, saveTick: 1, sign: 1, importPlan: 1, saveAccount: 1, saveSiteItems: 1, report: 1, deleteReport: 1, addSite: 1, siteStatus: 1, settle: 1, setActive: 1, saveConfig: 1, saveProject: 1 };
+var WRITES = { undoChange: 1, importItems: 1, saveTick: 1, sign: 1, importPlan: 1, saveAccount: 1, saveSiteItems: 1, report: 1, deleteReport: 1, addSite: 1, siteStatus: 1, settle: 1, setActive: 1, saveConfig: 1, saveProject: 1 };
 
 /* ===== 帳號與資安 ===== */
 var ROLE_MAP = { '管理者': 'admin', '現場': 'field', '內業': 'office', '老闆': 'office' };
@@ -2126,7 +2133,8 @@ function importItems_(q) {
       seen[code] = 1;
       var x = byCode[code];
       if (x) {
-        r[cq] = x.qty === null ? 0 : x.qty; out.changed++;
+        var hadQ = prevCols.some(function (c) { return num_(r[c]) !== null; });
+        r[cq] = x.qty === null ? (hadQ ? 0 : '') : x.qty; out.changed++;
         if (num_(r[col('單價')]) === null && x.price !== null) r[col('單價')] = x.price;
       } else {   // 變更檔沒有列出的項目:維持變更前數量
         var prev = ''; prevCols.forEach(function (c) { if (num_(r[c]) !== null) prev = r[c]; });
@@ -2138,6 +2146,7 @@ function importItems_(q) {
       var r = blank();
       r[col('項次')] = x.code; r[col('項目')] = x.name; r[col('單位')] = x.unit; r[col('單價')] = x.price === null ? '' : x.price;
       r[cq] = x.qty === null ? 0 : x.qty; r[col('分類')] = x.cat; r[col('計量方式')] = x.mode || '數量'; r[col('計入進度')] = x.prog ? '是' : '否';
+      r[col('變更新增')] = '第' + CH_NAMES_[n - 1] + '次';
       data.push(r); out.added++;
     });
     if (data.length) data[0][cd] = d;
@@ -2153,4 +2162,36 @@ function importItems_(q) {
     sh.getRange(2, 1, data.length, head.length).setValues(data);
   }
   return out;
+}
+
+function undoChange_(q) {
+  var p = projById_(str_(q.pid)); if (!p) throw new Error('找不到工程');
+  var n = Number(q.n) || (p.ch[1] ? 2 : p.ch[0] ? 1 : 0);
+  var name = ITEM_PREFIX + p.short, sh = sheet_(name), t = read_(name), head = t.head;
+  var cq = head.indexOf('第' + CH_NAMES_[n - 1] + '次變更數量'), cd = head.indexOf('第' + CH_NAMES_[n - 1] + '次變更日'), cm = head.indexOf('變更新增'), cmode = head.indexOf('計量方式');
+  if (!n || cq < 0) throw new Error('這個工程沒有已匯入的變更');
+  if (n === 1 && p.ch[1]) throw new Error('已經有第二次變更,請先復原第二次變更');
+  var prevCols = ['原契約數量'].concat(n === 2 ? ['第一次變更數量'] : []).map(function (h) { return head.indexOf(h); });
+  var last = sh.getLastRow(), data = last > 1 ? sh.getRange(2, 1, last - 1, head.length).getValues() : [];
+  var tag = '第' + CH_NAMES_[n - 1] + '次', marked = data.some(function (r) { return cm >= 0 && str_(r[cm]) === tag; });
+  var isNew = function (r) {
+    if (!str_(r[0]) || (cmode >= 0 && str_(r[cmode]) === '標題')) return false;
+    if (marked) return str_(r[cm]) === tag;
+    return !prevCols.some(function (c) { return num_(r[c]) !== null; }) && num_(r[cq]) !== null;
+  };
+  var cut = data.length;
+  if (!marked) while (cut > 0 && isNew(data[cut - 1])) cut--;   // 舊版沒有記號:只刪最後面連續新增的列
+  var keep = [], removed = 0;
+  data.forEach(function (r, i) {
+    if (marked ? isNew(r) : i >= cut) { removed++; return; }
+    r[cq] = ''; if (cd >= 0) r[cd] = ''; keep.push(r);
+  });
+  if (data.length) sh.getRange(2, 1, data.length, head.length).clearContent();
+  if (keep.length) { sh.getRange(2, 1, keep.length, 1).setNumberFormat('@'); sh.getRange(2, 1, keep.length, head.length).setValues(keep); }
+  var pt = read_('工程'), psh = sheet_('工程');
+  pt.rows.forEach(function (r) {
+    if (str_(r['工程代號']) !== p.id) return;
+    [n === 1 ? '第一次變更日' : '第二次變更日', n === 1 ? '第一次展延天數' : '第二次展延天數'].forEach(function (h) { var c = pt.head.indexOf(h); if (c >= 0) psh.getRange(r._row, c + 1).setValue(''); });
+  });
+  return { n: n, removed: removed, kept: keep.length };
 }

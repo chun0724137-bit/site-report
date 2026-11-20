@@ -126,4 +126,15 @@ r=m.call({key:'admin123',action:'importItems',pid,mode:'change',n:1,date:'2026-1
 m.call({key:'admin123',action:'saveProject',project:{id:'ntpu',status:'完工'}});const sp=m.g.SpreadsheetApp.getActiveSpreadsheet();
 ok(sp.getSheetByName('契約-三峽北大').hidden===true&&sp.getSheetByName('日誌_三峽北大').hidden===true,'完工後契約、日誌分頁隱藏');
 m.call({key:'admin123',action:'saveProject',project:{id:'ntpu',status:'施工中'}});ok(sp.getSheetByName('契約-三峽北大').hidden===false,'改回施工中分頁再顯示');}
+// 復原變更:有記號刪新增列;舊版無記號只刪最後連續新增列
+{let r=m.call({key:'admin123',action:'saveProject',project:{name:'復原測試',short:'復原測試',start:'2026-11-01',approved:100}});const pid=r.id;
+m.call({key:'admin123',action:'importItems',pid,mode:'new',items:[{code:'1.1',name:'甲',unit:'M',qty:10,price:1},{code:'1.2',name:'乙',unit:'M',qty:null,price:1}]});
+r=m.call({key:'admin123',action:'importItems',pid,mode:'change',n:1,date:'2026-11-05',ext:10,items:[{code:'1.1',name:'甲',unit:'M',qty:12},{code:'1.2',name:'乙',unit:'M',qty:null},{code:'1.3',name:'丙',unit:'M',qty:5,price:2}]});
+const sh=()=>m.sheets['契約-復原測試'].d,hd=sh()[0],cq=hd.indexOf('第一次變更數量');ok(r.ok&&sh()[2][cq]===''&&sh()[3][hd.indexOf('變更新增')]==='第一次','原本沒數量的維持空白、新增列有記號');
+r=m.call({key:'admin123',action:'undoChange',pid});ok(r.ok&&r.removed===1&&r.kept===2&&sh().filter(x=>x[0]).length===3&&sh()[1][cq]==='','復原:刪 1 列新增、清變更數量');
+const pr=m.run("projById_('"+pid+"')");ok(!pr.ch[0]&&!pr.chExt[0],'復原:清除變更日與展延');
+const s2=sh();s2[1][cq]=12;s2.push(['1.9','舊版新增','M','','','8']);s2[s2.length-1].length=hd.length;
+r=m.call({key:'admin123',action:'undoChange',pid,n:1});ok(r.ok&&r.removed===1&&sh().filter(x=>x[0]).length===3,'舊版沒有記號:只刪最後面新增的列');
+r=m.call({key:'admin123',action:'saveSiteItems',pid:'yanggong1',site:'新莊區測試',items:[['1.32',5]],area:'新北市',kind:'道路工程',start:'2026-11-20',plan:'2026-12-20'});
+const st=m.run("sites_().filter(function(s){return s[1]==='新莊區測試'})[0]");ok(r.ok&&st&&st[3].area==='新北市'&&st[3].start==='2026-11-20'&&st[3].plan==='2026-12-20','派工單匯入寫入區域、開工日、預定完工日');}
 console.log('全部通過');

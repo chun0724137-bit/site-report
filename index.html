@@ -1277,26 +1277,63 @@ function impParse(aoa,g,onlyDirect){
       if(cn&&!/\d/.test(code)){if(unit||qty!==null){it={code:String(cn),name,unit,qty,price,cat:""}}else{catNo=cn;cat=name;const o={code:String(cn),name,head:2,cat:name};out.push(o);lastHead=o;last=null;continue}}
       else if(/^\d+(\.\d+)*$/.test(code)){if(!unit&&qty===null&&price===null){cat=name;const o={code,name,head:2,cat:name};out.push(o);lastHead=o;last=null;continue}
         it={code:catNo&&!code.includes(".")?catNo+"."+code:code,name,unit,qty,price,cat}}
-      else{last=null;continue}}
+      else if(unit&&(qty!==null||price!==null)){it={code,name,unit,qty,price,cat}}
+      else{if(name&&!unit&&qty===null&&price===null){cat=name;const o={code,name,head:2,cat:name};out.push(o);lastHead=o}last=null;continue}}
     if(it){lastHead=null;it.mode=/^(式|一式)$/.test(it.unit)&&(it.qty===1||it.qty===null)?"現場填百分比":"數量";out.push(it);last=it}}
   // 分類補上「分類號.名稱」以外的乾淨名稱
   out.forEach(it=>{it.name=it.name.replace(/\s+/g,"");it.cat=String(it.cat||"").replace(/\s+/g,"")});
   return out}
+// 開口契約:讀機關派工單 Excel(派工單分頁),寫進派工地點的派工工項與派工量,不動契約分頁
+function dispatchImport(p,I,sec){
+  const sn=I.wb.SheetNames.find(n=>/派工單/.test(n))||I.wb.SheetNames[0];
+  const aoa=XLSX.utils.sheet_to_json(I.wb.Sheets[sn],{header:1,raw:true,defval:""});
+  const g=impGuess(aoa,"new"),m=g.m,txt=v=>String(v??"").replace(/\s+/g," ").trim();
+  const siteRows=[];for(let r=Math.max(0,g.hr-2);r<aoa.length;r++){const x=aoa[r]||[];if(/^\d+$/.test(txt(x[0]))&&(txt(x[2])||txt(x[3])))siteRows.push({area:txt(x[1]),place:txt(x[2]),kind:txt(x[3])})}
+  const info=siteRows[0]||{area:"",place:"",kind:""};
+  if(I.site===undefined)I.site=(info.place+info.kind).replace(/\s/g,"");
+  const sum={},order=[];for(let r=g.dr;r<aoa.length;r++){const x=aoa[r]||[];const code=txt(x[m.code]).replace(/\s/g,""),q=impNum(x[m.qty]);if(!code||!/\d/.test(code)||q===null||q===0)continue;
+    if(!sum[code]){sum[code]={code,name:txt(x[m.name]),unit:m.unit>=0?txt(x[m.unit]):"",qty:0};order.push(code)}sum[code].qty=Math.round((sum[code].qty+q)*10000)/10000}
+  const cur={},byName={};(p.items||[]).forEach(i=>{cur[i.code]=i;const k=i.name.replace(/\s/g,"")+"|"+i.unit;byName[k]=byName[k]?"dup":i});
+  const list=order.map(c=>{const x=sum[c];let it=cur[c]||cur[c.replace(/^[壹一]\./,"")];if(!it){const y=byName[x.name.replace(/\s/g,"")+"|"+x.unit];if(y&&y!=="dup")it=y}return Object.assign({},x,{to:it?it.code:""})});
+  const ok=list.filter(x=>x.to),bad=list.filter(x=>!x.to);
+  const inp=(label,key,type,ph,dl)=>{const i=h("input",{type:type||"text",placeholder:ph||"",list:dl||null});i.value=I[key]??"";i.addEventListener("input",()=>I[key]=i.value);return h("label",{class:"f"},label,i)};
+  const dl=h("datalist",{id:"dsp_sites"},(p.siteInfo||[]).map(x=>h("option",{value:x.name})));
+  const exists=(p.siteInfo||[]).some(x=>x.name===String(I.site||"").trim());
+  sec.append(h("div",{class:"msg"},"讀到「"+sn+"」:"+[info.area,info.place,info.kind].filter(Boolean).join("｜")+(siteRows.length>1?"(這份派工單有 "+siteRows.length+" 個地點,目前只匯入第 1 個)":"")),
+    dl,inp("派工地點名稱(App 與日誌上顯示的名稱,可修改)","site","text","例:新莊區光明段277-1道路瓶頸打通工程","dsp_sites"),
+    h("p",{class:"note"},exists?"已有這張派工單:確定後會用這份 Excel 的工項與數量整份取代原本的派工工項。":"這是新的派工地點,確定後會自動新增。"),
+    h("div",{class:"row"},inp("開工日(可空白)","start","date"),inp("預定完工日(可空白)","plan","date")),
+    h("p",{class:"note"},"派工工項 "+list.length+" 項:對到契約 "+ok.length+" 項"+(bad.length?"、對不到 "+bad.length+" 項(紅底,不會寫入,請確認契約分頁有沒有這個項次)":"")+"。不會改動契約分頁。"),
+    h("div",{class:"tbl"},h("table",{class:"imp"},h("thead",{},h("tr",{},["項次","工作項目","派工數量","單位","契約項次"].map(x=>h("th",{},x)))),
+      h("tbody",{},list.map(x=>h("tr",{class:x.to?"":"over"},h("td",{},x.code),h("td",{class:"nm"},x.name),h("td",{class:"r"},fmt(x.qty)),h("td",{},x.unit),h("td",{},x.to||"✕ 找不到")))))),
+    h("button",{type:"button",class:"btn primary",disabled:S.busy||!ok.length,onclick:async()=>{const site=String(I.site||"").trim();if(!site){alert("請填派工地點名稱");return}
+      try{S.busy=true;render();const agg={};ok.forEach(x=>agg[x.to]=Math.round(((agg[x.to]||0)+x.qty)*10000)/10000);
+        await api("saveSiteItems",{pid:p.id,site,items:Object.keys(agg).map(c=>[c,agg[c]]),area:info.area,kind:info.kind,start:I.start||"",plan:I.plan||""});
+        S.imp={mode:"dispatch",onlyDirect:true,n:"1",msg:"已寫入派工單「"+site+"」:派工工項 "+Object.keys(agg).length+" 項"+(bad.length?",另有 "+bad.length+" 項對不到契約沒有寫入":"")+"。",ok:!bad.length};await reload(false)}
+      catch(e){I.msg="沒有寫入成功:"+e.message;I.ok=false}S.busy=false;render()}},(exists?"更新":"新增")+"派工單並寫入 "+ok.length+" 項"));
+}
 function itemImportAdmin(p){
   const I=S.imp=S.imp||{mode:"new",onlyDirect:true,n:"1",date:"",ext:"",replace:false};
   const sec=h("section",{class:"card"},h("h2",{},"📥 匯入契約項目（預算書／變更）"),h("p",{class:"note"},"上傳內業整理好的 Excel(預算詳細表或詳細價目表;變更請用變更後的明細表)。程式會自動找欄位,畫面上可核對、修正後再確定匯入。"));
-  const modes=[["new","新增工程"],["change","本工程變更｜"+(p.short||p.name)],["redo","重新匯入本工程"]];
+  const modes=[["new","新增工程"],...(p.multi?[["dispatch","📋 匯入派工單｜"+(p.short||p.name)]]:[]),["change","本工程變更｜"+(p.short||p.name)],["redo","重新匯入本工程"]];
   const sg=h("div",{class:"sug"});modes.forEach(([k,t])=>sg.append(h("button",{type:"button",class:"tag"+(I.mode===k?" on":""),onclick:()=>{S.imp={mode:k,onlyDirect:true,n:"1",date:"",ext:"",replace:k==="redo"};render()}},t)));sec.append(sg);
   const inp=(label,key,type,ph)=>{const i=h("input",{type:type||"text",placeholder:ph||""});i.value=I[key]??"";i.addEventListener("input",()=>I[key]=i.value);return h("label",{class:"f"},label,i)};
   if(I.mode==="new"){const ty=h("select",{},["一般","開口契約"].map(x=>h("option",{value:x},x)));ty.value=I.type||"一般";ty.addEventListener("change",()=>I.type=ty.value);
     sec.append(inp("工程名稱(全名)","name"),h("div",{class:"row"},inp("選單簡稱(也是分頁名稱)","short","text","例:南港玉成公園"),h("label",{class:"f"},"工程類型",ty)),h("div",{class:"row"},inp("開工日期(可空白)","start","date"),inp("核定工期(天)(可空白)","approved","number")))}
   if(I.mode==="change"){const ns=h("select",{},[["1","第一次變更"],["2","第二次變更"]].map(x=>h("option",{value:x[0]},x[1])));ns.value=I.n;ns.addEventListener("change",()=>{I.n=ns.value;render()});
-    sec.append(h("div",{class:"row"},h("label",{class:"f"},"第幾次變更",ns),inp("變更日期(議定生效日)","date","date"),inp("展延天數(天)","ext","number","0")),h("p",{class:"note"},"日誌從變更日期那天起改用變更數量、加上展延天數;變更日期以前不受影響。"))}
+    if(p.multi)sec.append(h("div",{class:"msg warn"},"⚠ 這是開口契約:派工單請用「📋 匯入派工單」,這裡只用於辦理契約變更(例如議價新增工項)。"));
+    sec.append(h("div",{class:"row"},h("label",{class:"f"},"第幾次變更",ns),inp("變更日期(議定生效日)","date","date"),p.multi?null:inp("展延天數(天)","ext","number","0")),h("p",{class:"note"},p.multi?"從變更日期那天起改用變更數量;開口契約的工期以各派工單的開工日、預定完工日為準。":"日誌從變更日期那天起改用變更數量、加上展延天數;變更日期以前不受影響。"));
+    const ch=(p.ch||[]).map((d,i)=>d?i+1:0).filter(Boolean),lastN=ch[ch.length-1];
+    if(lastN)sec.append(h("button",{type:"button",class:"btn",disabled:S.busy,onclick:async()=>{const nm="第"+"一二"[lastN-1]+"次變更("+p.ch[lastN-1]+")";
+      if(!confirm("是否確認復原「"+(p.short||p.name)+"」的"+nm+"?"))return;
+      if(!confirm("再次確認:會清除契約分頁的「第"+"一二"[lastN-1]+"次變更數量」、刪除這次變更新增的項目,並清除變更日"+(p.multi?"":"與展延天數")+"。"))return;
+      try{S.busy=true;render();const j=await api("undoChange",{pid:p.id,n:lastN});S.imp={mode:"change",onlyDirect:true,n:"1",msg:"已復原"+nm+":刪除新增項目 "+j.removed+" 項,其餘 "+j.kept+" 項的變更數量已清除。",ok:true};await reload(false)}catch(e){I.msg="沒有復原成功:"+e.message;I.ok=false}S.busy=false;render()}},"↩ 復原上一次變更匯入(第"+"一二"[lastN-1]+"次,"+p.ch[lastN-1]+")"))}
   const fi=h("input",{type:"file",accept:".xls,.xlsx"}),msg=h("div",{class:"msg",hidden:!I.msg});if(I.msg){msg.className="msg "+(I.ok?"ok":"warn");msg.textContent=I.msg}
   fi.addEventListener("change",async()=>{const f=fi.files[0];if(!f)return;try{if(typeof XLSX==="undefined")throw new Error("Excel 讀取元件還在載入,請稍等幾秒再選一次");
     const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});I.wb=wb;I.file=f.name;
     I.sheet=wb.SheetNames.find(n=>/詳細/.test(n))||wb.SheetNames.find(n=>/價目|明細|變更/.test(n))||wb.SheetNames[0];I.g=null;I.msg="";render()}catch(e){I.msg="讀取失敗:"+e.message;I.ok=false;render()}});
   sec.append(h("label",{class:"f"},"選擇 Excel 檔"+(I.file?"(目前:"+I.file+")":""),fi));
+  if(I.wb&&I.mode==="dispatch"){dispatchImport(p,I,sec);sec.append(msg);return sec}
   if(I.wb){
     const shs=h("select",{},I.wb.SheetNames.map(n=>h("option",{value:n},n)));shs.value=I.sheet;shs.addEventListener("change",()=>{I.sheet=shs.value;I.g=null;render()});
     const aoa=XLSX.utils.sheet_to_json(I.wb.Sheets[I.sheet],{header:1,raw:true,defval:""});
