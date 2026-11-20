@@ -39,7 +39,7 @@ header{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var
 header .wrap{display:flex;gap:10px;align-items:center;padding-block:10px}
 header b{font-size:15px;white-space:nowrap}
 select,input,textarea,button{font:inherit;color:inherit}
-select,input[type=text],input[type=date],input[type=number],textarea{width:100%;min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card)}
+select,input[type=text],input[type=search],input[type=date],input[type=number],textarea{width:100%;min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card)}
 textarea{min-height:64px;resize:vertical}
 main{padding-block:14px 96px;display:flex;flex-direction:column;gap:14px}
 section.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
@@ -276,7 +276,7 @@ function viewReport(){const p=proj(),d=S.draft,out=[];const T=ptype(p),isSoil=T=
       h("h2",{style:"margin-top:8px"},"📊 本日契約項目數量(可當日填，或於「看每日回報及修改」統一填寫)"),
       grid);
     if(S.pick)sec.append(pickSheet(p));
-    d.entries.forEach((e,i)=>sec.append(h("div",{class:"entry"},h("span",{style:"flex:1"},(e.code==="-"?"":e.code+" ")+e.name+(e.loc?"｜"+e.loc:"")+(e.photo?" 📷":"")),qtyEditor(e,pt=>Object.assign(e,pt)),h("button",{type:"button","aria-label":"刪除這一筆",onclick:()=>{d.entries.splice(i,1);render()}},"×"))));
+    d.entries.forEach((e,i)=>sec.append(h("div",{class:"entry"},(()=>{const it=e.code!=="-"&&(p.items||[]).find(i=>i.code===e.code);return h("span",{style:"flex:1;min-width:0"},(e.code==="-"?"":e.code+" ")+e.name+(e.loc?"｜"+e.loc:"")+(e.photo?" 📷":""),it?h("small",{class:"note",style:"display:block;font-size:12px;margin-top:2px"},it.mode==="現場填百分比"?"一式｜累計 "+fmt(ratioOf(p,it)*100)+"%":(it.qty===null||it.qty===undefined||it.qty===""?"":"契約 "+fmt(it.qty)+" "+it.unit+"｜")+"累計 "+fmt(doneQty(p,it))):null)})(),qtyEditor(e,pt=>Object.assign(e,pt)),h("button",{type:"button","aria-label":"刪除這一筆",onclick:()=>{d.entries.splice(i,1);render()}},"×"))));
     out.push(sec);
     if(isRepair){out.push(matSection());out.push(h("section",{class:"card"},h("h2",{},"備註"),txt("備註","notes","例:雨天暫停半天",true)));}
     else{out.push(soilSection(p));
@@ -1394,9 +1394,19 @@ function viewPeople(){const out=[],mo=S.month,rs=rowsFor("",mo);const ym=mo.spli
 function viewSet(){const p=proj(),out=[];const act=new Set(p.active||[]);
   const sec=h("section",{class:"card"},h("h2",{},"本週施工中的項目｜"+(p.short||p.name)),h("p",{class:"note"},"勾選的項目會變成「回報」頁的大按鈕。建議維持 5 到 10 項。"));
   if(!S.canWrite)sec.append(h("div",{class:"msg warn"},"名單與大按鈕只有管理者可以修改。請用管理者帳號登入。"));
-  (p.cats||[]).forEach(c=>{const firstIt=p.items.find(i=>i.cat===c.code);sec.append(h("div",{class:"cat"},catTag(firstIt)||c.name));p.items.filter(i=>i.cat===c.code).forEach(it=>{const cb=h("input",{type:"checkbox",id:"a_"+it.code,disabled:!S.canWrite});cb.checked=act.has(it.code);
-    cb.addEventListener("change",async()=>{cb.checked?act.add(it.code):act.delete(it.code);const next=p.items.filter(i=>act.has(i.code)).map(i=>i.code);try{await S.db.doc("projects/"+p.id).update({active:next})}catch(e){S.err="清單沒有存成功。";render()}});
-    sec.append(h("label",{class:"chk",for:"a_"+it.code},cb,h("span",{},it.code+" "+it.name+"("+fmt(it.qty)+" "+it.unit+")")))})});
+  S.actOpen=S.actOpen||{};const aq=h("input",{type:"search",placeholder:"搜尋項次或名稱,例:混凝土、2.2","aria-label":"搜尋施工項目"});aq.value=S.actQ||"";
+  const alist=h("div",{});
+  const draw=()=>{alist.replaceChildren();const q=(S.actQ||"").trim().toLowerCase();let shown=0;
+    (p.cats||[]).forEach(c=>{const its=p.items.filter(i=>i.cat===c.code&&(!q||(i.code+" "+i.name).toLowerCase().includes(q)));if(!its.length)return;
+      const all=p.items.filter(i=>i.cat===c.code),on=all.filter(i=>act.has(i.code)).length,open=q?true:!!S.actOpen[c.code];
+      alist.append(h("button",{type:"button",class:"cath"+(open?" on":""),"aria-expanded":String(open),onclick:()=>{S.actOpen[c.code]=!open;draw()}},(open?"▾ ":"▸ ")+(catTag(all[0])||c.name)+"（"+all.length+" 項"+(on?"，已勾 "+on:"")+"）"));
+      if(!open)return;
+      its.forEach(it=>{shown++;const cb=h("input",{type:"checkbox",id:"a_"+it.code,disabled:!S.canWrite});cb.checked=act.has(it.code);
+        cb.addEventListener("change",async()=>{cb.checked?act.add(it.code):act.delete(it.code);const next=p.items.filter(i=>act.has(i.code)).map(i=>i.code);p.active=next;draw();try{await S.db.doc("projects/"+p.id).update({active:next})}catch(e){S.err="清單沒有存成功。";render()}});
+        alist.append(h("label",{class:"chk",for:"a_"+it.code},cb,h("span",{},it.code+" "+it.name+"("+fmt(it.qty)+" "+it.unit+")")))})});
+    if(q&&!shown)alist.append(h("p",{class:"note"},"找不到「"+S.actQ+"」。"))};
+  aq.addEventListener("input",()=>{S.actQ=aq.value;draw()});
+  if(p.items.length){const onN=p.items.filter(i=>act.has(i.code));sec.append(aq);if(onN.length)sec.append(h("p",{class:"note"},"目前已勾 "+onN.length+" 項："+onN.map(i=>i.code).join("、")));sec.append(alist);draw()}
   if(!p.items.length)sec.append(h("p",{class:"note"},"這個工程還沒有匯入契約項目。"));
   out.push(sec);if(S.canOffice)out.push(itemImportAdmin(p));if(!["土方暫置","機動修繕"].includes(ptype(p)))out.push(diarySetAdmin(p));if(S.canOffice&&p.multi)out.push(siteAdmin(p));if(S.admin){out.push(accountsAdmin());out.push(projAdmin());}
   const sp=v=>[...new Set(v.split(/[、,，\n]/).map(s=>s.trim()).filter(Boolean))];
