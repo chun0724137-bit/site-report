@@ -53,7 +53,9 @@ h2{font-size:14px;margin:0;color:var(--mute);font-weight:600;letter-spacing:.04e
 .date-by-row>.f-date{min-width:0}
 .date-by-row>.f-by{min-width:0}
 .date-by-row input{padding:7px 8px;font-size:14px;height:38px;width:100%;max-width:100%;box-sizing:border-box}
-.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mute)}
+.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mute);min-width:0}
+input[type=date],input[type=month]{-webkit-appearance:none;appearance:none;display:block;box-sizing:border-box;width:100%;max-width:100%;min-width:0;min-height:44px}
+input[type=date]::-webkit-date-and-time-value,input[type=month]::-webkit-date-and-time-value{text-align:left}
 .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .seg button{flex:1;padding:10px 4px;border:0;background:var(--card);border-left:1px solid var(--line)}
 .seg button:first-child{border-left:0}
@@ -1236,7 +1238,7 @@ function siteAdmin(p){const sec=h("section",{class:"card"},h("h2",{},"派工地�
       if(isEditDisp){S.siteDispOpen="";render();return}
       const m={};curDisp.forEach(([c,q])=>m[c]=q||"");
       S.siteDispOpen=k;S.siteDispMap=m;S.siteDispQ="";render();
-    }},isEditDisp?"收起派工單工項設定":"📋 設定此派工單施工工項（"+(curDisp.length?"已限定 "+curDisp.length+" 項":"未限定，顯示預設大按鈕")+"）")));
+    }},isEditDisp?"收起派工單工項設定":"📋 設定此派工單施工工項"+(curDisp.length?"（已限定 "+curDisp.length+" 項）":""))));
     if(isEditDisp)row.append(siteDispEditor(p,s.name));
     if(S.siteDone===k)row.append(h("div",{class:"msg ok"},"已設為完工。要結算的話,按上面的「產生結算資料」。"));
     if(S.settled&&S.settled.k===k)row.append(h("div",{class:"msg ok"},"已產生「"+S.settled.name+"」,存在雲端硬碟「結算資料」資料夾。 ",h("a",{href:S.settled.url,target:"_blank",rel:"noopener"},"開啟檔案")));
@@ -1771,6 +1773,7 @@ function diaryMonthBtns(D,P){const models=()=>diaryModelsOf(P,D,D.days);
   return h("div",{class:"row"},h("button",{type:"button",class:"btn primary",onclick:()=>dOpenPrint(models(),P.short+" "+D.month+" 施工日誌")},"下載整月 PDF"),
     h("button",{type:"button",class:"btn primary",onclick:async()=>{try{const b=buildXlsx(models());await S.dl.save({filename:P.short+"_"+D.month+"_施工日誌.xlsx",data:b})}catch(e){if(!(e&&e.code==="declined")){S.err="Excel 產生失敗:"+(e.message||e);render()}}}},"下載整月 Excel"))}
 function viewDiary(){const p=proj(),out=[];S.dMonth=S.dMonth||today().slice(0,7);
+  if(["土方暫置","機動修繕"].includes(ptype(p)))return [h("p",{class:"note"},"這個工程沒有施工日誌,下面直接列出每日回報(和「紀錄」相同)。")].concat(viewLog());
   const mi=h("input",{type:"month",value:S.dMonth});mi.addEventListener("change",()=>{if(mi.value){S.dMonth=mi.value;S.dData=null;render()}});
   const sec=h("section",{class:"card"},h("h2",{},"施工日誌|"+(p.short||p.name)));out.push(sec);
   if(p.multi){const opts=(p.siteInfo||[]).filter(x=>x.status!=="結案").map(x=>x.name);if(!S.dSite||!opts.includes(S.dSite))S.dSite=opts[0]||"";
