@@ -4,10 +4,11 @@
  * 執行身分:我;存取權:所有人。通行碼在「設定」分頁。
  */
 var HEAD = {
-  '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型', '常用機具', '勾選方式', '工地負責人', '承攬廠商', '核定工期', '展延天數', '日誌第一聯', '日誌二聯', '第一次展延天數', '第二次展延天數'],
+  '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型', '常用機具', '勾選方式', '工地負責人', '承攬廠商', '核定工期', '展延天數', '日誌第一聯', '日誌二聯', '第一次展延天數', '第二次展延天數', '監造單位', '不鎖修改'],
   '派工地點': ['工程代號', '地點', '狀態', '區域', '工作性質', '開工日', '預定完工日', '實際完工日', '派工工項'],
   '設定': ['類別', '值', '屬性'],
   '預定進度': ['工程簡稱', '版本', '生效日', '日期', '累計預定進度'],
+  '派工預定進度': ['工程代號', '地點', '日期', '預定進度'],
   '簽名': ['工程代號', '日期', '簽名人', '簽名圖', '簽名時間', '資料指紋', '登入者', '派工地點'],
   '日誌勾選': ['工程代號', '派工地點', '日期', '勾選', '修改人', '修改時間'],
   '人員': ['姓名', '角色', '狀態', 'PIN雜湊', '鹽', '最後登入', '備註'],
@@ -520,7 +521,8 @@ function projects_() {
       type: rawType || (isMulti ? '開口契約' : '一般'),
       machines: machs,
       tick: str_(r['勾選方式']) || '手勾', layout1: str_(r['日誌第一聯']) || '當日', layout2: str_(r['日誌二聯']) || '不附', signer: str_(r['工地負責人']), company: str_(r['承攬廠商']), approved: num_(r['核定工期']), ext: num_(r['展延天數']) || 0,
-      chExt: [num_(r['第一次展延天數']) || 0, num_(r['第二次展延天數']) || 0]
+      chExt: [num_(r['第一次展延天數']) || 0, num_(r['第二次展延天數']) || 0],
+      supervisor: str_(r['監造單位']), nolock: str_(r['不鎖修改']) === '是'
     };
   }).filter(function (p) { return p.id; }).sort(function (a, b) { return a.order - b.order; });
 }
@@ -1522,6 +1524,17 @@ function planVers_(p) {
   arr.sort(function (a, b) { return a.eff < b.eff ? -1 : 1; });
   return arr;
 }
+/** 派工單(分案)的預定進度:[[日期, 累計預定(0~1)], …] 依日期排序 */
+function sitePlan_(pid, site) {
+  var out = [];
+  read_('派工預定進度').rows.forEach(function (r) {
+    if (str_(r['工程代號']) !== pid || str_(r['地點']) !== site) return;
+    var d = date_(r['日期']), v = num_(r['預定進度']); if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || v === null) return;
+    out.push([d, v > 1 ? v / 100 : v]);
+  });
+  return out.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
+}
+function sitePlanAt_(pts, date) { var v = 0; pts.forEach(function (x) { if (x[0] <= date) v = x[1]; }); return v; }
 function plannedAt_(vers, date) {
   var use = null; vers.forEach(function (v) { if (v.eff <= date) use = v; });
   if (!use) return null;
@@ -1558,7 +1571,7 @@ function diaryMonth_(pid, ym, site) {
     itemBy = {}; items.forEach(function (it) { itemBy[it.code] = it; });
     pp = { ch: [], multi: true };
   }
-  var machCols = diaryMachColsFor_(p), sig = sigRows_(), ticks = tickRows_(), vers = p.multi ? [] : planVers_(p);
+  var machCols = diaryMachColsFor_(p), sig = sigRows_(), ticks = tickRows_(), vers = p.multi ? [] : planVers_(p), sp = site ? sitePlan_(pid, site) : [];
   var lastDay = Utilities.formatDate(new Date(new Date(ym.slice(0, 4), Number(ym.slice(5, 7)), 0).getTime()), tz_(), 'yyyy-MM-dd');
   var endDate = site ? (info.done || info.plan || '') : (p.end || (p.approved ? addDays_(start, p.approved - 1 + extAt_(p, '')) : ''));
   var approved = site ? (endDate ? dayDiff_(start, endDate) + 1 : null) : p.approved, ext = site ? 0 : (p.ext || 0);
@@ -1589,7 +1602,7 @@ function diaryMonth_(pid, ym, site) {
     matOrder.forEach(function (m) { matc[m[0]] = (matc[m[0]] || 0) + dmat[m[0]]; });
     if (cur < ym + '-01') continue;
     var uniq = function (f) { var o = []; reps.forEach(function (r) { var v = str_(r[f]); if (v && o.indexOf(v) < 0) o.push(v); }); return o; };
-    var actual = actualAt_(items, pp, cur, cum), planned = p.multi ? actual : plannedAt_(vers, cur);
+    var actual = actualAt_(items, pp, cur, cum), planned = sp.length ? sitePlanAt_(sp, cur) : p.multi ? actual : plannedAt_(vers, cur);
     var elapsed = dayDiff_(start, cur) + 1, extD = site ? 0 : extAt_(p, cur), remain = approved ? approved - elapsed + extD : (endDate ? dayDiff_(cur, endDate) : null);
     var sk = sigKey_(pid, site, cur), sg = sig[sk] || null, fp = fpOf_(reps);
     days.push({
@@ -1611,7 +1624,7 @@ function diaryMonth_(pid, ym, site) {
     });
   }
   return {
-    project: { id: p.id, name: site ? p.name + '｜' + site : p.name, short: site ? p.short + '_' + site : p.short, multi: p.multi, site: site, company: p.company, approved: approved, ext: ext, start: start, end: endDate, place: site || p.place, signer: p.signer, tick: p.tick, layout1: p.layout1, layout2: p.layout2 },
+    project: { id: p.id, name: site ? p.name + '｜' + site : p.name, short: site ? p.short + '_' + site : p.short, multi: p.multi, site: site, company: p.company, supervisor: p.supervisor, approved: approved, ext: ext, start: start, end: endDate, place: site || p.place, signer: p.signer, tick: p.tick, layout1: p.layout1, layout2: p.layout2 },
     month: ym, days: days, itemList: itemList
   };
 }
@@ -1697,7 +1710,7 @@ var ACTIONS = {
     if (id) {
       var old = null; read_('每日回報').rows.forEach(function (r) { if (str_(r['回報編號']) === id) old = r; });
       if (!old) throw new Error('找不到要修改的回報');
-      if (role !== 'admin' && role !== 'office' && daysAgo_(old['日期']) > EDIT_DAYS) throw new Error('超過 ' + EDIT_DAYS + ' 天的回報請洽內業修改');
+      if (role !== 'admin' && role !== 'office' && !p.nolock && daysAgo_(old['日期']) > EDIT_DAYS) throw new Error('超過 ' + EDIT_DAYS + ' 天的回報請洽內業修改');
       var before = reports_('0000-00', '9999-99', false).reports.filter(function (x) { return x.id === id; })[0];
       sent = old['送出時間']; edited = now_(); editBy = str_(d.by); prevJson = JSON.stringify(before);
       deleteById_('每日回報', id);
@@ -1840,10 +1853,11 @@ var ACTIONS = {
     if (role !== 'admin' && role !== 'office') throw new Error('只有管理者或內業可以管理工程');
     var p = q.project || {}, id = str_(p.id), t = read_('工程'), sh = sheet_('工程'), hit = null;
     t.rows.forEach(function (r) { if (str_(r['工程代號']) === id) hit = r; });
-    var map = { name: '工程名稱', short: '簡稱', status: '狀態', start: '開工日', end: '完工日', note: '備註', tick: '勾選方式', layout1: '日誌第一聯', layout2: '日誌二聯', signer: '工地負責人', company: '承攬廠商', approved: '核定工期', ext: '展延天數' };
+    var map = { name: '工程名稱', short: '簡稱', status: '狀態', start: '開工日', end: '完工日', note: '備註', tick: '勾選方式', layout1: '日誌第一聯', layout2: '日誌二聯', signer: '工地負責人', company: '承攬廠商', approved: '核定工期', ext: '展延天數', supervisor: '監造單位' };
     if (hit) {
       for (var k in map) if (p[k] !== undefined) sh.getRange(hit._row, t.head.indexOf(map[k]) + 1, 1, 1).setValues([[p[k]]]);
       if (p.multi !== undefined) sh.getRange(hit._row, t.head.indexOf('開口契約') + 1, 1, 1).setValues([[p.multi ? '是' : '否']]);
+      if (p.nolock !== undefined) sh.getRange(hit._row, t.head.indexOf('不鎖修改') + 1, 1, 1).setValues([[p.nolock ? '是' : '']]);
       if (p.machines !== undefined && t.head.indexOf('常用機具') >= 0) {
         var mVal = Array.isArray(p.machines) ? p.machines.join('、') : str_(p.machines);
         sh.getRange(hit._row, t.head.indexOf('常用機具') + 1, 1, 1).setValues([[mVal]]);
@@ -1886,6 +1900,32 @@ var ACTIONS = {
   },
   /** 照片打包下載:指定工程(派工單)與日期區間,依檔名規則打包成壓縮檔存到「照片下載」資料夾;照片太多自動拆成好幾包 */
   /** 直接把照片傳給 App(每次一批,base64),由 App 存到資料夾或分享;比打包壓縮檔快 */
+  /** 派工單(分案)預定進度:從 from 那天起,用上傳的日期與數值取代(from 以前不動) */
+  saveSitePlan: function (q, role) {
+    if (role !== 'admin' && role !== 'office') throw new Error('只有管理者或內業可以上傳預定進度');
+    var pid = str_(q.pid), site = str_(q.site), from = str_(q.from);
+    if (!pid || !site) throw new Error('請指定工程與派工地點');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) throw new Error('請選從哪一天起套用');
+    var add = [], seen = {};
+    (q.days || []).forEach(function (x) { var d = str_(x[0]), v = num_(x[1]); if (/^\d{4}-\d{2}-\d{2}$/.test(d) && v !== null && d >= from && !seen[d]) { seen[d] = 1; add.push([pid, site, d, v > 1 ? v / 100 : v]); } });
+    if (!add.length) throw new Error('沒有 ' + from + ' 以後的預定進度');
+    var to = add.reduce(function (m, x) { return x[2] > m ? x[2] : m; }, from);
+    var sh = sheet_('派工預定進度'), t = read_('派工預定進度'), keep = [];
+    t.rows.forEach(function (r) { var d = date_(r['日期']); if (str_(r['工程代號']) === pid && str_(r['地點']) === site && d >= from && d <= to) return; keep.push([str_(r['工程代號']), str_(r['地點']), d, r['預定進度']]); });
+    var all = keep.concat(add), last = sh.getLastRow();
+    if (last > 1) sh.getRange(2, 1, last - 1, 4).clearContent();
+    sh.getRange(2, 3, all.length, 1).setNumberFormat('@');
+    sh.getRange(2, 1, all.length, 4).setValues(all);
+    return { n: add.length, from: from, to: to };
+  },
+  /** 指定幾張照片(雲端連結)取回 base64,給回報機關分享用;最多 6 張 */
+  photoByUrl: function (q) {
+    return { files: (q.urls || []).slice(0, 6).map(function (u, i) {
+      var m = String(u || '').match(/\/d\/([^/?]+)/) || String(u || '').match(/[?&]id=([^&]+)/); if (!m) return { error: '連結不正確' };
+      try { var b = DriveApp.getFileById(m[1]).getBlob(); return { name: '照片' + (i + 1) + '.jpg', mime: b.getContentType ? (b.getContentType() || 'image/jpeg') : 'image/jpeg', data: Utilities.base64Encode(b.getBytes()) }; }
+      catch (err) { return { error: '讀不到這張照片' }; }
+    }) };
+  },
   photoFiles: function (q) {
     var p = projById_(str_(q.pid)); if (!p) throw new Error('找不到工程');
     var from = str_(q.from), to = str_(q.to) || from;
@@ -1977,7 +2017,7 @@ function folder_(name, parent) {
   return it.hasNext() ? it.next() : (parent ? parent.createFolder(name) : DriveApp.createFolder(name));
 }
 function safe_(v) { return str_(v).replace(/[\\\/:*?"<>|]/g, '_').slice(0, 80); }
-var WRITES = { undoChange: 1, importItems: 1, saveTick: 1, sign: 1, importPlan: 1, saveAccount: 1, saveSiteItems: 1, report: 1, deleteReport: 1, addSite: 1, siteStatus: 1, settle: 1, setActive: 1, saveConfig: 1, saveProject: 1 };
+var WRITES = { saveSitePlan: 1, undoChange: 1, importItems: 1, saveTick: 1, sign: 1, importPlan: 1, saveAccount: 1, saveSiteItems: 1, report: 1, deleteReport: 1, addSite: 1, siteStatus: 1, settle: 1, setActive: 1, saveConfig: 1, saveProject: 1 };
 
 /* ===== 帳號與資安 ===== */
 var ROLE_MAP = { '管理者': 'admin', '現場': 'field', '內業': 'office', '老闆': 'office' };

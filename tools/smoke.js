@@ -137,4 +137,15 @@ const s2=sh();s2[1][cq]=12;s2.push(['1.9','舊版新增','M','','','8']);s2[s2.l
 r=m.call({key:'admin123',action:'undoChange',pid,n:1});ok(r.ok&&r.removed===1&&sh().filter(x=>x[0]).length===3,'舊版沒有記號:只刪最後面新增的列');
 r=m.call({key:'admin123',action:'saveSiteItems',pid:'yanggong1',site:'新莊區測試',items:[['1.32',5]],area:'新北市',kind:'道路工程',start:'2026-11-20',plan:'2026-12-20'});
 const st=m.run("sites_().filter(function(s){return s[1]==='新莊區測試'})[0]");ok(r.ok&&st&&st[3].area==='新北市'&&st[3].start==='2026-11-20'&&st[3].plan==='2026-12-20','派工單匯入寫入區域、開工日、預定完工日');}
+// 分案預定進度:上傳、展延從某日起取代;監造單位;不鎖修改
+{let r=m.call({key:'admin123',action:'saveSitePlan',pid:'yanggong1',site:'新莊區測試',from:'2026-11-20',days:[['2026-11-20',10],['2026-11-21',20],['2026-11-22',30],['2026-11-23',40],['2026-11-24',50]]});ok(r.ok&&r.n===5,'分案預定進度寫入 5 天');
+r=m.call({key:'admin123',action:'saveSitePlan',pid:'yanggong1',site:'新莊區測試',from:'2026-11-23',days:[['2026-11-20',99],['2026-11-23',35],['2026-11-24',38]]});ok(r.ok&&r.n===2,'展延:只取代 11/23 以後');
+const sp=m.run("sitePlan_('yanggong1','新莊區測試')");ok(sp.length===5&&sp[0][1]===0.1&&sp[3][1]===0.35&&sp[4][1]===0.38,'預定進度:'+sp.map(x=>x[1]).join(','));
+r=m.call({key:'admin123',action:'diary',pid:'yanggong1',month:'2026-11',site:'新莊區測試'});const d22=r.days.find(x=>x.date==='2026-11-22'),d24=r.days.find(x=>x.date==='2026-11-24');
+ok(d22&&Math.abs(d22.planned-0.3)<1e-9&&d24&&Math.abs(d24.planned-0.38)<1e-9,'日誌預定進度用分案資料');
+m.call({key:'admin123',action:'saveProject',project:{id:'yanggong1',supervisor:'測試監造公司'}});ok(m.run("projById_('yanggong1').supervisor")==='測試監造公司','監造單位存檔');
+r=m.call({key:'admin123',action:'report',data:{pid:'ntpu',date:'2026-09-01',by:'t',am:'晴',pm:'晴',tech:1,entries:[]}});const rid=r.id;ok(rid,'建立舊回報');
+const lk=m.call({key:'field123',action:'report',id:rid,data:{pid:'ntpu',date:'2026-09-01',by:'t',tech:2,entries:[]}});ok(!lk.ok&&/超過/.test(lk.error),'鎖定:現場改不了舊回報');
+m.call({key:'admin123',action:'saveProject',project:{id:'ntpu',nolock:true}});ok(m.run("projById_('ntpu').nolock")===true,'不鎖修改存檔');
+r=m.call({key:'field123',action:'report',id:rid,data:{pid:'ntpu',date:'2026-09-01',by:'t',tech:2,entries:[]}});ok(r.ok,'不鎖修改:現場可以改舊回報');}
 console.log('全部通過');
