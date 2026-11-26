@@ -1366,24 +1366,43 @@ function spSerial(v){if(v instanceof Date)return v.getFullYear()+"-"+String(v.ge
 function spNum(v){if(typeof v==="number")return v;const s=String(v||"").trim();if(!s)return null;const n=parseFloat(s.replace(/[%,\s]/g,""));return isFinite(n)?(/%/.test(s)?n/100:n):null}
 function spAddDays(d,n){const t=new Date(Date.UTC(+d.slice(0,4),+d.slice(5,7)-1,+d.slice(8,10))+n*864e5);return t.toISOString().slice(0,10)}
 const spTxt=v=>String(v??"").replace(/\s/g,"");
-function spParse(wb,start){
+// 照「網圖項目進度表」的函數自己算每日預定進度(檔案只存函數、沒有計算結果時用)
+//  工作項目金額 = Σ(各項次複價 × 分配到該工作項目的比例);百分比 = 金額 ÷ 合計
+//  開始第 n 天:有填用填的,沒填接在前一項完成的隔天;完成 = 開始 + 日曆天 - 1
+//  每日原預定 = 當天施工中的工作項目「百分比 ÷ 日曆天」加總;有調整基準日/停工日時照網圖的停工重排公式
+function spNet(a,ctx,startIn){const T=spTxt,find=(re,rows)=>{for(let r=0;r<Math.min(a.length,rows||60);r++)for(let c=0;c<a[r].length;c++)if(re.test(T(a[r][c])))return[r,c];return null};
+  const hs=find(/^開始/);if(!hs)return null;const [hr,cs]=hs,row=a[hr].map(T),near=f=>row.findIndex((c,i)=>i>=cs-8&&i<cs&&f(c));
+  const cw=near(c=>c==="工作項目"),cn=near(c=>c==="日曆天"),cp=near(c=>c==="百分比"),ca=near(c=>/預估金額/.test(c));if(cw<0||cn<0)return null;
+  const its=[];for(let i=hr+1;i<a.length;i++){const x=a[i];const nm=T(x[cw]);if(!nm||nm==="合計")break;its.push({name:nm,n:spNum(x[cn]),s:spNum(x[cs]),pct:cp>=0?spNum(x[cp]):null,amt:ca>=0?spNum(x[ca]):null})}
+  if(!its.length)return null;
+  // 金額:先用檔案裡算好的;沒有就用右邊「項次 × 比例」表
+  if(!its.every(x=>x.amt>0||x.pct>0)){const ah=find(/^複價/);if(!ah)return{err:"網圖項目進度表找不到「複價」比例表,無法計算。"};
+    const [ar,ab]=ah,ag=(()=>{for(let i=ab-1;i>=0;i--)if(T(a[ar][i])==="項次")return i;return -1})();if(ag<0)return{err:"網圖項目進度表的比例表找不到「項次」欄。"};const k=its.length;const miss=[];its.forEach(x=>x.amt=0);
+    for(let i=ar+1;i<a.length;i++){const x=a[i],code=T(x[ag]);if(!code||code==="合計")break;let amt=spNum(x[ab]);if(!(amt>0))amt=(ctx.amt||{})[code];if(!(amt>0)){miss.push(code);continue}
+      for(let j=0;j<k;j++){const f=spNum(x[ab+1+j])||0;its[j].amt+=amt*f}}
+    its.forEach(x=>x.amt=Math.round(x.amt));if(miss.length)ctx.miss=miss}
+  const tot=its.reduce((t,x)=>t+(x.amt||0),0);its.forEach(x=>{if(!(x.pct>0))x.pct=tot?x.amt/tot:0;if(x.pct>1)x.pct/=100});
+  if(its.some(x=>!x.n))return{err:"網圖項目進度表有工作項目沒填日曆天:"+its.filter(x=>!x.n).map(x=>x.name).join("、")};
+  if(!tot&&!its.some(x=>x.pct>0))return{err:"算不出工作項目金額:檔案裡沒有複價,App 裡這張派工單也沒有派工數量或單價。請先上傳派工單。"};
+  let prev=0;its.forEach(x=>{if(!(x.s>0))x.s=prev+1;x.e=x.s+x.n-1;prev=x.e});
+  // 開工日、調整基準日、停工日
+  const lab=(re)=>{const f=find(re);return f?a[f[0]][f[1]+1]:""};
+  const start=spSerial(lab(/^開工日$/))||startIn;if(!start)return{needStart:true,its};
+  const base=spSerial(lab(/^調整基準日$/)),cumBase=spNum(lab(/^基準日預定累計$/))||0,stops=[1,2,3].map(i=>spSerial(lab(new RegExp("^停工日"+i+"$")))).filter(Boolean);
+  const N=Math.max(...its.map(x=>x.e)),BF=[0];for(let n=1;n<=N;n++)BF[n]=its.reduce((t,x)=>t+(n>=x.s&&n<=x.e?x.pct/x.n:0),0);
+  const dd=(x,y)=>Math.round((Date.UTC(+y.slice(0,4),+y.slice(5,7)-1,+y.slice(8,10))-Date.UTC(+x.slice(0,4),+x.slice(5,7)-1,+x.slice(8,10)))/864e5);
+  const nb=base?dd(start,base)+1:0,wd=nb-stops.filter(s=>s>=start&&(!base||s<=base)).length,rest=BF.reduce((t,v,n)=>t+(n>nb?v:0),0);
+  const days=[];let cum=0;for(let n=1;n<=N;n++){const d=spAddDays(start,n-1);const v=n<=nb?(stops.includes(d)?0:(wd>0?cumBase/wd:0)):(rest?BF[n]*(1-cumBase)/rest:0);cum+=v;days.push([d,Math.min(1,Math.round(cum*1e6)/1e6)])}
+  return{kind:"網圖計算",days,its,start,adj:base?{base,cumBase,stops}:null}}
+function spParse(wb,start,ctx){
   const net=wb.SheetNames.find(n=>/網圖/.test(n));
   if(net){const a=XLSX.utils.sheet_to_json(wb.Sheets[net],{header:1,raw:true,defval:""});
     // 1. 每日表:有「日期」「累計預定」兩欄的標題列
     for(let r=0;r<Math.min(a.length,40);r++){const row=a[r],cd=row.findIndex(c=>spTxt(c)==="日期"),cc=row.findIndex(c=>spTxt(c)==="累計預定");
       if(cd<0||cc<0)continue;const days=[];for(let i=r+1;i<a.length;i++){const d=spSerial(a[i][cd]),v=spNum(a[i][cc]);if(d&&v!==null)days.push([d,v>1?v/100:v])}
       if(days.length)return{sheet:net,kind:"每日表",days};break}
-    // 2. 工作項目:百分比(或預估金額)、日曆天、開始(第n天)
-    for(let r=0;r<Math.min(a.length,40);r++){const row=a[r].map(spTxt),cs=row.findIndex(c=>/^開始/.test(c));if(cs<0)continue;
-      const near=(f)=>row.findIndex((c,i)=>i>=cs-8&&i<cs&&f(c)),cn=near(c=>c==="日曆天"),cp=near(c=>c==="百分比"),ca=near(c=>/預估金額/.test(c)),cw=near(c=>c==="工作項目");if(cw<0||cn<0)continue;
-      const its=[];for(let i=r+1;i<a.length;i++){const x=a[i];if(spTxt(x[cw])==="合計"||!spTxt(x[cw]))break;its.push({name:spTxt(x[cw]),pct:cp>=0?spNum(x[cp]):null,amt:ca>=0?spNum(x[ca]):null,n:spNum(x[cn]),s:spNum(x[cs])})}
-      const tot=its.reduce((t,x)=>t+(x.amt||0),0);its.forEach(x=>{if(x.pct===null&&tot)x.pct=x.amt/tot;if(x.pct>1)x.pct/=100});
-      const miss=its.filter(x=>!x.pct||!x.n||!x.s).map(x=>x.name);
-      if(!its.length)break;if(miss.length)return{sheet:net,kind:"工作項目",err:"「"+net.trim()+"」還沒填完,這些工作項目缺百分比(或預估金額)、日曆天或開始第幾天:"+miss.join("、")+"。請在 Excel 填好存檔後再上傳。如果在 Excel 裡看得到數字,代表檔案只存了函數、沒存計算結果:請用 Excel 開啟後按「檔案 → 另存新檔」存一份新的 .xlsx,再上傳新存的那份。"};
-      if(!start)return{sheet:net,kind:"工作項目",needStart:true,its};
-      const last=Math.max(...its.map(x=>x.s+x.n-1)),days=[];let cum=0;
-      for(let k=1;k<=last;k++){its.forEach(x=>{if(k>=x.s&&k<x.s+x.n)cum+=x.pct/x.n});days.push([spAddDays(start,k-1),Math.min(1,Math.round(cum*1e6)/1e6)])}
-      return{sheet:net,kind:"工作項目",days,its}}}
+    // 2. 每日表沒有數字(檔案只存函數):照網圖的算法自己算
+    {const r=spNet(a,ctx||{},start);if(r)return Object.assign({sheet:net},r)}}
   // 3. 附件分頁的「預計進度」列(1~31 日)
   for(const n of wb.SheetNames.filter(n=>/附件/.test(n))){const a=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:""});
     const pr=a.findIndex(r=>r.some(c=>spTxt(c)==="預計進度"));if(pr<0)continue;
@@ -1394,7 +1413,7 @@ function spParse(wb,start){
 function sitePlanUpload(p,site){const X=S.sp=S.sp||{};const box=h("div",{class:"sheet"});const info=(p.siteInfo||[]).find(x=>x.name===site)||{};
   box.append(h("p",{class:"note"},"選這個分案的施工日誌 Excel。程式會讀「網圖項目進度表」:有每日表就直接用;每日表空白時,把每個工作項目的百分比平均分到它的施工天數。沒有網圖才讀「附件」分頁的「預計進度」。展延時把「從哪一天起套用」改成核定日,那天以前的預定進度不會動。"));
   const fi=h("input",{type:"file",accept:".xls,.xlsx,.xlsm"});
-  const parse=()=>{const g=spParse(X.wb,X.start||"");Object.assign(X,{g,err:""});if(!g){X.err="找不到「網圖項目進度表」或「附件」的預計進度,請確認是施工日誌檔。如果在 Excel 裡看得到數字,代表檔案只存了函數、沒存計算結果:請用 Excel 開啟後按「檔案 → 另存新檔」存一份新的 .xlsx,再上傳新存的那份。";return}
+  const parse=()=>{const amt={};((p.dispatch||{})[site]||[]).forEach(([c,q])=>{const it=(p.items||[]).find(i=>i.code===c);if(it&&Number(it.price)&&Number(q))amt[c]=Number(it.price)*Number(q)});const ctx={amt};const g=spParse(X.wb,X.start||"",ctx);if(g)g.miss=ctx.miss;Object.assign(X,{g,err:""});if(!g){X.err="找不到「網圖項目進度表」或「附件」的預計進度,請確認是施工日誌檔。如果在 Excel 裡看得到數字,代表檔案只存了函數、沒存計算結果:請用 Excel 開啟後按「檔案 → 另存新檔」存一份新的 .xlsx,再上傳新存的那份。";return}
     if(g.err){X.err=g.err;return}
     if(g.kind==="附件"){X.ym=X.ym||g.ym;const nd=X.ym?new Date(+X.ym.slice(0,4),+X.ym.slice(5,7),0).getDate():0;g.days=[];
       for(let d=1;d<=nd;d++){const v=spNum(g.vals[d-1]);if(v!==null&&String(g.vals[d-1]).trim()!=="")g.days.push([X.ym+"-"+String(d).padStart(2,"0"),v>1?v/100:v])}}
@@ -1405,14 +1424,15 @@ function sitePlanUpload(p,site){const X=S.sp=S.sp||{};const box=h("div",{class:"
   if(X.err)box.append(h("div",{class:"msg warn"},X.err));
   const g=X.g;
   if(g&&!X.err){
-    if(g.kind==="工作項目"){const si=h("input",{type:"date"});si.value=X.start||"";si.addEventListener("change",()=>{X.start=si.value;X.fromAuto=true;X.from="";parse();render()});
+    if(g.kind==="網圖計算"&&g.miss&&g.miss.length)box.append(h("div",{class:"msg warn"},"這些項次在檔案和 App 都找不到複價,沒有算進去:"+g.miss.join("、")));
+    if(g.kind==="工作項目"||g.needStart){const si=h("input",{type:"date"});si.value=X.start||"";si.addEventListener("change",()=>{X.start=si.value;X.fromAuto=true;X.from="";parse();render()});
       box.append(h("label",{class:"f"},"開工日(第 1 天)",si));if(g.needStart){box.append(h("p",{class:"note"},"網圖是用「第幾天」排的,請先選這張派工單的開工日。"));return box}}
     if(g.kind==="附件"){const ym=h("input",{type:"month"});ym.value=X.ym||"";ym.addEventListener("change",()=>{X.ym=ym.value;X.fromAuto=true;parse();render()});box.append(h("label",{class:"f"},"日誌月份",ym))}
     const days=g.days||[],fr=h("input",{type:"date"});fr.value=X.from||"";fr.addEventListener("change",()=>{X.from=fr.value;X.fromAuto=false;render()});
     const use=days.filter(x=>!X.from||x[0]>=X.from),pc=v=>(v*100).toFixed(2)+"%";
     box.append(h("label",{class:"f"},"從哪一天起套用",fr),
-      h("p",{class:"note"},"讀到「"+g.sheet.trim()+"」"+(g.kind==="工作項目"?"的 "+g.its.length+" 個工作項目,拆成":"")+" "+days.length+" 天的預定進度"+(days.length?"("+days[0][0]+" "+pc(days[0][1])+" → "+days[days.length-1][0]+" "+pc(days[days.length-1][1])+")":"")+"。會寫入 "+use.length+" 天。"));
-    if(g.kind==="工作項目")box.append(h("div",{class:"tbl"},h("table",{},h("thead",{},h("tr",{},["工作項目","百分比","開始(第n天)","日曆天"].map(x=>h("th",{},x)))),h("tbody",{},g.its.map(x=>h("tr",{},h("td",{class:"w"},x.name),h("td",{class:"r"},pc(x.pct)),h("td",{class:"r"},fmt(x.s)),h("td",{class:"r"},fmt(x.n))))))));
+      h("p",{class:"note"},"讀到「"+g.sheet.trim()+"」"+(g.its?"的 "+g.its.length+" 個工作項目算出":"")+(g.adj?"(含停工調整:基準日 "+g.adj.base+")":"")+" "+days.length+" 天的預定進度"+(days.length?"("+days[0][0]+" "+pc(days[0][1])+" → "+days[days.length-1][0]+" "+pc(days[days.length-1][1])+")":"")+"。會寫入 "+use.length+" 天。"));
+    if(g.its)box.append(h("div",{class:"tbl"},h("table",{},h("thead",{},h("tr",{},["工作項目","百分比","開始(第n天)","日曆天"].map(x=>h("th",{},x)))),h("tbody",{},g.its.map(x=>h("tr",{},h("td",{class:"w"},x.name),h("td",{class:"r"},pc(x.pct)),h("td",{class:"r"},fmt(x.s)),h("td",{class:"r"},fmt(x.n))))))));
     box.append(h("button",{type:"button",class:"btn primary",disabled:S.busy||!use.length,onclick:async()=>{try{S.busy=true;render();const j=await api("saveSitePlan",{pid:p.id,site,from:X.from,days:use});
       Object.keys(X).forEach(k=>delete X[k]);X.msg="已寫入「"+site+"」預定進度 "+j.n+" 天("+j.from+" ~ "+j.to+")。";X.ok=true}catch(e){X.msg="沒有寫入成功:"+e.message;X.ok=false}S.busy=false;render()}},"寫入預定進度 "+use.length+" 天"))}
   if(X.msg)box.append(h("div",{class:"msg "+(X.ok?"ok":"warn")},X.msg));
