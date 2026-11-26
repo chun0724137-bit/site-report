@@ -1330,7 +1330,7 @@ function itemImportAdmin(p){
       if(!confirm("是否確認復原「"+(p.short||p.name)+"」的"+nm+"?"))return;
       if(!confirm("再次確認:會清除契約分頁的「第"+"一二"[lastN-1]+"次變更數量」、刪除這次變更新增的項目,並清除變更日"+(p.multi?"":"與展延天數")+"。"))return;
       try{S.busy=true;render();const j=await api("undoChange",{pid:p.id,n:lastN});S.imp={mode:"change",onlyDirect:true,n:"1",msg:"已復原"+nm+":刪除新增項目 "+j.removed+" 項,其餘 "+j.kept+" 項的變更數量已清除。",ok:true};await reload(false)}catch(e){I.msg="沒有復原成功:"+e.message;I.ok=false}S.busy=false;render()}},"↩ 復原上一次變更匯入(第"+"一二"[lastN-1]+"次,"+p.ch[lastN-1]+")"))}
-  const fi=h("input",{type:"file",accept:".xls,.xlsx"}),msg=h("div",{class:"msg",hidden:!I.msg});if(I.msg){msg.className="msg "+(I.ok?"ok":"warn");msg.textContent=I.msg}
+  const fi=h("input",{type:"file",accept:".xls,.xlsx,.xlsm"}),msg=h("div",{class:"msg",hidden:!I.msg});if(I.msg){msg.className="msg "+(I.ok?"ok":"warn");msg.textContent=I.msg}
   fi.addEventListener("change",async()=>{const f=fi.files[0];if(!f)return;try{if(typeof XLSX==="undefined")throw new Error("Excel 讀取元件還在載入,請稍等幾秒再選一次");
     const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});I.wb=wb;I.file=f.name;
     I.sheet=wb.SheetNames.find(n=>/詳細/.test(n))||wb.SheetNames.find(n=>/價目|明細|變更/.test(n))||wb.SheetNames[0];I.g=null;I.msg="";render()}catch(e){I.msg="讀取失敗:"+e.message;I.ok=false;render()}});
@@ -1827,7 +1827,7 @@ function diarySetAdmin(p){const sec=h("section",{class:"card"},h("h2",{},"施工
   const chInfo=(p.ch||[]).map((d,i)=>d?"第"+"一二"[i]+"次變更 "+d+(Number((p.chExt||[])[i])?"，展延 "+(p.chExt||[])[i]+" 天(從變更日起算)":""):"").filter(Boolean);
   sec.append(l1,h("div",{class:"row"},l2,l3),chInfo.length?h("p",{class:"note"},"📌 "+chInfo.join("；")+"。變更的展延天數請在「匯入契約項目」的變更裡填。"):null,l4,h("div",{class:"row"},l5,l6),h("label",{class:"f"},"第一聯施工項目怎麼列",ly1),h("label",{class:"f"},"要不要附二聯(完成工程詳細表)",ly2),h("label",{class:"f"},"四、五項勾選",tk),
     h("button",{type:"button",class:"btn primary",onclick:async()=>{try{await api("saveProject",{project:{id:p.id,company:co.value.trim(),approved:ap.value===""?"":Number(ap.value),ext:ex.value===""?0:Number(ex.value),signer:sg.value.trim(),start:st.value,end:en.value,tick:tk.value,layout1:ly1.value,layout2:ly2.value}});S.dData=null;await reload(true);msg.hidden=false;msg.textContent="已儲存"}catch(e){S.err="沒有存成功:"+e.message;render()}}},"儲存日誌設定"),msg);
-  const fi=h("input",{type:"file",accept:".xlsx,.xls"}),pm=h("div",{class:"msg",hidden:true});
+  const fi=h("input",{type:"file",accept:".xlsx,.xls,.xlsm"}),pm=h("div",{class:"msg",hidden:true});
   fi.addEventListener("change",async()=>{const file=fi.files[0];if(!file)return;pm.hidden=false;pm.className="msg";pm.textContent="讀取中…";
     try{if(typeof XLSX==="undefined")throw new Error("Excel 讀取元件還在載入,請稍等幾秒再選一次");const wb=XLSX.read(await file.arrayBuffer(),{type:"array"});const ws=wb.Sheets["預定進度"]||wb.Sheets[wb.SheetNames[0]];
       const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:""});const dt=v=>{if(typeof v==="number"&&v>20000&&v<90000){const o=XLSX.SSF.parse_date_code(v);return o.y+"-"+String(o.m).padStart(2,"0")+"-"+String(o.d).padStart(2,"0")}return String(v||"").trim().replace(/\//g,"-")};
@@ -1908,7 +1908,7 @@ function siteDispEditor(p,siteName){
   const m=S.siteDispMap||(S.siteDispMap={});
   const box=h("div",{class:"sheet"},h("div",{class:"t"},"📍 「"+siteName+"」派工單施工工項設定"),
     h("p",{class:"note"},"勾選這張派工單有的工項（也可上傳監造給的派工單 Excel 自動勾選）。儲存後，現場回報選「"+siteName+"」時就只會出現這些工項！"));
-  const fi=h("input",{type:"file",accept:".xlsx,.xls,.csv"});
+  const fi=h("input",{type:"file",accept:".xlsx,.xls,.xlsm,.csv"});
   const fmsg=h("div",{class:"msg ok",hidden:true});
   fi.addEventListener("change",async()=>{
     const file=fi.files[0];if(!file)return;
