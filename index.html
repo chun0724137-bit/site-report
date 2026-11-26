@@ -1225,7 +1225,16 @@ function canEditReport(r){return !!S.g&&(S.canOffice||daysAgo(r.date)<=(S.editDa
 function startEdit(r){const c=x=>JSON.parse(JSON.stringify(x||{}));S.editId=r.id;S.pid=r.pid;ls.set("pid",r.pid);S.boss=false;S.view="report";S.repMode="daily";S.pick=null;
   S.draft={date:r.date,am:r.am||"",pm:r.pm||"",nowork:r.nowork||"",work:r.work||"",tech:r.tech||0,gen:r.gen||0,lab:r.lab||0,mach:c(r.mach),machOther:r.machOther||"",soil:JSON.parse(JSON.stringify(r.soil||[])),entries:JSON.parse(JSON.stringify(r.entries||[])),materials:r.materials||"",sample:r.sample||"",notes:r.notes||"",tomorrow:r.tomorrow||"",crew:c(r.crew),crewOt:c(r.crewOt),traffic:r.traffic||0,ot:r.ot||"",photos:JSON.parse(JSON.stringify(r.photos||[])),mats:JSON.parse(JSON.stringify(r.mats||[])),place:r.place||"",by:r.by||ls.get("by",""),site:r.site||""};
   try{location.hash="report"}catch(e){}render();window.scrollTo(0,0)}
-function siteAdmin(p){const sec=h("section",{class:"card"},h("h2",{},"派工地點(分案)｜"+(p.short||p.name)),h("p",{class:"note"},"分案做完按「分案完工」:現場的地點選單和老闆版就不再出現這個地點,資料都保留。派工單的項目和數量請填在試算表「派工數量」分頁。"));
+function siteAdmin(p){const sec=h("section",{class:"card"},h("h2",{},"派工地點(分案)｜"+(p.short||p.name)),h("p",{class:"note"},"收到新的派工單,按「📋 上傳新派工單」選派工單 Excel,系統會自動新增派工地點和該派工單的工項;同一張派工單再上傳一次會整份更新。分案做完按「分案完工」:現場的地點選單和老闆版就不再出現這個地點,資料都保留。"));
+  if(S.canOffice){const D=S.dsp=S.dsp||{mode:"dispatch"};
+    sec.append(h("button",{type:"button",class:"btn"+(S.dspOpen?"":" primary"),onclick:()=>{S.dspOpen=!S.dspOpen;if(!S.dspOpen)S.dsp=null;render()}},S.dspOpen?"收起派工單上傳":"📋 上傳新派工單（Excel，可用 .xlsm）"));
+    if(S.dspOpen){const box=h("div",{class:"sheet"});const fi=h("input",{type:"file",accept:".xls,.xlsx,.xlsm"});
+      fi.addEventListener("change",async()=>{const f=fi.files[0];if(!f)return;try{if(typeof XLSX==="undefined")throw new Error("Excel 讀取元件還在載入,請稍等幾秒再選一次");
+        const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});Object.keys(D).forEach(k=>delete D[k]);Object.assign(D,{mode:"dispatch",wb,file:f.name});render()}catch(e){D.msg="讀取失敗:"+e.message;D.ok=false;render()}});
+      box.append(h("label",{class:"f"},"選擇派工單 Excel"+(D.file?"(目前:"+D.file+")":""),fi));
+      if(D.wb)dispatchImport(p,D,box);
+      if(D.msg)box.append(h("div",{class:"msg "+(D.ok?"ok":"warn")},D.msg));
+      sec.append(box)}}
   const list=(p.siteInfo||[]).filter(s=>s.status!=="結案");
   list.forEach(s=>{const k=p.id+"|"+s.name,done=s.status==="完工";const row=h("div",{class:"proj"},h("div",{class:"h"},h("b",{},s.name),h("span",{class:"pill "+(done?"ok":"warn")},done?"完工 "+(s.done||""):"施工中")));
     if(S.siteAsk===k){const di=h("input",{type:"date",id:"f_done","aria-label":s.name+"完工日期"});di.value=today();
@@ -1243,7 +1252,7 @@ function siteAdmin(p){const sec=h("section",{class:"card"},h("h2",{},"派工地�
     if(S.siteDone===k)row.append(h("div",{class:"msg ok"},"已設為完工。要結算的話,按上面的「產生結算資料」。"));
     if(S.settled&&S.settled.k===k)row.append(h("div",{class:"msg ok"},"已產生「"+S.settled.name+"」,存在雲端硬碟「結算資料」資料夾。 ",h("a",{href:S.settled.url,target:"_blank",rel:"noopener"},"開啟檔案")));
     sec.append(row)});
-  if(!list.length)sec.append(h("p",{class:"note"},"還沒有派工地點。現場回報時新增地點,或在試算表「派工地點」分頁新增。"));
+  if(!list.length)sec.append(h("p",{class:"note"},"還沒有派工地點。請按上方「📋 上傳新派工單」。"));
   return sec}
 async function setSite(p,site,status,date){S.busy=true;render();try{await api("siteStatus",{pid:p.id,site,status,date});S.siteAsk="";S.siteDone=status==="完工"?p.id+"|"+site:"";await reload(true)}catch(e){S.err="沒有存成功:"+e.message}S.busy=false;render()}
 async function settle(p,site){const k=p.id+"|"+site;S.busy=true;S.settling=k;S.settled=null;render();try{const j=await api("settle",{pid:p.id,site});S.settled={k,name:j.name,url:j.url}}catch(e){S.err="結算資料沒有產生:"+e.message}S.busy=false;S.settling="";render()}
@@ -1311,7 +1320,7 @@ function dispatchImport(p,I,sec){
     h("button",{type:"button",class:"btn primary",disabled:S.busy||!ok.length,onclick:async()=>{const site=String(I.site||"").trim();if(!site){alert("請填派工地點名稱");return}
       try{S.busy=true;render();const agg={};ok.forEach(x=>agg[x.to]=Math.round(((agg[x.to]||0)+x.qty)*10000)/10000);
         await api("saveSiteItems",{pid:p.id,site,items:Object.keys(agg).map(c=>[c,agg[c]]),area:info.area,kind:info.kind,start:I.start||"",plan:I.plan||""});
-        S.imp={mode:"dispatch",onlyDirect:true,n:"1",msg:"已寫入派工單「"+site+"」:派工工項 "+Object.keys(agg).length+" 項"+(bad.length?",另有 "+bad.length+" 項對不到契約沒有寫入":"")+"。",ok:!bad.length};await reload(false)}
+        const done={mode:"dispatch",onlyDirect:true,n:"1",msg:"已寫入派工單「"+site+"」:派工工項 "+Object.keys(agg).length+" 項"+(bad.length?",另有 "+bad.length+" 項對不到契約沒有寫入":"")+"。",ok:!bad.length};Object.keys(I).forEach(k=>delete I[k]);Object.assign(I,done);await reload(false)}
       catch(e){I.msg="沒有寫入成功:"+e.message;I.ok=false}S.busy=false;render()}},(exists?"更新":"新增")+"派工單並寫入 "+ok.length+" 項"));
 }
 function itemImportAdmin(p){
