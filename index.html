@@ -674,10 +674,10 @@ async function saveGridCell(p,site,date,it,val,inp){const nv=val===""?0:Number(v
   catch(e){S.err="沒有存成功:"+e.message}
   render()}
 // ---- 回報機關:組 LINE 文字 + 選照片分享 ----
-const rocD=d=>d?(Number(d.slice(0,4))-1911)+"/"+d.slice(5,7)+"/"+d.slice(8,10):"";
+const rocD=d=>d?(Number(d.slice(0,4))-1911)+"/"+Number(d.slice(5,7))+"/"+Number(d.slice(8,10)):"";
 const canShareFiles=()=>{try{return !!(navigator.canShare&&navigator.canShare({files:[new File([new Uint8Array(1)],"t.jpg",{type:"image/jpeg"})]}))}catch(e){return false}};
 function agencyText(p,g,D){const day=D&&(D.days||[]).find(x=>x.date===g.date),pj=(D&&D.project)||{},pc=v=>v===null||v===undefined?"":(v*100).toFixed(2)+"%";
-  return ["工程名稱:"+(g.site||p.name),"監造單位:"+(p.supervisor||""),"承攬廠商:"+(p.company||pj.company||""),"工期:"+rocD(pj.start)+"~"+rocD(pj.end),"本日日期："+rocD(g.date),
+  return ["工程名稱:"+(g.site||p.name),"監造單位:"+(p.supervisor||""),"承攬廠商:"+(p.company||pj.company||""),"工期："+rocD(pj.start)+"~"+rocD(pj.end),"本日日期："+rocD(g.date),
     "預定進度："+pc(day&&day.planned),"實際進度："+pc(day&&day.actual),"出工人數："+fmt(g.hc),"查核材料規及品質："+(g.sample||"無"),"施工項目："+(g.workStr||g.brief||"")].join("\n")}
 function agencyBox(p,g){const A=S.ag=S.ag&&S.ag.key===g.key?S.ag:{key:g.key,pick:g.photos.slice(0,2).map(x=>x.url)};const box=h("div",{class:"sheet"});
   if(!A.D&&!A.loading&&!A.err){A.loading=true;api("diary",{pid:p.id,month:g.date.slice(0,7),site:p.multi?g.site:""}).then(j=>{A.D=j;A.loading=false;if(A.text===undefined)A.text=agencyText(p,g,j);render()}).catch(e=>{A.err=e.message;A.loading=false;A.text=agencyText(p,g,null);render()})}

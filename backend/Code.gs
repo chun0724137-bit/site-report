@@ -1563,7 +1563,8 @@ function diaryMonth_(pid, ym, site) {
   var byDate = {}; all.forEach(function (r) { (byDate[r.date] = byDate[r.date] || []).push(r); });
   var dates = Object.keys(byDate).sort();
   var info = {}; if (site) sites_().forEach(function (x) { if (x[0] === pid && x[1] === site) info = x[3] || {}; });
-  var start = (site ? info.start : p.start) || dates[0] || (ym + '-01');
+  var spAll = site ? sitePlan_(pid, site) : [];
+  var start = (site ? info.start || (spAll[0] || [])[0] : p.start) || dates[0] || (ym + '-01');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) start = dates[0] || (ym + '-01');
   var items = itemsFull_(pid), itemBy = {}; items.forEach(function (it) { itemBy[it.code] = it; });
   var pp = p;
@@ -1574,9 +1575,9 @@ function diaryMonth_(pid, ym, site) {
     itemBy = {}; items.forEach(function (it) { itemBy[it.code] = it; });
     pp = { ch: [], multi: true };
   }
-  var machCols = diaryMachColsFor_(p), sig = sigRows_(), ticks = tickRows_(), vers = p.multi ? [] : planVers_(p), sp = site ? sitePlan_(pid, site) : [];
+  var machCols = diaryMachColsFor_(p), sig = sigRows_(), ticks = tickRows_(), vers = p.multi ? [] : planVers_(p), sp = spAll;
   var lastDay = Utilities.formatDate(new Date(new Date(ym.slice(0, 4), Number(ym.slice(5, 7)), 0).getTime()), tz_(), 'yyyy-MM-dd');
-  var endDate = site ? (info.done || info.plan || '') : (p.end || (p.approved ? addDays_(start, p.approved - 1 + extAt_(p, '')) : ''));
+  var endDate = site ? (info.done || info.plan || (sp.length ? sp[sp.length - 1][0] : '')) : (p.end || (p.approved ? addDays_(start, p.approved - 1 + extAt_(p, '')) : ''));
   var approved = site ? (endDate ? dayDiff_(start, endDate) + 1 : null) : p.approved, ext = site ? 0 : (p.ext || 0);
   var itemList = items.map(function (it) { return { code: it.code, name: it.name, unit: it.unit, contract: qtyAt_(it, pp, lastDay) }; });
   var cum = {}, cc = { tech: 0, gen: 0, lab: 0 }, mc = {}, matc = {}, days = [];
