@@ -1379,7 +1379,7 @@ function spParse(wb,start){
       const its=[];for(let i=r+1;i<a.length;i++){const x=a[i];if(spTxt(x[cw])==="合計"||!spTxt(x[cw]))break;its.push({name:spTxt(x[cw]),pct:cp>=0?spNum(x[cp]):null,amt:ca>=0?spNum(x[ca]):null,n:spNum(x[cn]),s:spNum(x[cs])})}
       const tot=its.reduce((t,x)=>t+(x.amt||0),0);its.forEach(x=>{if(x.pct===null&&tot)x.pct=x.amt/tot;if(x.pct>1)x.pct/=100});
       const miss=its.filter(x=>!x.pct||!x.n||!x.s).map(x=>x.name);
-      if(!its.length)break;if(miss.length)return{sheet:net,kind:"工作項目",err:"「"+net.trim()+"」還沒填完,這些工作項目缺百分比(或預估金額)、日曆天或開始第幾天:"+miss.join("、")+"。請在 Excel 填好存檔後再上傳。"};
+      if(!its.length)break;if(miss.length)return{sheet:net,kind:"工作項目",err:"「"+net.trim()+"」還沒填完,這些工作項目缺百分比(或預估金額)、日曆天或開始第幾天:"+miss.join("、")+"。請在 Excel 填好存檔後再上傳。如果在 Excel 裡看得到數字,代表檔案只存了函數、沒存計算結果:請用 Excel 開啟後按「檔案 → 另存新檔」存一份新的 .xlsx,再上傳新存的那份。"};
       if(!start)return{sheet:net,kind:"工作項目",needStart:true,its};
       const last=Math.max(...its.map(x=>x.s+x.n-1)),days=[];let cum=0;
       for(let k=1;k<=last;k++){its.forEach(x=>{if(k>=x.s&&k<x.s+x.n)cum+=x.pct/x.n});days.push([spAddDays(start,k-1),Math.min(1,Math.round(cum*1e6)/1e6)])}
@@ -1394,7 +1394,7 @@ function spParse(wb,start){
 function sitePlanUpload(p,site){const X=S.sp=S.sp||{};const box=h("div",{class:"sheet"});const info=(p.siteInfo||[]).find(x=>x.name===site)||{};
   box.append(h("p",{class:"note"},"選這個分案的施工日誌 Excel。程式會讀「網圖項目進度表」:有每日表就直接用;每日表空白時,把每個工作項目的百分比平均分到它的施工天數。沒有網圖才讀「附件」分頁的「預計進度」。展延時把「從哪一天起套用」改成核定日,那天以前的預定進度不會動。"));
   const fi=h("input",{type:"file",accept:".xls,.xlsx,.xlsm"});
-  const parse=()=>{const g=spParse(X.wb,X.start||"");Object.assign(X,{g,err:""});if(!g){X.err="找不到「網圖項目進度表」或「附件」的預計進度,請確認是施工日誌檔。";return}
+  const parse=()=>{const g=spParse(X.wb,X.start||"");Object.assign(X,{g,err:""});if(!g){X.err="找不到「網圖項目進度表」或「附件」的預計進度,請確認是施工日誌檔。如果在 Excel 裡看得到數字,代表檔案只存了函數、沒存計算結果:請用 Excel 開啟後按「檔案 → 另存新檔」存一份新的 .xlsx,再上傳新存的那份。";return}
     if(g.err){X.err=g.err;return}
     if(g.kind==="附件"){X.ym=X.ym||g.ym;const nd=X.ym?new Date(+X.ym.slice(0,4),+X.ym.slice(5,7),0).getDate():0;g.days=[];
       for(let d=1;d<=nd;d++){const v=spNum(g.vals[d-1]);if(v!==null&&String(g.vals[d-1]).trim()!=="")g.days.push([X.ym+"-"+String(d).padStart(2,"0"),v>1?v/100:v])}}
