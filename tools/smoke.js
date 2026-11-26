@@ -95,10 +95,12 @@ const names=z.ok&&z.files[0]?z.files[0].count:0;ok(z.ok&&z.files.length===1&&nam
 const zb=m.books;const zipped=m.g.__lastPath||'';ok(/照片下載\/三峽北大_\d{8}_照片\.zip$/.test(zipped),'壓縮檔存到「照片下載」資料夾:'+zipped.split('/').pop());
 const L=m.run("photoList_(projById_('ntpu'),'','"+d0+"','"+d0+"').map(function(x){return x.name})");const D=d0.replace(/-/g,'');
 const LF=m.run("photoList_(projById_('ntpu'),'','"+d0+"','"+d0+"').map(function(x){return x.folder})");
-const F=LF[LF.length-1];ok(L.includes(D+'_路緣石 步道北側.jpg')&&L.includes(F+'_1.jpg')&&L.includes(F+'_2.jpg')&&LF.every(f=>f===F)&&/^\d{8}_.*混凝土澆置$/.test(F),'資料夾「日期_工作項目」;有說明用說明、沒說明用 _1、_2:'+L.slice(-3).join(' / '));
+const F=LF[LF.length-1];ok(F===D&&LF.every(f=>f===F)&&L.includes(D+'_4.5_路緣石_步道北側_01.jpg')&&L.some(x=>/_其他_.*混凝土澆置_01\.jpg$/.test(x))&&L.some(x=>/_其他_.*混凝土澆置_02\.jpg$/.test(x)),'資料夾「日期」;檔名「日期_項次_工項_位置_序號」,沒選工項「日期_其他_今日工作項目_序號」:'+L.slice(-3).join(' / '));
+r=m.call({key:'field123',action:'report',data:{pid:'ntpu',date:d0,by:'zip2',am:'晴',pm:'晴',tech:1,work:'模板',photos:[{cap:'kgf/cm2 說明',code:'2.2',name:'結構用混凝土,預拌,280kgf/cm2',loc:'北側',url:'https://drive.google.com/file/d/P9/view'}]}});
+const L3=m.run("photoList_(projById_('ntpu'),'','"+d0+"','"+d0+"').map(function(x){return x.name})");ok(L3.includes(D+'_2.2_結構用混凝土,預拌,280kgf-cm2_北側_kgf-cm2 說明_01.jpg'),'選了工項的照片:斜線改成 -、說明接在後面:'+L3[L3.length-1]);
 const pf=m.call({key:'field123',action:'photoFiles',pid:'ntpu',from:d0,to:d0,offset:0,limit:2});ok(pf.ok&&pf.total>=3&&pf.files.length===2&&pf.files[0].data&&/\.jpg$/.test(pf.files[0].name),'photoFiles 分批傳照片(共 '+pf.total+' 張,這批 2 張)');
 r=m.call({key:'field123',action:'report',data:{pid:'yanggong1',site:'實踐國小',date:d0,by:'zip',work:'AC 刨除',photos:[{cap:'',url:'https://drive.google.com/file/d/P4/view'}]}});
-const L2=m.run("photoList_(projById_('yanggong1'),'實踐國小','"+d0+"','"+d0+"').map(function(x){return x.name})");ok(L2.includes(D+'_實踐國小_AC 刨除_1.jpg'),'開口契約檔名含派工單:'+L2[L2.length-1]);
+const L2=m.run("photoList_(projById_('yanggong1'),'實踐國小','"+d0+"','"+d0+"').map(function(x){return x.name})");const LF2=m.run("photoList_(projById_('yanggong1'),'實踐國小','"+d0+"','"+d0+"').map(function(x){return x.folder})");ok(L2.includes(D+'_其他_AC 刨除_01.jpg')&&LF2[0]===D+'_實踐國小','開口契約資料夾「日期_派工單」:'+LF2[0]+'/'+L2[L2.length-1]);
 m.call({key:'field123',action:'upload',project:'115養工資本門(第1區)',site:'實踐國小',date:d0,name:'x.jpg',data:''});ok(/現場回報照片\/115養工資本門\(第1區\)\/實踐國小\/\d{4}-\d{2}-\d{2}\/x\.jpg$/.test(m.g.__lastPath),'照片資料夾:工程/派工單/日期');}
 // 匯入契約項目:新工程 → 第一次變更(數量變動、新增項目、展延依變更日)
 {r=m.call({key:'admin123',action:'saveProject',project:{name:'測試匯入工程',short:'匯入測試',type:'一般',status:'未開工',start:'2026-11-01',approved:100}});ok(r.ok&&r.id,'新增工程');const pid=r.id;
@@ -149,4 +151,25 @@ const lk=m.call({key:'field123',action:'report',id:rid,data:{pid:'ntpu',date:'20
 m.call({key:'admin123',action:'saveProject',project:{id:'ntpu',nolock:true}});ok(m.run("projById_('ntpu').nolock")===true,'不鎖修改存檔');
 r=m.call({key:'field123',action:'report',id:rid,data:{pid:'ntpu',date:'2026-09-01',by:'t',tech:2,entries:[]}});ok(r.ok,'不鎖修改:現場可以改舊回報');}
 ok(m.run("addDays_('2026-10-31',1)")==='2026-11-01'&&m.run("addDays_('2026-11-01',1)")==='2026-11-02'&&m.run("addDays_('2026-12-31',1)")==='2027-01-01'&&m.run("dayDiff_('2026-10-15','2026-11-30')")===46,'日期加減不受時區影響');
+// 新增回報用 App 編號,重送不重複;修改後同編號只留一列
+{const cnt=id=>m.sheets['每日回報'].d.filter(r=>r[0]===id).length;
+let r=m.call({key:'admin123',action:'report',data:{pid:'ntpu',date:'2026-11-02',by:'t',am:'晴',pm:'晴',tech:1,entries:[],newId:'abcd1234-test'}});ok(r.ok&&r.id==='abcd1234-test','新增回報用 App 給的編號');
+r=m.call({key:'admin123',action:'report',data:{pid:'ntpu',date:'2026-11-02',by:'t',am:'晴',pm:'晴',tech:1,entries:[],newId:'abcd1234-test'}});ok(r.ok&&r.dup&&cnt('abcd1234-test')===1,'同編號重送不會重複新增');
+r=m.call({key:'admin123',action:'report',id:'abcd1234-test',data:{pid:'ntpu',date:'2026-11-02',by:'t',am:'晴',pm:'雨',tech:3,entries:[]}});ok(r.ok&&cnt('abcd1234-test')===1,'修改後同編號只有一列');}
+// 封存/還原、備份
+{const sp=m.g.SpreadsheetApp.getActiveSpreadsheet(),rows=()=>m.sheets['每日回報'].d.filter(r=>r[2]==='ntpu').length;
+const n0=rows();let err=m.call({key:'admin123',action:'archiveProject',pid:'ntpu'});ok(!err.ok&&/完工/.test(err.error),'施工中的工程不能封存');
+m.call({key:'admin123',action:'saveProject',project:{id:'ntpu',status:'完工'}});
+let r,guard=0;do{r=m.call({key:'admin123',action:'archiveProject',pid:'ntpu'})}while(r.ok&&!r.done&&++guard<10);
+const arc=m.g.SpreadsheetApp.openById(r.id);
+ok(r.ok&&r.done&&n0>0&&rows()===0&&arc.getSheetByName('每日回報').d.length-2===n0,'封存:回報 '+n0+' 筆搬到封存檔,主檔清空');
+ok(!sp.getSheetByName('契約-三峽北大')&&!!arc.getSheetByName('契約-三峽北大')&&!sp.getSheetByName('日誌_三峽北大'),'契約分頁搬走、主檔日誌分頁刪除');
+ok(r.diaries>0&&arc.getSheets().some(x=>/^日誌_\d{4}-\d{2}/.test(x.getName())),'封存檔有各月日誌 '+r.diaries+' 份');
+ok(m.run("projById_('ntpu').status")==='封存'&&m.run("projById_('ntpu').archive")===r.id,'狀態改封存並記錄封存檔');
+const ld=m.call({key:'admin123',action:'load'});ok(ld.ok&&!sp.getSheetByName('契約-三峽北大')&&!ld.reports.some(x=>x.pid==='ntpu'),'載入時不讀也不重建封存工程');
+r=m.call({key:'admin123',action:'restoreProject',pid:'ntpu'});ok(r.ok&&rows()===n0&&!!sp.getSheetByName('契約-三峽北大')&&m.run("projById_('ntpu').status")==='完工','還原:回報 '+rows()+' 筆、契約分頁搬回,狀態改回完工');
+m.call({key:'admin123',action:'saveProject',project:{id:'ntpu',status:'施工中'}});
+for(let i=0;i<9;i++)m.call({key:'admin123',action:'backupNow'});r=m.call({key:'admin123',action:'backupInfo'});ok(r.ok&&r.list.length===8,'備份保留最近 8 份');
+m.run('setupWeeklyBackup()');ok(m.call({key:'admin123',action:'backupInfo'}).weekly===true,'每週自動備份已啟用');
+ok(!m.call({key:'field123',action:'archiveProject',pid:'ntpu'}).ok,'現場帳號不能封存');}
 console.log('全部通過');

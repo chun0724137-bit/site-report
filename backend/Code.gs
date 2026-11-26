@@ -4,7 +4,7 @@
  * 執行身分:我;存取權:所有人。通行碼在「設定」分頁。
  */
 var HEAD = {
-  '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型', '常用機具', '勾選方式', '工地負責人', '承攬廠商', '核定工期', '展延天數', '日誌第一聯', '日誌二聯', '第一次展延天數', '第二次展延天數', '監造單位', '不鎖修改'],
+  '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型', '常用機具', '勾選方式', '工地負責人', '承攬廠商', '核定工期', '展延天數', '日誌第一聯', '日誌二聯', '第一次展延天數', '第二次展延天數', '監造單位', '不鎖修改', '封存檔', '封存日'],
   '派工地點': ['工程代號', '地點', '狀態', '區域', '工作性質', '開工日', '預定完工日', '實際完工日', '派工工項'],
   '設定': ['類別', '值', '屬性'],
   '預定進度': ['工程簡稱', '版本', '生效日', '日期', '累計預定進度'],
@@ -409,7 +409,7 @@ function setup() {
   normalizeProjectsSheet_();
   ensureConfigSamples_();
   projects_().forEach(function (p) {
-    if (p.type === '土方暫置' || p.type === '機動修繕') return;
+    if (p.type === '土方暫置' || p.type === '機動修繕' || p.status === '封存') return;
     var sh = sheet_(ITEM_PREFIX + p.short);
     sh.getRange(1, 1, sh.getMaxRows(), 1).setNumberFormat('@');
   });
@@ -470,6 +470,140 @@ function append_(name, objs) {
   sh.getRange(r0, 1, data.length, head.length).setValues(data);
 }
 
+function reportIdExists_(id) {
+  var sh = sheet_('每日回報'), last = sh.getLastRow(); if (last < 3) return false;
+  return sh.getRange(3, 1, last - 2, 1).getValues().some(function (r) { return str_(r[0]) === id; });
+}
+/** 同一編號有多列時,只留最下面(最新)那一列 */
+function keepLastById_(name, id) {
+  var sh = sheet_(name); var last = sh.getLastRow();
+  var startRow = name === '每日回報' ? 3 : 2;
+  if (last < startRow) return;
+  var ids = sh.getRange(startRow, 1, last - startRow + 1, 1).getValues(), seen = false;
+  for (var i = ids.length - 1; i >= 0; i--) if (str_(ids[i][0]) === id) { if (seen) sh.deleteRow(i + startRow); else seen = true; }
+}
+/* ===== 備份:每週自動複製整個試算表到「現場回報備份」資料夾,保留最近 8 份 ===== */
+var BACKUP_FOLDER = '現場回報備份', BACKUP_KEEP = 8;
+function backupNow_() {
+  var folder = folder_(BACKUP_FOLDER), name = '現場回報備份_' + Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd_HHmmss');
+  var f = DriveApp.getFileById(ss_().getId()).makeCopy(name, folder);
+  var list = [], it = folder.getFiles();
+  while (it.hasNext()) { var x = it.next(); list.push(x); }
+  list.sort(function (a, b) { return b.getDateCreated() - a.getDateCreated(); });
+  list.slice(BACKUP_KEEP).forEach(function (x) { try { x.setTrashed(true); } catch (e) { } });   // 舊的移到垃圾桶(30 天內可救回)
+  return { name: name, url: f.getUrl() };
+}
+function backupList_() {
+  var it = DriveApp.getFoldersByName(BACKUP_FOLDER); if (!it.hasNext()) return [];
+  var files = it.next().getFiles(), out = [];
+  while (files.hasNext()) { var x = files.next(); out.push({ name: x.getName(), at: Utilities.formatDate(x.getDateCreated(), tz_(), 'yyyy-MM-dd HH:mm'), url: x.getUrl() }); }
+  return out.sort(function (a, b) { return a.at < b.at ? 1 : -1; });
+}
+/** 給時間觸發器用:每週日凌晨 2 點自動備份 */
+function weeklyBackup() { backupNow_(); }
+/** 在 Apps Script 編輯器執行一次(會要求授權),就會每週自動備份 */
+function setupWeeklyBackup() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'weeklyBackup') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('weeklyBackup').timeBased().everyWeeks(1).onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(2).create();
+  return backupNow_();
+}
+function backupTriggerOn_() { try { return ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'weeklyBackup'; }); } catch (e) { return null; } }
+function menuBackup() { var r = backupNow_(); SpreadsheetApp.getUi().alert('已備份:' + r.name + '\n存在雲端硬碟「' + BACKUP_FOLDER + '」資料夾。'); }
+function menuSetupBackup() { setupWeeklyBackup(); SpreadsheetApp.getUi().alert('已啟用每週自動備份(每週日凌晨 2 點),並先備份一份。'); }
+
+/* ===== 封存:已完工的工程搬到「現場回報封存」資料夾裡自己的試算表,主檔不再讀它 ===== */
+var ARCHIVE_FOLDER = '現場回報封存';
+/** 有工程資料的表格:[分頁, 對應欄, 用代號或簡稱] */
+var ARCHIVE_TABLES = [['每日回報', '工程代號', 'id'], ['簽名', '工程代號', 'id'], ['日誌勾選', '工程代號', 'id'], ['派工地點', '工程代號', 'id'], ['派工預定進度', '工程代號', 'id'], ['預定進度', '工程簡稱', 'short']];
+function archiveSheetsOf_(p) { return [ITEM_PREFIX + p.short, SOIL_PREFIX + p.short]; }
+function hdrRows_(name, v) { return name === '每日回報' && v && str_((v[0] || [])[0]) === '年度' ? 2 : 1; }
+function projRowSet_(sh, id, field, value) {
+  var t = read_('工程'), hit = null; t.rows.forEach(function (r) { if (str_(r['工程代號']) === id) hit = r; });
+  if (hit) sheet_('工程').getRange(hit._row, t.head.indexOf(field) + 1, 1, 1).setValues([[value]]);
+}
+/** 這個工程每個月(開口契約依分案)要封存的日誌清單 */
+function archiveDiaryJobs_(p) {
+  if (p.type === '土方暫置' || p.type === '機動修繕') return [];
+  var reps = reports_('0000-00', '9999-99', false).reports.filter(function (r) { return r.pid === p.id; });
+  var mode = diaryMode_(p), seen = {}, jobs = [];
+  reps.forEach(function (r) { var k = r.date.slice(0, 7) + '|' + (mode === 'site' ? r.site : ''); if (!seen[k]) { seen[k] = 1; jobs.push([r.date.slice(0, 7), mode === 'site' ? r.site : '']); } });
+  return jobs.sort(function (a, b) { return (a[0] + a[1]) < (b[0] + b[1]) ? -1 : 1; });
+}
+function archiveDiaryName_(job) { return ('日誌_' + job[0] + (job[1] ? '_' + safe_(job[1]) : '')).slice(0, 90); }
+function copySheetTo_(src, book, name) {
+  var old = book.getSheetByName(name); if (old) book.deleteSheet(old);
+  var c = src.copyTo(book); c.setName(name);
+  try { if (c.isSheetHidden && c.isSheetHidden()) c.showSheet(); } catch (e) { }
+  return c;
+}
+/** 一次做一段(避免超過 Apps Script 6 分鐘上限):先產生各月日誌,最後才搬資料 */
+function archiveProject_(q) {
+  var t0 = Date.now(), p = projById_(str_(q.pid)); if (!p) throw new Error('找不到工程');
+  if (p.status !== '完工') throw new Error('只有「完工」的工程可以封存');
+  var book = p.archive ? SpreadsheetApp.openById(p.archive) : null;
+  if (!book) {
+    book = SpreadsheetApp.create('封存_' + p.short);
+    try { DriveApp.getFileById(book.getId()).moveTo(folder_(ARCHIVE_FOLDER)); } catch (e) { }
+    projRowSet_(null, p.id, '封存檔', book.getId());
+  }
+  var jobs = archiveDiaryJobs_(p), ctx = null, done = 0;
+  for (var i = 0; i < jobs.length; i++) {
+    var nm = archiveDiaryName_(jobs[i]);
+    if (book.getSheetByName(nm)) { done++; continue; }
+    if (Date.now() - t0 > 240000) return { phase: 'diary', done: done, total: jobs.length };
+    ctx = ctx || diaryCtx_();
+    writeDiary_(p, jobs[i][0], jobs[i][1], ctx);
+    var dsh = ss_().getSheetByName(DIARY_PREFIX + p.short); if (dsh) copySheetTo_(dsh, book, nm);
+    done++;
+  }
+  // 搬資料:要鎖住,避免同時有人送出回報
+  var lock = LockService.getScriptLock(); lock.waitLock(25000);
+  try {
+    var count = {};
+    ARCHIVE_TABLES.forEach(function (tb) {
+      var name = tb[0], sh = ss_().getSheetByName(name); if (!sh || sh.getLastRow() < 1) return;
+      var v = sh.getDataRange().getValues(), hn = hdrRows_(name, v), hd = (v[hn - 1] || []).map(str_), ki = hd.indexOf(tb[1]); if (ki < 0) return;
+      var key = tb[2] === 'id' ? p.id : p.short, mine = [], keep = [];
+      v.slice(hn).forEach(function (r) { (str_(r[ki]) === key || (tb[2] === 'short' && str_(r[ki]) === p.name) ? mine : keep).push(r); });
+      count[name] = mine.length; if (!mine.length) return;
+      var ash = book.getSheetByName(name) || book.insertSheet(name), all = v.slice(0, hn).concat(mine);
+      ash.clear(); ash.getRange(1, 1, all.length, hd.length).setValues(all.map(function (r) { return r.slice(0, hd.length); }));
+      // 主檔:先確認封存檔寫好,再把這個工程的列拿掉
+      if (ash.getLastRow() < all.length) throw new Error('封存檔寫入不完整,沒有刪除主檔資料:' + name);
+      var last = sh.getLastRow(); if (last > hn) sh.getRange(hn + 1, 1, last - hn, sh.getLastColumn()).clearContent();
+      if (keep.length) sh.getRange(hn + 1, 1, keep.length, keep[0].length).setValues(keep);
+    });
+    archiveSheetsOf_(p).concat([DIARY_PREFIX + p.short]).forEach(function (n) {
+      var sh = ss_().getSheetByName(n); if (!sh) return;
+      if (n.indexOf(DIARY_PREFIX) !== 0) copySheetTo_(sh, book, n);
+      ss_().deleteSheet(sh);
+    });
+    var def = book.getSheetByName('工作表1') || book.getSheetByName('Sheet1'); if (def && book.getSheets().length > 1) book.deleteSheet(def);
+    projRowSet_(null, p.id, '狀態', '封存'); projRowSet_(null, p.id, '封存日', today_());
+    return { done: true, url: book.getUrl(), id: book.getId(), count: count, diaries: done };
+  } finally { lock.releaseLock(); }
+}
+/** 還原:把封存檔的資料搬回主檔,狀態改回「完工」(封存檔保留,改名註記已還原) */
+function restoreProject_(q) {
+  var p = projById_(str_(q.pid)); if (!p) throw new Error('找不到工程');
+  if (p.status !== '封存' || !p.archive) throw new Error('這個工程沒有封存');
+  var book = SpreadsheetApp.openById(p.archive), lock = LockService.getScriptLock(); lock.waitLock(25000);
+  try {
+    var count = {};
+    ARCHIVE_TABLES.forEach(function (tb) {
+      var name = tb[0], ash = book.getSheetByName(name); if (!ash || ash.getLastRow() < 1) return;
+      var v = ash.getDataRange().getValues(), hn = hdrRows_(name, v), hd = (v[hn - 1] || []).map(str_);
+      var objs = v.slice(hn).filter(function (r) { return r.some(function (x) { return x !== '' && x !== null; }); }).map(function (r) { var o = {}; hd.forEach(function (h, i) { if (h) o[h] = r[i]; }); return o; });
+      if (objs.length) { sheet_(name); append_(name, objs); } count[name] = objs.length;
+    });
+    archiveSheetsOf_(p).forEach(function (n) { var ash = book.getSheetByName(n); if (ash && !ss_().getSheetByName(n)) copySheetTo_(ash, ss_(), n); });
+    projRowSet_(null, p.id, '狀態', '完工'); projRowSet_(null, p.id, '封存檔', ''); projRowSet_(null, p.id, '封存日', '');
+    try { DriveApp.getFileById(book.getId()).setName('封存_' + p.short + '(已還原 ' + today_() + ')'); } catch (e) { }
+    hideProjSheets_(p.short, true);
+    return { ok: true, count: count };
+  } finally { lock.releaseLock(); }
+}
+
 function deleteById_(name, id) {
   var sh = sheet_(name); var last = sh.getLastRow();
   var startRow = name === '每日回報' ? 3 : 2;
@@ -522,7 +656,7 @@ function projects_() {
       machines: machs,
       tick: str_(r['勾選方式']) || '手勾', layout1: str_(r['日誌第一聯']) || '當日', layout2: str_(r['日誌二聯']) || '不附', signer: str_(r['工地負責人']), company: str_(r['承攬廠商']), approved: num_(r['核定工期']), ext: num_(r['展延天數']) || 0,
       chExt: [num_(r['第一次展延天數']) || 0, num_(r['第二次展延天數']) || 0],
-      supervisor: str_(r['監造單位']), nolock: str_(r['不鎖修改']) === '是'
+      supervisor: str_(r['監造單位']), nolock: str_(r['不鎖修改']) === '是', archive: str_(r['封存檔']), archivedAt: date_(r['封存日'])
     };
   }).filter(function (p) { return p.id; }).sort(function (a, b) { return a.order - b.order; });
 }
@@ -970,7 +1104,7 @@ function diarySel_(sh, p) {
   var site = str_(v[5]); if (diaryMode_(p) === 'site' && !site) site = diarySites_(p)[0] || '';
   return { ym: ym, site: site };
 }
-function diaryProjects_() { var map = itemSheets_(); return projects_().filter(function (p) { return p.status !== '完工' && p.type !== '土方暫置' && p.type !== '機動修繕' && (p.multi || map[p.id]); }); }
+function diaryProjects_() { var map = itemSheets_(); return projects_().filter(function (p) { return p.status !== '完工' && p.status !== '封存' && p.type !== '土方暫置' && p.type !== '機動修繕' && (p.multi || map[p.id]); }); }
 
 /* ===== 「出土」分頁(上方選年、月;左邊當月出土明細,右邊並排各案工程出土總計) ===== */
 function ymSel_(sh) {
@@ -1271,7 +1405,7 @@ function onEdit(e) {
 
 /* ===== 土方月報:工程類型「土方暫置」(例:新店土尾)一張「土方月報_簡稱」,第 1 列選年、月 ===== */
 var SOIL_PREFIX = '土方月報_', SOIL_KINDS = ['B5', 'B2-3', '廢棄物'], SOIL_NOTE = { 'B5': '無鋼筋或含鋼筋混凝土塊', 'B2-3': '土壤與礫石及砂', '廢棄物': '' };
-function soilProjects_() { return projects_().filter(function (p) { return p.type === '土方暫置' && p.status !== '完工'; }); }
+function soilProjects_() { return projects_().filter(function (p) { return p.type === '土方暫置' && p.status !== '完工' && p.status !== '封存'; }); }
 function soilTarget_(dest, sps) {
   if (!/暫置/.test(dest || '')) return null;
   if (sps.length === 1) return sps[0];
@@ -1441,7 +1575,7 @@ function makeSettlement_(pid, site) {
 
 /** 試算表選單 */
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu('現場回報').addItem('重新整理日誌與報表', 'menuDiaries').addItem('產生結算資料…', 'menuSettle').addToUi();
+  SpreadsheetApp.getUi().createMenu('現場回報').addItem('重新整理日誌與報表', 'menuDiaries').addItem('產生結算資料…', 'menuSettle').addSeparator().addItem('立即備份', 'menuBackup').addItem('啟用每週自動備份', 'menuSetupBackup').addToUi();
 }
 function menuDiaries() { normalizeProjectsSheet_(); rebuildDiaries_(); }
 function menuSettle() {
@@ -1717,8 +1851,14 @@ var ACTIONS = {
       if (role !== 'admin' && role !== 'office' && !p.nolock && daysAgo_(old['日期']) > EDIT_DAYS) throw new Error('超過 ' + EDIT_DAYS + ' 天的回報請洽內業修改');
       var before = reports_('0000-00', '9999-99', false).reports.filter(function (x) { return x.id === id; })[0];
       sent = old['送出時間']; edited = now_(); editBy = str_(d.by); prevJson = JSON.stringify(before);
-      deleteById_('每日回報', id);
-    } else id = Utilities.getUuid().slice(0, 8) + '-' + Utilities.formatDate(new Date(), tz_(), 'MMddHHmmss');
+      var isEdit = true;
+    } else {
+      var nid = str_(d.newId);
+      if (/^[A-Za-z0-9-]{8,40}$/.test(nid)) {
+        if (reportIdExists_(nid)) return { id: nid, dup: true };   // 同一筆重送(網路斷線後再送):不重複新增
+        id = nid;
+      } else id = Utilities.getUuid().slice(0, 8) + '-' + Utilities.formatDate(new Date(), tz_(), 'MMddHHmmss');
+    }
 
     var site = p.multi ? str_(d.site) : '';
     var normEntries = (d.entries || []).map(function (e) {
@@ -1736,7 +1876,9 @@ var ACTIONS = {
       return { name: str_(x.name), qty: num_(x.qty) === null ? '' : num_(x.qty), unit: str_(x.unit) };
     });
     var normPhotos = (d.photos || []).filter(function (x) { return x && str_(x.url); }).map(function (x) {
-      return { cap: str_(x.cap), url: str_(x.url) };
+      var o = { cap: str_(x.cap).slice(0, 100), url: str_(x.url) };
+      if (str_(x.name)) { o.code = str_(x.code); o.name = str_(x.name); o.loc = str_(x.loc); }
+      return o;
     });
     var crew = {}, crewOt = {};
     Object.keys(d.crew || {}).forEach(function (n) { if (Number(d.crew[n]) > 0) crew[n] = Number(d.crew[n]); });
@@ -1763,6 +1905,7 @@ var ACTIONS = {
       '最後修改人': editBy, '修改時間': edited, '修改前內容': prevJson,
       '原始資料JSON': JSON.stringify(rawPayload)
     }]);
+    if (isEdit) keepLastById_('每日回報', id);   // 新的一列已寫入,才刪掉舊的那一列
 
     if (p.multi && site) ACTIONS.addSite({ pid: p.id, sites: [site] });
     autoDiary_(p.id, d.date, site); autoSoil_(p, d.date, normSoil);
@@ -1930,6 +2073,10 @@ var ACTIONS = {
       catch (err) { return { error: '讀不到這張照片' }; }
     }) };
   },
+  archiveProject: function (q, role) { if (role !== 'admin') throw new Error('只有管理者可以封存工程'); return archiveProject_(q); },
+  restoreProject: function (q, role) { if (role !== 'admin') throw new Error('只有管理者可以還原工程'); return restoreProject_(q); },
+  backupNow: function (q, role) { if (role !== 'admin') throw new Error('只有管理者可以備份'); return backupNow_(); },
+  backupInfo: function (q, role) { if (role !== 'admin') throw new Error('只有管理者可以看備份'); return { list: backupList_(), weekly: backupTriggerOn_() }; },
   photoFiles: function (q) {
     var p = projById_(str_(q.pid)); if (!p) throw new Error('找不到工程');
     var from = str_(q.from), to = str_(q.to) || from;
@@ -1959,9 +2106,10 @@ function photoName_(date, site, cap, fallback) {
   t = t.replace(/[\\\/:*?"<>|\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 30).trim();
   return [date.replace(/-/g, ''), site ? safe_(site) : '', t].filter(function (x) { return x; }).join('_');
 }
-/** 照片清單:每天(開口契約再分派工單)一個資料夾「日期_派工單_今日工作項目」;
- *  現場有寫說明的照片用「日期_派工單_說明」,沒寫的用「資料夾名_序號(從 1 開始)」 */
-function photoClean_(t) { return str_(t).replace(/[\\\/:*?"<>|\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 30).trim(); }
+/** 照片清單:每天一個資料夾「日期」(開口契約「日期_派工單」);
+ *  照片檔名「日期_項次_工項名稱_位置_說明_序號」(有選工項時),沒選工項的用「日期_其他_今日工作項目_說明_序號」 */
+function photoPart_(t, max) { return str_(t).replace(/[\\\/:*?"<>|]+/g, '-').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max).trim(); }
+function photoClean_(t) { return photoPart_(t, 30); }
 function photoList_(p, site, from, to) {
   var groups = {}, keys = [];
   reports_(from.slice(0, 7), to.slice(0, 7), false).reports
@@ -1969,29 +2117,30 @@ function photoList_(p, site, from, to) {
     .sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; })
     .forEach(function (r) {
       var st = p.multi ? str_(r.site) : '', k = r.date + '|' + st;
-      if (!groups[k]) { groups[k] = { date: r.date, site: st, works: [], photos: [] }; keys.push(k); }
+      if (!groups[k]) { groups[k] = { date: r.date, site: st, works: [], photos: [], seen: {} }; keys.push(k); }
       var g = groups[k];
       str_(r.work).split(/[、,，;；]/).map(str_).forEach(function (w) { if (w && g.works.indexOf(w) < 0) g.works.push(w); });
-      (r.photos || []).forEach(function (ph) { g.photos.push(ph); });
+      (r.photos || []).forEach(function (ph) { if (ph && ph.url && !g.seen[ph.url]) { g.seen[ph.url] = 1; g.photos.push(ph); } });
+      (r.entries || []).forEach(function (e) { if (e && e.photo && !g.seen[e.photo]) { g.seen[e.photo] = 1; g.photos.push({ url: e.photo, code: e.code, name: e.name, loc: e.loc }); } });
     });
   var out = [];
   keys.forEach(function (k) {
     var g = groups[k]; if (!g.photos.length) return;
-    var work = photoClean_(g.works.join('、'));
-    var head = [g.date.replace(/-/g, ''), g.site ? safe_(g.site) : ''].filter(function (x) { return x; }).join('_');
-    var folder = work ? head + '_' + work : head, used = {}, seq = 0;
+    var work = photoPart_(g.works.join('、'), 100), d8 = g.date.replace(/-/g, '');
+    var folder = [d8, g.site ? photoPart_(g.site, 60) : ''].filter(function (x) { return x; }).join('_'), seq = {};
     g.photos.forEach(function (ph) {
       var m = String(ph.url || '').match(/\/d\/([^/]+)/); if (!m) return;
-      var cap = str_(ph.cap).replace(/^【([^】]*)】/, '$1 ').replace(/^[0-9A-Za-z一二三四五六七八九十壹貳參肆伍陸柒捌玖拾]+(\.[0-9A-Za-z]+)+\s+/, '').replace(/｜/g, ' ');
-      cap = photoClean_(cap);
-      var name;
-      if (cap && cap !== '現場照片' && cap !== work) {
-        var base = head + '_' + cap, n = 2; name = base;
-        while (used[name]) name = base + '_' + (n++);
-      } else {
-        do { name = folder + '_' + (++seq); } while (used[name]);
+      var code = str_(ph.code), name = str_(ph.name), loc = str_(ph.loc), cap = str_(ph.cap);
+      if (!name && cap) {   // 舊資料:說明是「項次 工項｜位置」或「【取樣】名稱」
+        var mm = cap.match(/^([0-9A-Za-z][0-9A-Za-z.]*\.[0-9A-Za-z]+)\s+(.+)$/);
+        if (mm) { code = mm[1]; var sp = mm[2].split('｜'); name = sp[0]; loc = sp[1] || ''; cap = ''; }
+        else if (/^【取樣】/.test(cap)) { name = '取樣-' + cap.replace(/^【取樣】/, ''); cap = ''; }
       }
-      used[name] = 1; out.push({ id: m[1], name: name + '.jpg', folder: folder });
+      if (cap && (cap === '現場照片' || cap === name || cap === str_(g.works.join('、')) || cap.indexOf(name + '｜') === 0)) cap = '';
+      var parts = name ? [d8, code && code !== '-' ? photoPart_(code, 20) : '', photoPart_(name, 100), photoPart_(loc, 20), photoPart_(cap, 30)]
+                       : [d8, '其他', work, photoPart_(cap, 30)];
+      var base = parts.filter(function (x) { return x; }).join('_'), n = seq[base] = (seq[base] || 0) + 1;
+      out.push({ id: m[1], name: base + '_' + ('0' + n).slice(-2) + '.jpg', folder: folder });
     });
   });
   return out;

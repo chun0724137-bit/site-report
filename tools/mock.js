@@ -15,7 +15,7 @@ function mk(){
     merge(){if(this.nr>1||this.nc>1)this.sh.merges.push([this.c,this.c+this.nc-1]);return chain(this)} breakApart(){this.sh.merges=[];return chain(this)}
     clearContent(){for(let i=0;i<this.nr;i++){const row=this.sh.d[this.r-1+i];if(row)for(let j=0;j<this.nc;j++)row[this.c-1+j]=''}return chain(this)}}
   class Sheet{constructor(n){this.n=n;this.d=[];this.merges=[];return chain(this)}
-    setFrozenColumns(n){if(this.merges.some(m=>m[0]<=n&&m[1]>n))throw new Error('很抱歉,你無法凍結僅包含部分合併儲存格的欄');return this} getName(){return this.n} hideSheet(){this.hidden=true;return this} showSheet(){this.hidden=false;return this} isSheetHidden(){return !!this.hidden} setName(n){this.n=n;return this}
+    setFrozenColumns(n){if(this.merges.some(m=>m[0]<=n&&m[1]>n))throw new Error('很抱歉,你無法凍結僅包含部分合併儲存格的欄');return this} getName(){return this.n} hideSheet(){this.hidden=true;return this} showSheet(){this.hidden=false;return this} isSheetHidden(){return !!this.hidden} setName(n){this.n=n;return this} copyTo(b){const s=b.insertSheet(this.n+' 的副本');s.d=this.d.map(r=>r.slice());s.hidden=this.hidden;return s}
     getDataRange(){return new Range(this,1,1,Math.max(this.getLastRow(),1),Math.max(this.getLastColumn(),1))}
     getLastRow(){let n=this.d.length;while(n>0&&!(this.d[n-1]||[]).some(v=>v!==''&&v!==undefined&&v!==null))n--;return n}
     getLastColumn(){return Math.max(0,...this.d.map(r=>{let n=r.length;while(n>0&&(r[n-1]===''||r[n-1]===undefined))n--;return n}))} getMaxRows(){return 1000} getMaxColumns(){return 50}
@@ -31,14 +31,14 @@ function mk(){
     books.push(b);return b}
   const ss=book('main');const sheets=ss.sheets;
   const pad=n=>String(n).padStart(2,'0');
-  const g={SpreadsheetApp:{getActiveSpreadsheet:()=>ss,create:n=>{const b=book(n);b.insertSheet('工作表1');return b},flush(){},
+  const g={SpreadsheetApp:{getActiveSpreadsheet:()=>ss,create:n=>{const b=book(n);b.insertSheet('工作表1');return b},openById:id=>{const b=books.find(x=>x.id===id);if(!b)throw new Error('找不到檔案');return b},flush(){},
       newDataValidation:()=>chain({build:()=>({})})},LockService:{getScriptLock:()=>({waitLock(){},releaseLock(){}})},
     ContentService:{createTextOutput:t=>({setMimeType(){return this},text:t}),MimeType:{JSON:'json'}},
     Utilities:{base64Encode:b=>Buffer.from((b||[]).map(x=>x||0)).toString('base64'),formatDate:(d,tz,f)=>{const t=new Date(d.getTime()+8*3600e3-0);const o={yyyy:t.getUTCFullYear(),MM:pad(t.getUTCMonth()+1),dd:pad(t.getUTCDate()),HH:pad(t.getUTCHours()),mm:pad(t.getUTCMinutes()),ss:pad(t.getUTCSeconds())};return f.replace(/yyyy|MM|dd|HH|mm|ss/g,m=>o[m])},
       getUuid:()=>require('crypto').randomUUID(),base64Decode:s=>Buffer.from(s,'base64'),zip:(blobs,n)=>({n,blobs}),DigestAlgorithm:{SHA_256:'sha256'},computeDigest:(a,x)=>[...require('crypto').createHash('sha256').update(String(x)).digest()].map(b=>b>127?b-256:b),newBlob:(b,m,n)=>({b,m,n})},
-    UrlFetchApp:{fetch:()=>({getBlob:()=>({setName(n){return{n}}})})},ScriptApp:{getOAuthToken:()=>'TOKEN'},
-    DriveApp:(()=>{const mkf=(n,path)=>({n,path,kids:{},files:[],getFoldersByName(x){const k=this.kids[x];return{hasNext:()=>!!k,next:()=>k}},createFolder(x){return this.kids[x]=mkf(x,path+'/'+x)},getFiles(){const fs=this.files.map(n=>({getDateCreated:()=>new Date(0),setTrashed(){}}));let i=0;return{hasNext:()=>i<fs.length,next:()=>fs[i++]}},createFile(b){this.files.push(b.n);g.__lastPath=this.path+'/'+b.n;return{getId:()=>'FAKEID',setSharing(){},getUrl:()=>'https://drive.google.com/'+b.n}}});const root=mkf('','');
-      return{getFoldersByName:x=>root.getFoldersByName(x),createFolder:x=>root.createFolder(x),getFileById:id=>{if(id==='MISSING')throw new Error('no file');return{moveTo(){},setTrashed(){},getBlob:()=>({n:'',setName(x){this.n=x;return this},getBytes:()=>new Array(1000)})}},Access:{},Permission:{},root}})(),console};
+    UrlFetchApp:{fetch:()=>({getBlob:()=>({setName(n){return{n}}})})},ScriptApp:{getOAuthToken:()=>'TOKEN',_tr:[],getProjectTriggers(){return this._tr},deleteTrigger(t){this._tr=this._tr.filter(x=>x!==t)},WeekDay:{SUNDAY:'SUNDAY'},newTrigger(fn){const S=this,o={timeBased:()=>o,everyWeeks:()=>o,onWeekDay:()=>o,atHour:()=>o,create:()=>{const t={getHandlerFunction:()=>fn};S._tr.push(t);return t}};return o}},
+    DriveApp:(()=>{const mkf=(n,path)=>({n,path,kids:{},files:[],getFoldersByName(x){const k=this.kids[x];return{hasNext:()=>!!k,next:()=>k}},createFolder(x){return this.kids[x]=mkf(x,path+'/'+x)},getFiles(){const self=this,fs=this.files.map((n,i)=>({getName:()=>n,getUrl:()=>'https://drive/'+n,getDateCreated:()=>new Date(2026,0,1+i),setTrashed(){self.files=self.files.filter(x=>x!==n)}}));let i=0;return{hasNext:()=>i<fs.length,next:()=>fs[i++]}},createFile(b){this.files.push(b.n);g.__lastPath=this.path+'/'+b.n;return{getId:()=>'FAKEID',setSharing(){},getUrl:()=>'https://drive.google.com/'+b.n}}});const root=mkf('','');
+      return{getFoldersByName:x=>root.getFoldersByName(x),createFolder:x=>root.createFolder(x),getFileById:id=>{if(id==='MISSING')throw new Error('no file');return{moveTo(){},setTrashed(){},setName(){},getUrl:()=>'https://drive/'+id,makeCopy:(n,f)=>{f.files.push(n+'#'+(f.n_=(f.n_||0)+1));return{getUrl:()=>'https://drive/'+n}},getBlob:()=>({n:'',setName(x){this.n=x;return this},getBytes:()=>new Array(1000)})}},Access:{},Permission:{},root}})(),console};
   vm.createContext(g);vm.runInContext(fs.readFileSync(__dirname+'/../backend/Code.gs','utf8'),g);
   vm.runInContext('setup()',g);
   const put=(n,rows)=>rows.forEach(r=>sheets[n].d.push(r.map(v=>v===null?'':v)));
