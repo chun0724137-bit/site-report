@@ -1378,7 +1378,7 @@ function spNet(a,ctx,startIn){const T=spTxt,find=(re,rows)=>{for(let r=0;r<Math.
   // 金額:先用檔案裡算好的;沒有就用右邊「項次 × 比例」表
   if(!its.every(x=>x.amt>0||x.pct>0)){const ah=find(/^複價/);if(!ah)return{err:"網圖項目進度表找不到「複價」比例表,無法計算。"};
     const [ar,ab]=ah,ag=(()=>{for(let i=ab-1;i>=0;i--)if(T(a[ar][i])==="項次")return i;return -1})();if(ag<0)return{err:"網圖項目進度表的比例表找不到「項次」欄。"};const k=its.length;const miss=[];its.forEach(x=>x.amt=0);
-    for(let i=ar+1;i<a.length;i++){const x=a[i],code=T(x[ag]);if(!code||code==="合計")break;let amt=spNum(x[ab]);if(!(amt>0))amt=(ctx.amt||{})[code];if(!(amt>0)){miss.push(code);continue}
+    for(let i=ar+1;i<a.length;i++){const x=a[i],code=T(x[ag]);if(!code||code==="合計")break;let amt=spNum(x[ab]);if(!(amt>0))amt=(ctx.amt||{})[code]||(ctx.amt||{})[spCode(code)];if(!(amt>0)){miss.push(code);continue}
       for(let j=0;j<k;j++){const f=spNum(x[ab+1+j])||0;its[j].amt+=amt*f}}
     its.forEach(x=>x.amt=Math.round(x.amt));if(miss.length)ctx.miss=miss}
   const tot=its.reduce((t,x)=>t+(x.amt||0),0);its.forEach(x=>{if(!(x.pct>0))x.pct=tot?x.amt/tot:0;if(x.pct>1)x.pct/=100});
@@ -1394,6 +1394,10 @@ function spNet(a,ctx,startIn){const T=spTxt,find=(re,rows)=>{for(let r=0;r<Math.
   const nb=base?dd(start,base)+1:0,wd=nb-stops.filter(s=>s>=start&&(!base||s<=base)).length,rest=BF.reduce((t,v,n)=>t+(n>nb?v:0),0);
   const days=[];let cum=0;for(let n=1;n<=N;n++){const d=spAddDays(start,n-1);const v=n<=nb?(stops.includes(d)?0:(wd>0?cumBase/wd:0)):(rest?BF[n]*(1-cumBase)/rest:0);cum+=v;days.push([d,Math.min(1,Math.round(cum*1e6)/1e6)])}
   return{kind:"網圖計算",days,its,start,adj:base?{base,cumBase,stops}:null}}
+// 派工單項次 → 契約項次:壹.甲.二.17 → 2.17、壹.甲.十二.33 → 12.33
+function spCode(c){const cn=t=>{if(/^\d+$/.test(t))return t;const d={"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9};if(!/^[一二三四五六七八九十]+$/.test(t))return t;
+    if(t==="十")return "10";const i=t.indexOf("十");if(i<0)return String(d[t]);return String((i?d[t[0]]:1)*10+(t[i+1]?d[t[i+1]]:0))};
+  return String(c||"").replace(/\s/g,"").replace(/^[壹一]\./,"").replace(/^[甲乙]\./,"").split(".").map(cn).join(".")}
 function spParse(wb,start,ctx){
   const net=wb.SheetNames.find(n=>/網圖/.test(n));
   if(net){const a=XLSX.utils.sheet_to_json(wb.Sheets[net],{header:1,raw:true,defval:""});
