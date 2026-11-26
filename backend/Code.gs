@@ -1509,8 +1509,10 @@ function staleList_(reports, from) {
   });
   return out;
 }
-function addDays_(d, n) { var t = new Date(d + 'T00:00:00'); t.setDate(t.getDate() + n); return Utilities.formatDate(t, tz_(), 'yyyy-MM-dd'); }
-function dayDiff_(a, b) { return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000); }
+/** 日期加減天數:純日曆計算(UTC),不受指令碼與試算表時區不同影響 */
+function ymdUTC_(d) { var m = String(d || '').match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : NaN; }
+function addDays_(d, n) { var t = new Date(ymdUTC_(d) + n * 86400000); if (isNaN(t.getTime())) return ''; return t.getUTCFullYear() + '-' + ('0' + (t.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + t.getUTCDate()).slice(-2); }
+function dayDiff_(a, b) { return Math.round((ymdUTC_(b) - ymdUTC_(a)) / 86400000); }
 function planVers_(p) {
   var vers = {};
   read_('預定進度').rows.forEach(function (r) {
@@ -1562,6 +1564,7 @@ function diaryMonth_(pid, ym, site) {
   var dates = Object.keys(byDate).sort();
   var info = {}; if (site) sites_().forEach(function (x) { if (x[0] === pid && x[1] === site) info = x[3] || {}; });
   var start = (site ? info.start : p.start) || dates[0] || (ym + '-01');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) start = dates[0] || (ym + '-01');
   var items = itemsFull_(pid), itemBy = {}; items.forEach(function (it) { itemBy[it.code] = it; });
   var pp = p;
   if (site) {   // 派工單:只列派工工項,契約數量用派工量,進度依這張派工單的完成金額
@@ -1580,7 +1583,7 @@ function diaryMonth_(pid, ym, site) {
   var cur = start < ym + '-01' ? start : ym + '-01';
   var stop = lastDay, tdy = today_(); if (stop > tdy) stop = tdy;
   if (dates.length && dates[0] < cur) cur = dates[0];
-  for (var guard = 0; cur <= stop && guard < 1500; guard++, cur = addDays_(cur, 1)) {
+  for (var guard = 0; cur && cur <= stop && guard < 1500; guard++, cur = addDays_(cur, 1)) {
     var reps = byDate[cur] || [], worked = reps.filter(function (r) { return !r.nowork; });
     var dayQ = {}, locs = {}, order = [], dm = {}, dmat = {}, matOrder = [];
     var crew = { tech: 0, gen: 0, lab: 0 };
@@ -1606,7 +1609,7 @@ function diaryMonth_(pid, ym, site) {
     var elapsed = dayDiff_(start, cur) + 1, extD = site ? 0 : extAt_(p, cur), remain = approved ? approved - elapsed + extD : (endDate ? dayDiff_(cur, endDate) : null);
     var sk = sigKey_(pid, site, cur), sg = sig[sk] || null, fp = fpOf_(reps);
     days.push({
-      date: cur, wk: WEEK_[new Date(cur + 'T00:00:00').getDay()], has: reps.length > 0, worked: worked.length > 0, ext: extD,
+      date: cur, wk: WEEK_[new Date(ymdUTC_(cur)).getUTCDay()], has: reps.length > 0, worked: worked.length > 0, ext: extD,
       am: uniq('am')[0] || '', pm: uniq('pm')[0] || '', nowork: uniq('nowork').join('、'),
       items: order.map(function (code) {
         var it = itemBy[code], s = cum[code];

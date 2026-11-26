@@ -148,4 +148,5 @@ r=m.call({key:'admin123',action:'report',data:{pid:'ntpu',date:'2026-09-01',by:'
 const lk=m.call({key:'field123',action:'report',id:rid,data:{pid:'ntpu',date:'2026-09-01',by:'t',tech:2,entries:[]}});ok(!lk.ok&&/超過/.test(lk.error),'鎖定:現場改不了舊回報');
 m.call({key:'admin123',action:'saveProject',project:{id:'ntpu',nolock:true}});ok(m.run("projById_('ntpu').nolock")===true,'不鎖修改存檔');
 r=m.call({key:'field123',action:'report',id:rid,data:{pid:'ntpu',date:'2026-09-01',by:'t',tech:2,entries:[]}});ok(r.ok,'不鎖修改:現場可以改舊回報');}
+ok(m.run("addDays_('2026-10-31',1)")==='2026-11-01'&&m.run("addDays_('2026-11-01',1)")==='2026-11-02'&&m.run("addDays_('2026-12-31',1)")==='2027-01-01'&&m.run("dayDiff_('2026-10-15','2026-11-30')")===46,'日期加減不受時區影響');
 console.log('全部通過');

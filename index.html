@@ -349,7 +349,7 @@ function soilSection(p){const d=S.draft,k=S.soil,isSoil=ptype(p)==="土方暫置
     h("div",{class:"row"},stepper("車次(台)","trucks",k,()=>{syncB5Port();tot.textContent=sum()}),inp("s_per","每台(米)","per","0",true)),
     inp("s_note","出土位置 / 備註(選填)","note","可不填，或例：新北市板橋區新海路150號前方",false),
     h("div",{class:"row"},tot,h("button",{type:"button",class:"btn",onclick:()=>{const n=Number(k.trucks);if(!k.type||(!noDest&&!k.dest)){tot.textContent=!k.type?"請先點選土質":"請先點選去處";return}if(isSoil&&!k.src){tot.textContent="請先選來源工地";return}if(!(n>0)){tot.textContent="請按 + 填車次";return}const isB5Port=k.type==="B5"&&k.dest==="台北港";const totM=isB5Port?(Number(k.per)||0):Math.round(n*(Number(k.per)||0)*100)/100;const perM=isB5Port?(n>0?Math.round((totM/n)*100)/100:12):(Number(k.per)||0);d.soil.push({type:k.type.trim(),dest:noDest?"":k.dest.trim(),src:isSoil?k.src:"",trucks:n,per:perM,total:totM,note:(k.note||"").trim()});S.soil={src:k.src,type:k.type,trucks:"",per:isB5Port?"":k.per,dest:noDest?"":k.dest,note:"",manualPer:false};render()}},"加入出土")));
-  d.soil.forEach((e,i)=>sec.append(h("div",{class:"entry"},h("span",{},(e.src?e.src+"｜":"")+(e.type||"未填土質")+(e.dest?"→"+e.dest:"")+(e.note?"｜📍 "+e.note:"")),h("b",{},fmt(e.trucks)+" 台"+(e.total?" / "+fmt(e.total)+" 米":"")),h("button",{type:"button","aria-label":"刪除這一筆出土",onclick:()=>{d.soil.splice(i,1);render()}},"×"))));
+  d.soil.forEach((e,i)=>sec.append(h("div",{class:"entry"},h("span",{},(e.src?e.src+"｜":"")+(e.type||"未填土質")+(e.dest?"→"+e.dest:"")+(e.note?"｜📍 "+e.note:"")),soilEditor(e),h("button",{type:"button","aria-label":"刪除這一筆出土",onclick:()=>{d.soil.splice(i,1);render()}},"×"))));
   return sec}
 function notesField(){
   const d=S.draft,p=proj();
@@ -1185,6 +1185,12 @@ function ratioOf(p,it){
   const q=Number(it.qty)||0;return q?doneQty(p,it)/q:0}
 const doneAmt=(p,it)=>it.mode==="數量"?(Number(it.price)||0)*doneQty(p,it):amt(it)*ratioOf(p,it);
 // 已填的工項數量可直接修改:回傳輸入框;改完呼叫 save(patch)
+// 已加入的出土:車次、每台米數可直接改,合計自動重算
+function soilEditor(e){const t=h("input",{type:"number",inputmode:"decimal",step:"any",class:"s","aria-label":"車次(台)"}),pr=h("input",{type:"number",inputmode:"decimal",step:"any",class:"s","aria-label":"每台(米)"}),tot=h("span",{});
+  t.value=e.trucks??"";pr.value=e.per||"";
+  const upd=()=>{const a=Number(t.value)||0,b=Number(pr.value)||0;e.trucks=a;e.per=b;e.total=b?Math.round(a*b*1000)/1000:0;tot.textContent=e.total?"＝"+fmt(e.total)+" 米":""};upd();
+  t.addEventListener("input",upd);pr.addEventListener("input",upd);
+  return h("span",{class:"qe"},t,"台",e.type==="廢棄物"&&!e.per?null:"×",e.type==="廢棄物"&&!e.per?null:pr,e.type==="廢棄物"&&!e.per?null:"米",tot)}
 function qtyEditor(e,save){
   if(e.code==="-"&&(e.qty===""||e.qty===null||e.qty===undefined))return null;
   const num=v=>v===""?"":Number(v);
@@ -1352,29 +1358,63 @@ function siteAdmin(p){const sec=h("section",{class:"card"},h("h2",{},"派工地�
     sec.append(row)});
   if(!list.length)sec.append(h("p",{class:"note"},"還沒有派工地點。請按上方「📋 上傳新派工單」。"));
   return sec}
-// 分案預定進度:讀施工日誌「附件」分頁的「預計進度」列(每天一格),從指定日期起寫入
-function sitePlanUpload(p,site){const X=S.sp=S.sp||{};const box=h("div",{class:"sheet"});
-  box.append(h("p",{class:"note"},"選這個分案的月施工日誌 Excel(含「附件」分頁)。程式讀「預計進度」那一列,每天一個數字。每個月的日誌各上傳一次;展延時把「從哪一天起套用」改成核定日,那天以前的預定進度不會動。"));
+// 分案預定進度:讀施工日誌。優先「網圖項目進度表」的每日表(日期、累計預定);每日表空白時,用上面的工作項目
+// (百分比或預估金額、開始第 n 天、日曆天)平均拆成每天;都沒有才讀「附件」分頁的「預計進度」列(每月一份)。
+function spSerial(v){if(v instanceof Date)return v.getFullYear()+"-"+String(v.getMonth()+1).padStart(2,"0")+"-"+String(v.getDate()).padStart(2,"0");
+  if(typeof v==="number"&&v>20000&&v<80000){const d=XLSX.SSF.parse_date_code(v);return d.y+"-"+String(d.m).padStart(2,"0")+"-"+String(d.d).padStart(2,"0")}
+  const m=String(v||"").trim().replace(/\//g,"-").match(/^(\d{2,4})-(\d{1,2})-(\d{1,2})/);if(!m)return "";const y=+m[1]<1000?+m[1]+1911:+m[1];return y+"-"+String(m[2]).padStart(2,"0")+"-"+String(m[3]).padStart(2,"0")}
+function spNum(v){if(typeof v==="number")return v;const s=String(v||"").trim();if(!s)return null;const n=parseFloat(s.replace(/[%,\s]/g,""));return isFinite(n)?(/%/.test(s)?n/100:n):null}
+function spAddDays(d,n){const t=new Date(Date.UTC(+d.slice(0,4),+d.slice(5,7)-1,+d.slice(8,10))+n*864e5);return t.toISOString().slice(0,10)}
+const spTxt=v=>String(v??"").replace(/\s/g,"");
+function spParse(wb,start){
+  const net=wb.SheetNames.find(n=>/網圖/.test(n));
+  if(net){const a=XLSX.utils.sheet_to_json(wb.Sheets[net],{header:1,raw:true,defval:""});
+    // 1. 每日表:有「日期」「累計預定」兩欄的標題列
+    for(let r=0;r<Math.min(a.length,40);r++){const row=a[r],cd=row.findIndex(c=>spTxt(c)==="日期"),cc=row.findIndex(c=>spTxt(c)==="累計預定");
+      if(cd<0||cc<0)continue;const days=[];for(let i=r+1;i<a.length;i++){const d=spSerial(a[i][cd]),v=spNum(a[i][cc]);if(d&&v!==null)days.push([d,v>1?v/100:v])}
+      if(days.length)return{sheet:net,kind:"每日表",days};break}
+    // 2. 工作項目:百分比(或預估金額)、日曆天、開始(第n天)
+    for(let r=0;r<Math.min(a.length,40);r++){const row=a[r].map(spTxt),cs=row.findIndex(c=>/^開始/.test(c));if(cs<0)continue;
+      const near=(f)=>row.findIndex((c,i)=>i>=cs-8&&i<cs&&f(c)),cn=near(c=>c==="日曆天"),cp=near(c=>c==="百分比"),ca=near(c=>/預估金額/.test(c)),cw=near(c=>c==="工作項目");if(cw<0||cn<0)continue;
+      const its=[];for(let i=r+1;i<a.length;i++){const x=a[i];if(spTxt(x[cw])==="合計"||!spTxt(x[cw]))break;its.push({name:spTxt(x[cw]),pct:cp>=0?spNum(x[cp]):null,amt:ca>=0?spNum(x[ca]):null,n:spNum(x[cn]),s:spNum(x[cs])})}
+      const tot=its.reduce((t,x)=>t+(x.amt||0),0);its.forEach(x=>{if(x.pct===null&&tot)x.pct=x.amt/tot;if(x.pct>1)x.pct/=100});
+      const miss=its.filter(x=>!x.pct||!x.n||!x.s).map(x=>x.name);
+      if(!its.length)break;if(miss.length)return{sheet:net,kind:"工作項目",err:"「"+net.trim()+"」還沒填完,這些工作項目缺百分比(或預估金額)、日曆天或開始第幾天:"+miss.join("、")+"。請在 Excel 填好存檔後再上傳。"};
+      if(!start)return{sheet:net,kind:"工作項目",needStart:true,its};
+      const last=Math.max(...its.map(x=>x.s+x.n-1)),days=[];let cum=0;
+      for(let k=1;k<=last;k++){its.forEach(x=>{if(k>=x.s&&k<x.s+x.n)cum+=x.pct/x.n});days.push([spAddDays(start,k-1),Math.min(1,Math.round(cum*1e6)/1e6)])}
+      return{sheet:net,kind:"工作項目",days,its}}}
+  // 3. 附件分頁的「預計進度」列(1~31 日)
+  for(const n of wb.SheetNames.filter(n=>/附件/.test(n))){const a=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:""});
+    const pr=a.findIndex(r=>r.some(c=>spTxt(c)==="預計進度"));if(pr<0)continue;
+    let c0=-1;for(let i=0;i<Math.min(a.length,20)&&c0<0;i++){const r=a[i];for(let c=0;c+30<r.length;c++){let ok=true;for(let d=1;d<=31&&ok;d++)ok=String(r[c+d-1]).trim()===String(d);if(ok){c0=c;break}}}
+    if(c0<0)continue;const t=a.slice(0,3).flat().map(String).join(" ").match(/(\d{2,4})\s*年\s*(\d{1,2})\s*月/);
+    return{sheet:n,kind:"附件",vals:Array.from({length:31},(_,d)=>a[pr][c0+d]),ym:t?(Number(t[1])<1000?Number(t[1])+1911:Number(t[1]))+"-"+String(t[2]).padStart(2,"0"):""}}
+  return null}
+function sitePlanUpload(p,site){const X=S.sp=S.sp||{};const box=h("div",{class:"sheet"});const info=(p.siteInfo||[]).find(x=>x.name===site)||{};
+  box.append(h("p",{class:"note"},"選這個分案的施工日誌 Excel。程式會讀「網圖項目進度表」:有每日表就直接用;每日表空白時,把每個工作項目的百分比平均分到它的施工天數。沒有網圖才讀「附件」分頁的「預計進度」。展延時把「從哪一天起套用」改成核定日,那天以前的預定進度不會動。"));
   const fi=h("input",{type:"file",accept:".xls,.xlsx,.xlsm"});
+  const parse=()=>{const g=spParse(X.wb,X.start||"");Object.assign(X,{g,err:""});if(!g){X.err="找不到「網圖項目進度表」或「附件」的預計進度,請確認是施工日誌檔。";return}
+    if(g.err){X.err=g.err;return}
+    if(g.kind==="附件"){X.ym=X.ym||g.ym;const nd=X.ym?new Date(+X.ym.slice(0,4),+X.ym.slice(5,7),0).getDate():0;g.days=[];
+      for(let d=1;d<=nd;d++){const v=spNum(g.vals[d-1]);if(v!==null&&String(g.vals[d-1]).trim()!=="")g.days.push([X.ym+"-"+String(d).padStart(2,"0"),v>1?v/100:v])}}
+    if(g.days&&g.days.length&&(!X.from||X.fromAuto)){X.from=g.days[0][0];X.fromAuto=true}};
   fi.addEventListener("change",async()=>{const f=fi.files[0];if(!f)return;try{if(typeof XLSX==="undefined")throw new Error("Excel 讀取元件還在載入,請稍等幾秒再選一次");
-    const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});let got=null;
-    for(const n of wb.SheetNames.filter(n=>/附件/.test(n))){const a=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:""});
-      const pr=a.findIndex(r=>r.some(c=>String(c).replace(/\s/g,"")==="預計進度"));if(pr<0)continue;
-      let hr=-1,c0=-1;for(let i=0;i<Math.min(a.length,20)&&hr<0;i++){const r=a[i];for(let c=0;c+30<r.length;c++){let ok=true;for(let d=1;d<=31&&ok;d++)ok=String(r[c+d-1]).trim()===String(d);if(ok){hr=i;c0=c;break}}}
-      if(hr<0)continue;const t=a.slice(0,3).flat().map(String).join(" ").match(/(\d{2,4})\s*年\s*(\d{1,2})\s*月/);
-      got={sheet:n,vals:Array.from({length:31},(_,d)=>a[pr][c0+d]),ym:t?(Number(t[1])<1000?Number(t[1])+1911:Number(t[1]))+"-"+String(t[2]).padStart(2,"0"):""};break}
-    if(!got)throw new Error("找不到「附件」分頁的「預計進度」列,請確認是施工日誌檔");
-    Object.keys(X).forEach(k=>delete X[k]);Object.assign(X,got,{file:f.name,from:got.ym?got.ym+"-01":""});render()}catch(e){X.msg="讀取失敗:"+e.message;X.ok=false;render()}});
+    const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});Object.keys(X).forEach(k=>delete X[k]);Object.assign(X,{wb,file:f.name,start:info.start||""});parse();render()}catch(e){X.err="讀取失敗:"+e.message;render()}});
   box.append(h("label",{class:"f"},"選擇施工日誌 Excel"+(X.file?"(目前:"+X.file+")":""),fi));
-  if(X.vals){const ym=h("input",{type:"month"});ym.value=X.ym||"";ym.addEventListener("change",()=>{X.ym=ym.value;if(!X.from||X.from.slice(0,7)!==X.ym)X.from=X.ym+"-01";render()});
-    const fr=h("input",{type:"date"});fr.value=X.from||"";fr.addEventListener("change",()=>{X.from=fr.value;render()});
-    const nd=X.ym?new Date(+X.ym.slice(0,4),+X.ym.slice(5,7),0).getDate():0;
-    const days=[];for(let d=1;d<=nd;d++){const v=X.vals[d-1];const n=typeof v==="number"?v:parseFloat(String(v).replace(/[%,\s]/g,""));if(isFinite(n)&&String(v).trim()!==""){const val=typeof v==="string"&&/%/.test(v)?n/100:n;days.push([X.ym+"-"+String(d).padStart(2,"0"),val])}}
-    const use=days.filter(x=>!X.from||x[0]>=X.from),pc=v=>(v>1?v:v*100).toFixed(2)+"%";
-    box.append(h("div",{class:"date-by-row"},h("label",{class:"f"},"日誌月份",ym),h("label",{class:"f"},"從哪一天起套用",fr)),
-      h("p",{class:"note"},"讀到「"+X.sheet+"」"+days.length+" 天的預計進度"+(days.length?"("+days[0][0].slice(5)+" "+pc(days[0][1])+" → "+days[days.length-1][0].slice(5)+" "+pc(days[days.length-1][1])+")":"")+"。會寫入 "+use.length+" 天"+(X.from?"("+X.from+" 起)":"")+"。"),
-      h("button",{type:"button",class:"btn primary",disabled:S.busy||!use.length,onclick:async()=>{try{S.busy=true;render();const j=await api("saveSitePlan",{pid:p.id,site,from:X.from,days:use});
-        Object.keys(X).forEach(k=>delete X[k]);X.msg="已寫入「"+site+"」預定進度 "+j.n+" 天("+j.from+" ~ "+j.to+")。";X.ok=true}catch(e){X.msg="沒有寫入成功:"+e.message;X.ok=false}S.busy=false;render()}},"寫入預定進度 "+use.length+" 天"))}
+  if(X.err)box.append(h("div",{class:"msg warn"},X.err));
+  const g=X.g;
+  if(g&&!X.err){
+    if(g.kind==="工作項目"){const si=h("input",{type:"date"});si.value=X.start||"";si.addEventListener("change",()=>{X.start=si.value;X.fromAuto=true;X.from="";parse();render()});
+      box.append(h("label",{class:"f"},"開工日(第 1 天)",si));if(g.needStart){box.append(h("p",{class:"note"},"網圖是用「第幾天」排的,請先選這張派工單的開工日。"));return box}}
+    if(g.kind==="附件"){const ym=h("input",{type:"month"});ym.value=X.ym||"";ym.addEventListener("change",()=>{X.ym=ym.value;X.fromAuto=true;parse();render()});box.append(h("label",{class:"f"},"日誌月份",ym))}
+    const days=g.days||[],fr=h("input",{type:"date"});fr.value=X.from||"";fr.addEventListener("change",()=>{X.from=fr.value;X.fromAuto=false;render()});
+    const use=days.filter(x=>!X.from||x[0]>=X.from),pc=v=>(v*100).toFixed(2)+"%";
+    box.append(h("label",{class:"f"},"從哪一天起套用",fr),
+      h("p",{class:"note"},"讀到「"+g.sheet.trim()+"」"+(g.kind==="工作項目"?"的 "+g.its.length+" 個工作項目,拆成":"")+" "+days.length+" 天的預定進度"+(days.length?"("+days[0][0]+" "+pc(days[0][1])+" → "+days[days.length-1][0]+" "+pc(days[days.length-1][1])+")":"")+"。會寫入 "+use.length+" 天。"));
+    if(g.kind==="工作項目")box.append(h("div",{class:"tbl"},h("table",{},h("thead",{},h("tr",{},["工作項目","百分比","開始(第n天)","日曆天"].map(x=>h("th",{},x)))),h("tbody",{},g.its.map(x=>h("tr",{},h("td",{class:"w"},x.name),h("td",{class:"r"},pc(x.pct)),h("td",{class:"r"},fmt(x.s)),h("td",{class:"r"},fmt(x.n))))))));
+    box.append(h("button",{type:"button",class:"btn primary",disabled:S.busy||!use.length,onclick:async()=>{try{S.busy=true;render();const j=await api("saveSitePlan",{pid:p.id,site,from:X.from,days:use});
+      Object.keys(X).forEach(k=>delete X[k]);X.msg="已寫入「"+site+"」預定進度 "+j.n+" 天("+j.from+" ~ "+j.to+")。";X.ok=true}catch(e){X.msg="沒有寫入成功:"+e.message;X.ok=false}S.busy=false;render()}},"寫入預定進度 "+use.length+" 天"))}
   if(X.msg)box.append(h("div",{class:"msg "+(X.ok?"ok":"warn")},X.msg));
   return box}
 async function setSite(p,site,status,date){S.busy=true;render();try{await api("siteStatus",{pid:p.id,site,status,date});S.siteAsk="";S.siteDone=status==="完工"?p.id+"|"+site:"";await reload(true)}catch(e){S.err="沒有存成功:"+e.message}S.busy=false;render()}
