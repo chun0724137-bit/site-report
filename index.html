@@ -265,8 +265,8 @@ function viewReport(){const p=proj(),d=S.draft,out=[];const T=ptype(p),isSoil=T=
     const disp=p.multi&&d.site?((p.dispatch||{})[d.site]||[]):[],dq={};disp.forEach(x=>dq[x[0]]=x[1]);
     const act=(disp.length?disp.map(x=>p.items.find(i=>i.code===x[0])):(p.active||[]).map(c=>p.items.find(i=>i.code===c))).filter(i=>i&&i.mode!=="依大項百分比");
     const grid=h("div",{class:"items"});
-    act.forEach(it=>grid.append(h("button",{type:"button",class:"item"+(isOver(p,it)?" over":"")+(S.pick&&S.pick.code===it.code?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,cat:it.cat,qty:"",loc:"",method:"測距儀",photos:[]};render()}},
-      h("span",{class:"n"},it.name),h("span",{class:"q"},disp.length?it.code+(catTag(it)?"｜"+catTag(it):"")+"｜派工 "+fmt(dq[it.code])+" "+it.unit:itemStat(p,it)))));
+    groupItems(p,grid,act,it=>h("button",{type:"button",class:"item"+(isOver(p,it)?" over":"")+(S.pick&&S.pick.code===it.code?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,cat:it.cat,qty:"",loc:"",method:"測距儀",photos:[]};render()}},
+      h("span",{class:"n"},it.name),h("span",{class:"q"},disp.length?it.code+"｜派工 "+fmt(dq[it.code])+" "+it.unit:itemStat(p,it))),S.pick&&S.pick.code);
     if(p.items.length&&(!disp.length||S.showAllDispItems))grid.append(h("button",{type:"button",class:"item yl"+(S.pick&&S.pick.code==="other"?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code==="other"?null:{code:"other",name:"",unit:"",qty:"",loc:"",method:"測距儀",photos:[]};S.search="";render()}},h("span",{class:"n"},"其他契約項目",h("span",{class:"pm"},S.pick&&S.pick.code==="other"?"－":"＋")),h("span",{class:"q"},"搜尋全部 "+p.items.length+" 項")));
     else if(disp.length)grid.append(h("button",{type:"button",class:"item yl",onclick:()=>{S.showAllDispItems=true;S.pick={code:"other",name:"",unit:"",qty:"",loc:"",method:"測距儀",photos:[]};S.search="";render()}},h("span",{class:"n"},"臨時加填派工單外工項",h("span",{class:"pm"},"＋")),h("span",{class:"q"},"目前已限定此派工單 "+disp.length+" 項")));
     const sec=h("section",{class:"card"},
@@ -275,7 +275,7 @@ function viewReport(){const p=proj(),d=S.draft,out=[];const T=ptype(p),isSoil=T=
       usedWorks.length?wSug:null,
       h("h2",{style:"margin-top:8px"},"📊 本日契約項目數量(可當日填，或於「看每日回報及修改」統一填寫)"),
       grid);
-    if(S.pick)sec.append(pickSheet(p));
+    if(S.pick){const ps=pickSheet(p),sb=S.pick.code!=="other"&&grid.querySelector(".item.sel");if(sb)sb.after(ps);else sec.append(ps)}
     d.entries.forEach((e,i)=>sec.append(h("div",{class:"entry"},(()=>{const it=e.code!=="-"&&(p.items||[]).find(i=>i.code===e.code);return h("span",{style:"flex:1;min-width:0"},(e.code==="-"?"":e.code+" ")+e.name+(e.loc?"｜"+e.loc:"")+(e.photo?" 📷":""),it?h("small",{class:"note",style:"display:block;font-size:12px;margin-top:2px"},it.mode==="現場填百分比"?"一式｜累計 "+fmt(ratioOf(p,it)*100)+"%":(it.qty===null||it.qty===undefined||it.qty===""?"":"契約 "+fmt(it.qty)+" "+it.unit+"｜")+"累計 "+fmt(doneQty(p,it))):null)})(),qtyEditor(e,pt=>Object.assign(e,pt)),h("button",{type:"button","aria-label":"刪除這一筆",onclick:()=>{d.entries.splice(i,1);render()}},"×"))));
     out.push(sec);
     if(isRepair){out.push(matSection());out.push(h("section",{class:"card"},h("h2",{},"備註"),txt("備註","notes","例:雨天暫停半天",true)));}
@@ -794,8 +794,8 @@ function viewWeeklyQty(p){
       const wDisp=p.multi&&g.site?((p.dispatch||{})[g.site]||[]):[];
       const act=(wDisp.length?wDisp.map(x=>p.items.find(i=>i.code===x[0])):(p.active||[]).map(c=>p.items.find(i=>i.code===c))).filter(i=>i&&i.mode!=="依大項百分比");
       const grid=h("div",{class:"items"});
-      act.forEach(it=>grid.append(h("button",{type:"button",class:"item"+(isOver(p,it)?" over":"")+(S.wkPick&&S.wkPick.code===it.code?" sel":""),onclick:()=>{S.wkPick=S.wkPick&&S.wkPick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,cat:it.cat,qty:"",loc:"",method:"測距儀",photos:[]};render()}},
-        h("span",{class:"n"},it.name),h("span",{class:"q"},itemStat(p,it)))));
+      groupItems(p,grid,act,it=>h("button",{type:"button",class:"item"+(isOver(p,it)?" over":"")+(S.wkPick&&S.wkPick.code===it.code?" sel":""),onclick:()=>{S.wkPick=S.wkPick&&S.wkPick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,cat:it.cat,qty:"",loc:"",method:"測距儀",photos:[]};render()}},
+        h("span",{class:"n"},it.name),h("span",{class:"q"},itemStat(p,it))),S.wkPick&&S.wkPick.code);
       if(p.items.length)grid.append(h("button",{type:"button",class:"item yl"+(S.wkPick&&S.wkPick.code==="other"?" sel":""),onclick:()=>{S.wkPick=S.wkPick&&S.wkPick.code==="other"?null:{code:"other",name:"",unit:"",qty:"",loc:"",method:"測距儀",photos:[]};S.search="";render()}},
         h("span",{class:"n"},"搜尋全部契約項目",h("span",{class:"pm"},S.wkPick&&S.wkPick.code==="other"?"－":"＋")),h("span",{class:"q"},"全部 "+p.items.length+" 項")));
       eBox.append(grid);
@@ -848,7 +848,7 @@ function viewWeeklyQty(p){
               await saveReportPatch(primary,{entries:nx,photos:curPhotos},"已將「"+k.code+" "+k.name+"」數量寫入 "+g.date+"。");
             }},"儲存到 "+g.date)));
         }
-        eBox.append(sbox);
+        {const sb=k.code!=="other"&&grid.querySelector(".item.sel");if(sb)sb.after(sbox);else eBox.append(sbox)}
       }
     }
     card.append(eBox);
@@ -1114,6 +1114,12 @@ function fillItemList(p,list,q,pick){list.replaceChildren();S.catOpen=S.catOpen|
   cats.forEach(c=>{const open=q?true:(S.catOpen[c]!==undefined?S.catOpen[c]:cats.length===1);
     list.append(h("button",{type:"button",class:"cath"+(open?" on":""),"aria-expanded":String(open),onclick:()=>{S.catOpen[c]=!open;fillItemList(p,list,q,pick)}},(open?"▾ ":"▸ ")+c+"（"+by[c].length+" 項）"));
     if(open)by[c].forEach(it=>list.append(h("button",{type:"button",class:"chk",style:"width:100%;background:none;border:0;border-bottom:1px solid var(--line);text-align:left;padding-left:20px",onclick:()=>pick(it)},h("span",{},it.code+" "+it.name+(it.unit?"("+it.unit+")":"")))))})}
+// 工項大按鈕依大項分組,可收合;選到的工項所在大項自動展開
+function groupItems(p,grid,act,mk,selCode){const by={},cats=[];act.forEach(it=>{const c=catTag(it)||it.cat||"其他";if(!by[c]){by[c]=[];cats.push(c)}by[c].push(it)});
+  if(cats.length<2){act.forEach(it=>grid.append(mk(it)));return}
+  S.rCat=S.rCat||{};cats.forEach(c=>{const k=p.id+"|"+c,has=by[c].some(it=>it.code===selCode),open=has||!!S.rCat[k];
+    grid.append(h("button",{type:"button",class:"cath"+(open?" on":""),"aria-expanded":String(open),onclick:()=>{S.rCat[k]=!open;if(has&&open){S.pick=null;S.wkPick=null}render()}},(open?"▾ ":"▸ ")+c+"（"+by[c].length+" 項）"));
+    if(open)by[c].forEach(it=>grid.append(mk(it)))})}
 function catTag(it){
   if(!it||!it.cat||it.cat==="未分類")return "";
   const m=String(it.code||"").match(/^(\d+)\./);
@@ -1330,7 +1336,12 @@ function itemImportAdmin(p){
   const sg=h("div",{class:"sug"});modes.forEach(([k,t])=>sg.append(h("button",{type:"button",class:"tag"+(I.mode===k?" on":""),onclick:()=>{S.imp={mode:k,onlyDirect:true,n:"1",date:"",ext:"",replace:k==="redo"};render()}},t)));sec.append(sg);
   const inp=(label,key,type,ph)=>{const i=h("input",{type:type||"text",placeholder:ph||""});i.value=I[key]??"";i.addEventListener("input",()=>I[key]=i.value);return h("label",{class:"f"},label,i)};
   if(I.mode==="new"){const ty=h("select",{},["一般","開口契約"].map(x=>h("option",{value:x},x)));ty.value=I.type||"一般";ty.addEventListener("change",()=>I.type=ty.value);
-    sec.append(inp("工程名稱(全名)","name"),h("div",{class:"row"},inp("選單簡稱(也是分頁名稱)","short","text","例:南港玉成公園"),h("label",{class:"f"},"工程類型",ty)),h("div",{class:"row"},inp("開工日期(可空白)","start","date"),inp("核定工期(天)(可空白)","approved","number")))}
+    sec.append(inp("工程名稱(全名)","name"),h("div",{class:"row"},inp("選單簡稱(也是分頁名稱)","short","text","例:南港玉成公園"),h("label",{class:"f"},"工程類型",ty)),(()=>{const st=h("input",{type:"date"}),en=h("input",{type:"date"}),ap=h("input",{type:"number",min:"1",placeholder:"例:180"});st.value=I.start||"";en.value=I.end||"";ap.value=I.approved||"";
+      const D=x=>Date.parse(x+"T00:00:00Z"),fromAp=()=>{if(st.value&&Number(ap.value)>0){en.value=new Date(D(st.value)+(Number(ap.value)-1)*864e5).toISOString().slice(0,10);I.end=en.value}},
+        fromEn=()=>{if(st.value&&en.value){const n=Math.round((D(en.value)-D(st.value))/864e5)+1;if(n>0){ap.value=String(n);I.approved=String(n)}}};
+      st.addEventListener("change",()=>{I.start=st.value;if(en.value)fromEn();else fromAp()});en.addEventListener("change",()=>{I.end=en.value;fromEn()});ap.addEventListener("input",()=>{I.approved=ap.value;fromAp()});
+      return h("div",{style:"display:flex;flex-direction:column;gap:10px"},h("div",{class:"date-by-row"},h("label",{class:"f"},"開工日期(可空白)",st),h("label",{class:"f"},"預定完工日(可空白)",en)),
+        h("label",{class:"f"},"核定工期(天)(選好兩個日期會自動算日曆天;也可以直接填天數,自動帶出預定完工日)",ap))})())}
   if(I.mode==="change"){const ns=h("select",{},[["1","第一次變更"],["2","第二次變更"]].map(x=>h("option",{value:x[0]},x[1])));ns.value=I.n;ns.addEventListener("change",()=>{I.n=ns.value;render()});
     if(p.multi)sec.append(h("div",{class:"msg warn"},"⚠ 這是開口契約:派工單請用「📋 匯入派工單」,這裡只用於辦理契約變更(例如議價新增工項)。"));
     sec.append(h("div",{class:"row"},h("label",{class:"f"},"第幾次變更",ns),inp("變更日期(議定生效日)","date","date"),p.multi?null:inp("展延天數(天)","ext","number","0")),h("p",{class:"note"},p.multi?"從變更日期那天起改用變更數量;開口契約的工期以各派工單的開工日、預定完工日為準。":"日誌從變更日期那天起改用變更數量、加上展延天數;變更日期以前不受影響。"));
@@ -1379,13 +1390,16 @@ function itemImportAdmin(p){
   }
   sec.append(msg);
   return sec}
-function projAdmin(){const sec=h("section",{class:"card"},h("h2",{},"工程管理"),h("p",{class:"note"},"改成「完工」的工程會收到下方「已完工」裡,現場選單不再出現,試算表的契約、日誌分頁也會隱藏(資料仍保留,改回施工中就會再出現)。契約項目可用上方「匯入契約項目」上傳。"));
+function projAdmin(){const sec=h("section",{class:"card"},h("h2",{},"工程管理"),h("p",{class:"note"},"改成「完工」的工程會收到下方「已完工」裡,現場選單不再出現,試算表的契約、日誌分頁也會隱藏(資料仍保留,改回施工中就會再出現)。契約項目可用上方「匯入契約項目」上傳。"),
+    h("button",{type:"button",class:"btn primary",onclick:()=>{S.imp={mode:"new",onlyDirect:true,n:"1",date:"",ext:"",replace:false};let st={};try{st=JSON.parse(ls.get("setFold","{}")||"{}")}catch(e){}
+      Object.keys(st).forEach(k=>{if(k.includes("匯入契約項目"))delete st[k]});ls.set("setFold",JSON.stringify(st));render();
+      const t=[...document.querySelectorAll("section.card")].find(x=>(x.querySelector("h2")||{}).textContent?.includes("匯入契約項目"));if(t)t.scrollIntoView({behavior:"smooth",block:"start"})}},"＋ 新增工程（上傳標單）"));
   const row=p=>{const s=h("select",{id:"st_"+p.id,"aria-label":(p.short||p.name)+"狀態"},["未開工","施工中","完工"].map(x=>h("option",{value:x},x)));s.value=p.status||"施工中";
     s.addEventListener("change",async()=>{try{await S.db.doc("projects/"+p.id).update({status:s.value})}catch(e){S.err="狀態沒有存成功:"+e.message;render()}});return h("div",{class:"row"},h("span",{},p.short||p.name),s)};
   const done=S.projects.filter(p=>p.status==="完工");S.projects.filter(p=>p.status!=="完工").forEach(p=>sec.append(row(p)));
   if(done.length){sec.append(h("button",{type:"button",class:"cath"+(S.doneOpen?" on":""),"aria-expanded":String(!!S.doneOpen),onclick:()=>{S.doneOpen=!S.doneOpen;render()}},(S.doneOpen?"▾ ":"▸ ")+"已完工（"+done.length+" 個）"));if(S.doneOpen)done.forEach(p=>sec.append(row(p)))}
   const n=h("input",{id:"np_name",type:"text",placeholder:"工程名稱(全名)"}),sh=h("input",{id:"np_short",type:"text",placeholder:"選單簡稱"}),mu=h("input",{id:"np_multi",type:"checkbox"});
-  sec.append(h("h2",{},"新增工程"),n,sh,h("label",{class:"chk",for:"np_multi"},mu,h("span",{},"開口契約(有多個派工地點)")),h("button",{type:"button",class:"btn primary",onclick:async()=>{if(!n.value.trim()){n.focus();return}try{await S.db.doc("projects/new").set({name:n.value.trim(),short:sh.value.trim(),multi:mu.checked,status:"未開工"})}catch(e){S.err="工程沒有新增成功:"+e.message;render()}}},"新增工程"));
+  sec.append(h("h2",{},"只建工程名稱(不上傳標單,例如機動修繕)"),n,sh,h("label",{class:"chk",for:"np_multi"},mu,h("span",{},"開口契約(有多個派工地點)")),h("button",{type:"button",class:"btn primary",onclick:async()=>{if(!n.value.trim()){n.focus();return}try{await S.db.doc("projects/new").set({name:n.value.trim(),short:sh.value.trim(),multi:mu.checked,status:"未開工"})}catch(e){S.err="工程沒有新增成功:"+e.message;render()}}},"新增工程"));
   return sec}
 function viewPeople(){const out=[],mo=S.month,rs=rowsFor("",mo);const ym=mo.split("-").map(Number);const nd=new Date(ym[0],ym[1],0).getDate();
   out.push(S.boss?bossTabs():h("button",{type:"button",class:"btn",onclick:()=>{S.view="all";render();window.scrollTo(0,0)}},"← 回到總覽"));
