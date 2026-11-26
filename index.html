@@ -270,8 +270,9 @@ function viewReport(){const p=proj(),d=S.draft,out=[];const T=ptype(p),isSoil=T=
     const disp=p.multi&&d.site?((p.dispatch||{})[d.site]||[]):[],dq={};disp.forEach(x=>dq[x[0]]=x[1]);
     const act=(disp.length?disp.map(x=>p.items.find(i=>i.code===x[0])):(p.active||[]).map(c=>p.items.find(i=>i.code===c))).filter(i=>i&&i.mode!=="依大項百分比");
     const grid=h("div",{class:"items"});
-    groupItems(p,grid,act,it=>h("button",{type:"button",class:"item"+(isOver(p,it)?" over":"")+(S.pick&&S.pick.code===it.code?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,cat:it.cat,qty:"",loc:"",method:"測距儀",photos:[]};render()}},
-      h("span",{class:"n"},it.name),h("span",{class:"q"},disp.length?it.code+"｜派工 "+fmt(dq[it.code])+" "+it.unit:itemStat(p,it))),S.pick&&S.pick.code);
+    const sc=c=>Number((((p.sums||{})[c]||{}).s||{})[d.site]||0);
+    groupItems(p,grid,act,it=>h("button",{type:"button",class:"item"+((disp.length?sc(it.code)>Number(dq[it.code])+1e-9:isOver(p,it))?" over":"")+(S.pick&&S.pick.code===it.code?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code===it.code?null:{code:it.code,name:it.name,unit:it.unit,mode:it.mode,cat:it.cat,qty:"",loc:"",method:"測距儀",photos:[]};render()}},
+      h("span",{class:"n"},it.name),h("span",{class:"q"},disp.length?it.code+"｜派工 "+fmt(dq[it.code])+" "+it.unit+"｜累計 "+fmt(sc(it.code)):itemStat(p,it))),S.pick&&S.pick.code);
     if(p.items.length&&(!disp.length||S.showAllDispItems))grid.append(h("button",{type:"button",class:"item yl"+(S.pick&&S.pick.code==="other"?" sel":""),onclick:()=>{S.pick=S.pick&&S.pick.code==="other"?null:{code:"other",name:"",unit:"",qty:"",loc:"",method:"測距儀",photos:[]};S.search="";render()}},h("span",{class:"n"},"其他契約項目",h("span",{class:"pm"},S.pick&&S.pick.code==="other"?"－":"＋")),h("span",{class:"q"},"搜尋全部 "+p.items.length+" 項")));
     else if(disp.length)grid.append(h("button",{type:"button",class:"item yl",onclick:()=>{S.showAllDispItems=true;S.pick={code:"other",name:"",unit:"",qty:"",loc:"",method:"測距儀",photos:[]};S.search="";render()}},h("span",{class:"n"},"臨時加填派工單外工項",h("span",{class:"pm"},"＋")),h("span",{class:"q"},"目前已限定此派工單 "+disp.length+" 項")));
     const sec=h("section",{class:"card"},
@@ -281,7 +282,7 @@ function viewReport(){const p=proj(),d=S.draft,out=[];const T=ptype(p),isSoil=T=
       h("h2",{style:"margin-top:8px"},"📊 本日契約項目數量(可當日填，或於「看每日回報及修改」統一填寫)"),
       grid);
     if(S.pick){const ps=pickSheet(p),sb=S.pick.code!=="other"&&grid.querySelector(".item.sel");if(sb)sb.after(ps);else sec.append(ps)}
-    d.entries.forEach((e,i)=>sec.append(h("div",{class:"entry"},(()=>{const it=e.code!=="-"&&(p.items||[]).find(i=>i.code===e.code);return h("span",{style:"flex:1;min-width:0"},(e.code==="-"?"":e.code+" ")+e.name+(e.loc?"｜"+e.loc:"")+(e.photo?" 📷":""),it?h("small",{class:"note",style:"display:block;font-size:12px;margin-top:2px"},it.mode==="現場填百分比"?"一式｜累計 "+fmt(ratioOf(p,it)*100)+"%":(it.qty===null||it.qty===undefined||it.qty===""?"":"契約 "+fmt(it.qty)+" "+it.unit+"｜")+"累計 "+fmt(doneQty(p,it))):null)})(),qtyEditor(e,pt=>Object.assign(e,pt)),h("button",{type:"button","aria-label":"刪除這一筆",onclick:()=>{d.entries.splice(i,1);render()}},"×"))));
+    d.entries.forEach((e,i)=>sec.append(h("div",{class:"entry"},(()=>{const it=e.code!=="-"&&(p.items||[]).find(i=>i.code===e.code);return h("span",{style:"flex:1;min-width:0"},(e.code==="-"?"":e.code+" ")+e.name+(e.loc?"｜"+e.loc:"")+(e.photo?" 📷":""),it?h("small",{class:"note",style:"display:block;font-size:12px;margin-top:2px"},disp.length&&dq[it.code]!==undefined?"派工 "+fmt(dq[it.code])+" "+it.unit+"｜累計 "+fmt(sc(it.code)):it.mode==="現場填百分比"?"一式｜累計 "+fmt(ratioOf(p,it)*100)+"%":(it.qty===null||it.qty===undefined||it.qty===""?"":"契約 "+fmt(it.qty)+" "+it.unit+"｜")+"累計 "+fmt(doneQty(p,it))):null)})(),qtyEditor(e,pt=>Object.assign(e,pt)),h("button",{type:"button","aria-label":"刪除這一筆",onclick:()=>{d.entries.splice(i,1);render()}},"×"))));
     out.push(sec);
     if(isRepair){out.push(matSection());out.push(h("section",{class:"card"},h("h2",{},"備註"),txt("備註","notes","例:雨天暫停半天",true)));}
     else{out.push(soilSection(p));
