@@ -677,13 +677,16 @@ async function saveGridCell(p,site,date,it,val,inp){const nv=val===""?0:Number(v
 const rocD=d=>d?(Number(d.slice(0,4))-1911)+"/"+Number(d.slice(5,7))+"/"+Number(d.slice(8,10)):"";
 const canShareFiles=()=>{try{return !!(navigator.canShare&&navigator.canShare({files:[new File([new Uint8Array(1)],"t.jpg",{type:"image/jpeg"})]}))}catch(e){return false}};
 function agencyText(p,g,D){const day=D&&(D.days||[]).find(x=>x.date===g.date),pj=(D&&D.project)||{},pc=v=>v===null||v===undefined?"":(v*100).toFixed(2)+"%";
-  return ["工程名稱:"+(g.site||p.name),"監造單位:"+(p.supervisor||""),"承攬廠商:"+(p.company||pj.company||""),"工期："+rocD(pj.start)+"~"+rocD(pj.end),"本日日期："+rocD(g.date),
+  return ["工程名稱:"+(g.site||p.name),"監造單位:"+(p.supervisor||""),"承攬廠商:"+(p.company||pj.company||"松青營造有限公司"),"工期："+rocD(pj.start)+"~"+rocD(pj.end),"本日日期："+rocD(g.date),
     "預定進度："+pc(day&&day.planned),"實際進度："+pc(day&&day.actual),"出工人數："+fmt(g.hc),"查核材料規及品質："+(g.sample||"無"),"施工項目："+(g.workStr||g.brief||"")].join("\n")}
 function agencyBox(p,g){const A=S.ag=S.ag&&S.ag.key===g.key?S.ag:{key:g.key,pick:g.photos.slice(0,2).map(x=>x.url)};const box=h("div",{class:"sheet"});
   if(!A.D&&!A.loading&&!A.err){A.loading=true;api("diary",{pid:p.id,month:g.date.slice(0,7),site:p.multi?g.site:""}).then(j=>{A.D=j;A.loading=false;if(A.text===undefined)A.text=agencyText(p,g,j);render()}).catch(e=>{A.err=e.message;A.loading=false;A.text=agencyText(p,g,null);render()})}
   if(A.loading){box.append(h("p",{class:"note"},"正在計算進度…"));return box}
   if(A.err)box.append(h("div",{class:"msg warn"},"進度沒有算出來("+A.err+"),預定/實際進度請自行填寫。"));
-  if(!p.supervisor)box.append(h("div",{class:"msg warn"},"還沒填「監造單位」:請內業到「設定 → 施工日誌設定」填寫。"));
+  if(!p.supervisor){if(S.canOffice){const si=h("input",{type:"text",placeholder:"例:和建工程顧問股份有限公司","aria-label":"監造單位"});
+    box.append(h("div",{class:"msg warn"},"這個工程還沒填「監造單位」,填一次就會記住:"),h("div",{class:"row"},si,h("button",{type:"button",class:"btn primary",style:"flex:0 0 auto",onclick:async()=>{const v=si.value.trim();if(!v){si.focus();return}
+      try{await api("saveProject",{project:{id:p.id,supervisor:v}});p.supervisor=v;A.text=agencyText(p,g,A.D);await reload(true)}catch(e){S.err="沒有存成功:"+e.message}render()}},"儲存監造單位")))}
+    else box.append(h("div",{class:"msg warn"},"還沒填「監造單位」:請內業到「設定 → 施工日誌設定」填寫。"))}
   const ta=h("textarea",{rows:"10","aria-label":"回報機關文字"});ta.value=A.text||"";ta.addEventListener("input",()=>A.text=ta.value);
   const st=h("span",{class:"note"});
   box.append(h("b",{},"📨 回報機關文字(可直接修改)"),ta,h("div",{class:"row"},h("button",{type:"button",class:"btn primary",onclick:async()=>{try{await navigator.clipboard.writeText(ta.value)}catch(e){ta.select();document.execCommand("copy")}st.textContent="✅ 已複製,到 LINE 貼上即可。"}},"📋 複製文字"),
