@@ -133,8 +133,31 @@ const ok = (c, msg) => { if (c) { pass++; console.log('ok', msg) } else { fail++
     const ta = page.locator('textarea[aria-label^="二、監督"]'); await ta.fill('抽查模板組立'); await wait(1800);
     ok(await ev(async () => { const d = S.svDate; const L = await api('svList', { pid: proj().id, site: '', month: d.slice(0, 7) }); return (L.rows[d] || {}).sup === '抽查模板組立' }), '監造報表打字自動儲存');
     ok(await ev(async () => { const p = proj(), D = S.svD.D, P = svPrj(p, D); const b = buildXlsx([svSummaryModel(p, D), ...svModelsOf(p, P, D, D.days)]); const wb = XLSX.read(await b.arrayBuffer()); return wb.SheetNames[0] === '監造事項' && wb.SheetNames.length === D.days.length + 1 }), '監造 Excel 有監造事項與每日報表');
-    await ev(() => { S.svTab = '監造事項總表'; render() });
-    ok(await ev(() => document.querySelectorAll('.svt tbody tr').length === S.svD.D.days.length), '監造事項總表一天一列');
+    await ev(() => { S.svTab = '矩陣表'; render() });
+    ok(await ev(() => document.querySelectorAll('.mx tbody tr').length === S.svD.D.days.length), '矩陣表一天一列');
+    const c0 = page.locator('.mx tbody tr').nth(1).locator('textarea[aria-label$="二、施工抽查項目"]'); await c0.fill('模板工程');
+    ok(await ev(() => !!document.querySelector('.mx td.dirty') && mxDirtyN() === 1), '矩陣表修改後變藍色、還沒儲存');
+    await page.locator('.mx tbody tr').nth(2).locator('textarea[aria-label$="二、施工抽查項目"]').press('Control+d');
+    await page.getByRole('button', { name: /💾 儲存/ }).click(); await wait(1500);
+    ok(await ev(async () => { const D = S.svD.D, L = await api('svList', { pid: proj().id, site: '', month: D.month }); return L.rows[D.days[1].date].chk === '模板工程' && L.rows[D.days[2].date].chk === '模板工程' && mxDirtyN() === 0 }), '矩陣表按儲存一次存好(含 Ctrl+D 複製上一列)');
+    ok(await ev(async () => { const st = S.svD.D.project.start; return !st || S.svD.D.days.every(d => d.date >= st) }), '監造報表不列開工前的日期');
+    ok(await ev(async () => { const p = proj(), D = S.svD.D; let got = null; const sv = S.dl.save; S.dl.save = async o => { got = o }; await svXlsDownload(p, D); S.dl.save = sv;
+      const wb = XLSX.read(await got.data.arrayBuffer()), a = XLSX.utils.sheet_to_json(wb.Sheets['監造事項'], { header: 1, defval: '' });
+      a[1][1] = 'Excel 填的工項'; a[1][6] = '■完成'; a[2][2] = 'Excel 重要督導';
+      const ws = XLSX.utils.aoa_to_sheet(a), nb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(nb, ws, '監造事項');
+      const f = new File([XLSX.write(nb, { bookType: 'xlsx', type: 'array' })], 'x.xlsx'); await svXlsUpload(p, D, f);
+      const L = await api('svList', { pid: p.id, site: '', month: D.month }), d0 = D.days[0].date, d1 = D.days[1].date;
+      return L.rows[d0].oth === 'Excel 填的工項' && L.rows[d0].pre === '完成' && L.rows[d1].imp === 'Excel 重要督導' && a[0][1] === '工項(監造五)' }), '監造事項 Excel(監造的欄位)下載後填寫再上傳');
+    await page.setViewportSize({ width: 420, height: 900 }); }
+
+  // 14. 管理者預覽監造畫面
+  { await page.setViewportSize({ width: 1280, height: 900 }); await ev(() => { localStorage.clear(); localStorage.setItem('gkey', 'admin123'); localStorage.setItem('layoutMode', 'desktop') }); await boot();
+    ok(await ev(() => { const b = document.querySelector('nav button[data-v=sv]'); return !!b && !b.hidden }), '管理者電腦版選單有監造報表');
+    await ev(() => { S.view = 'sv'; render() }); await wait(1500);
+    await page.getByRole('button', { name: '👁 用監造畫面預覽' }).click(); await wait(300);
+    ok(await ev(() => document.documentElement.dataset.role === 'sv' && [...document.querySelectorAll('nav button')].filter(b => !b.hidden).map(b => b.dataset.v).join() === 'sv,diary'), '管理者可以預覽監造畫面');
+    await page.getByRole('button', { name: /結束預覽/ }).click(); await wait(300);
+    ok(await ev(() => document.documentElement.dataset.role === '' && !document.querySelector('nav button[data-v=report]').hidden), '結束預覽回到管理者畫面');
     await page.setViewportSize({ width: 420, height: 900 }); }
 
   ok(!errors.length, '頁面沒有程式錯誤' + (errors.length ? ':' + errors.slice(0, 3).join(' | ') : ''));

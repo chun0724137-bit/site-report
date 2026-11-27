@@ -20,7 +20,7 @@
 - 頁面(GitHub Pages):https://chun0724137-bit.github.io/site-report/ (`#boss` 老闆版、`#people` 人員出工、`#progress` 施工進度)
 - 後台:Google 試算表 + Apps Script 網頁應用程式(公司 Google 帳號,雲端硬碟 400 GB),網址在 `index.html` 的 `GAS_URL`。
 - 登入:每人姓名 + PIN(角色:管理者 / 內業 / 現場 / 下包),權杖存在 localStorage `gkey`。舊的共用通行碼在建立管理者帳號後失效。
-- 監造(`sv`):同樣用「可看範圍」。只能用 load/diary/svList/svSave/svProject;畫面藍色(`html[data-role=sv]`),只有「監造報表」(`viewSv`,電腦版)與「日誌」(唯讀)。監造報表一的數量取自 diary API,二~五存在「監造報表」分頁;每日填寫與「監造事項總表」是同一份資料,打字自動存。PDF 用 `dOpenPrint`,Excel 用 `buildXlsx`(第一張「監造事項」+ 每日報表 + 依設定的第二聯)。工程的「契約變更次數、原/變更後契約金額、實際完工日、監造第一聯/二聯」由監造或內業在報表頁「⚙ 基本資料」填。
+- 監造(`sv`):同樣用「可看範圍」。只能用 load/diary/svList/svSave/svProject;畫面藍色(`html[data-role=sv]`),只有「監造報表」(`viewSv`,電腦版)與「日誌」(唯讀)。監造報表一的數量取自 diary API,二~五存在「監造報表」分頁;每日填寫與「監造事項總表」是同一份資料,打字自動存。二(施作工項)、三(取樣)、五(工項)預設先帶入施工日誌內容(黃色待確認),五後面另有「重要督導」(`imp`)。「矩陣表」(`svMatrix`)一天一列、按「儲存」才用 `svSaveBatch` 一次存;「每日填寫」打字自動存。監造事項 Excel 的欄位照監造習慣:日期、工項(五)、重要督導、取樣(三)、施作工項(二)、抽查項目、四之一、四之二,可下載後上傳。管理者電腦版選單有「監造報表」,可按「👁 用監造畫面預覽」。PDF 用 `dOpenPrint`,Excel 用 `buildXlsx`(第一張「監造事項」+ 每日報表 + 依設定的第二聯)。工程的「契約變更次數、原/變更後契約金額、實際完工日、監造第一聯/二聯」由監造或內業在報表頁「⚙ 基本資料」填。
 - 下包(`sub`):「人員」分頁「可看範圍」一行一個 `工程代號` 或 `工程代號/派工地點`。後台 `handle_` 用 `subCheck_` 限制動作(只能 load/reports/report/diary/upload/photoByUrl/photoFiles)、`subFilter_` 過濾回傳(範圍外工程/派工單/回報、單價、工人姓名、人員名單都拿掉,累計只算範圍內派工單)。前端只有「回報、紀錄」,回報不填工人姓名只填義交,紀錄沒有數量表,只能改自己送出的回報。
 
 ## 檔案

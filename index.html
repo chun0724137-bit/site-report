@@ -106,7 +106,7 @@ html[data-view=grid] .wrap{max-width:none}
 html[data-role=sv]{--accent:#1d5fa8;--soft:#dde8f5;--bg:#eef1f6}
 @media (prefers-color-scheme: dark){html[data-role=sv]:not([data-theme="light"]){--accent:#6ea8e8;--accent-ink:#0b1d33;--soft:#1f3046;--bg:#11161d}}
 html[data-role=sv][data-theme="dark"]{--accent:#6ea8e8;--accent-ink:#0b1d33;--soft:#1f3046;--bg:#11161d}
-html[data-view=sv] .wrap{max-width:1280px}html[data-view=sv] main{display:block!important}
+html[data-view=sv] .wrap{max-width:none}html[data-view=sv] main{display:block!important}
 .svw{display:grid;grid-template-columns:190px minmax(0,1fr);gap:14px;align-items:start}
 .svdays{display:flex;flex-direction:column;gap:2px;max-height:80vh;overflow:auto;position:sticky;top:8px}
 .svdays button{display:flex;justify-content:space-between;gap:6px;border:0;background:transparent;color:var(--ink);padding:7px 10px;border-radius:6px;font:inherit;font-size:14px;cursor:pointer;text-align:left}
@@ -119,7 +119,19 @@ html[data-view=sv] .wrap{max-width:1280px}html[data-view=sv] main{display:block!
 .svp textarea,.svp input,.svp select{font:15px var(--font);color:#000;background:#f4f8fd;border:1.5px dashed #7aa3d4;border-radius:6px;padding:6px 8px;width:100%}
 .svp textarea{min-height:70px;resize:vertical}.svp input.sm{width:90px}.svp select{width:auto}
 .svp .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.svp .chips button{font:12px var(--font);border:1px solid #9bb8de;background:#eef4fb;color:#1d5fa8;border-radius:12px;padding:2px 8px;cursor:pointer}
-.svp .seg button{font-size:14px}
+.svp .seg{flex:0 0 auto}.svp .seg button{font-size:14px;white-space:nowrap;padding:6px 14px}
+.svp textarea.auto,.mx td.auto textarea{background:#fff6d6;border-color:#e0c46a}
+.mxw{overflow:auto;max-height:76vh;border:1px solid var(--line);border-radius:8px}
+.mx{border-collapse:separate;border-spacing:0;font-size:13px;min-width:100%}
+.mx th{position:sticky;top:0;z-index:2;background:var(--soft);font-weight:700;font-size:12px;padding:6px 4px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);white-space:normal;vertical-align:bottom}
+.mx td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:0;vertical-align:top;background:var(--card)}
+.mx td.dt{position:sticky;left:0;z-index:1;padding:6px 8px;white-space:nowrap;cursor:pointer;font-weight:700}.mx th.dt{left:0;z-index:3}
+.mx td.dt small{color:var(--mute);font-weight:400}.mx td.ro{color:var(--mute);padding:6px;white-space:nowrap;text-align:right;min-width:64px}.mx th{min-width:64px}.mx td.one{background:#fff6d6;color:#333;padding:6px;white-space:normal;min-width:200px;max-width:260px;font-size:12px}
+.mx textarea{min-height:0!important;height:auto}.mx textarea,.mx select{width:100%;min-width:var(--w,120px);border:0;background:transparent;color:var(--ink);font:13px var(--font);padding:6px;resize:none;display:block;line-height:1.35}
+.mx textarea:focus,.mx select:focus{outline:2px solid var(--accent);outline-offset:-2px;background:var(--card)}
+.mx td.dirty textarea,.mx td.dirty select{background:#e3eefc!important}.mx td.lk textarea{color:var(--mute)}
+.mxbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}.mxbar .note{font-size:12px}
+.lg{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:3px}
 .svt{font-size:13px}.svt td{vertical-align:top;padding:3px}.svt textarea{width:100%;min-width:150px;min-height:54px;font:13px var(--font);border:1px solid var(--line);border-radius:4px;padding:4px;background:var(--card);color:var(--ink)}.svt .wk{color:var(--mute);font-size:12px;max-width:220px;white-space:normal}
 .qgrid{max-height:75vh;overflow:auto}.qgrid table{width:auto;font-size:12px}.qgrid th,.qgrid td{padding:3px 4px;white-space:nowrap}.qgrid td.w{white-space:normal;min-width:180px;max-width:260px}
 .qgrid thead th{position:sticky;top:0;background:var(--soft);z-index:2}.qgrid .stk{position:sticky;background:var(--card);z-index:1}.qgrid thead .stk{z-index:3;background:var(--soft)}.qgrid .s0{left:0;min-width:84px}.qgrid .s1{left:84px}
@@ -2122,16 +2134,16 @@ function viewDiary(){const p=proj(),out=[];S.dMonth=S.dMonth||today().slice(0,7)
     P.tick=nv;p.tick=nv;render();
     try{await api("saveProject",{project:{id:p.id,tick:nv}})}catch(e){}
   })):h("p",{class:"note"},"日誌「四、五」項勾選方式："+curTick);
-  if(S.canOffice)sec.append(h("button",{type:"button",class:"btn",onclick:()=>{S.view="sv";try{location.hash="sv"}catch(e){}render();window.scrollTo(0,0)}},"📝 監造報表(電腦版)"));
-  sec.append(S.sv?null:tickRow,diaryMonthBtns(D,P),h("p",{class:"note"},"簽名後 7 天內若回報被修改,該日會標示「待重簽」,PDF 與 Excel 不會帶出舊簽名。"));
+  if(S.canOffice&&!S.svPreview)sec.append(h("button",{type:"button",class:"btn",onclick:()=>{S.view="sv";try{location.hash="sv"}catch(e){}render();window.scrollTo(0,0)}},"📝 監造報表(電腦版)"));
+  sec.append(S.sv||S.svPreview?null:tickRow,diaryMonthBtns(D,P),h("p",{class:"note"},"簽名後 7 天內若回報被修改,該日會標示「待重簽」,PDF 與 Excel 不會帶出舊簽名。"));
   const list=h("section",{class:"card"});
   const tickOn=P.tick==="自動";
   D.days.slice().reverse().forEach(d=>{const sg=d.sig;let st,cls;
     if(!d.has){st="無回報";cls="note"}else if(!sg){st="未簽名";cls="note"}else if(sg.stale){st="⚠ 簽名後已修改,待重簽";cls="msg warn"}else{st="✅ 已簽名 "+sg.signer;cls="msg ok"}
     list.append(h("div",{class:"drow"},
       h("div",{class:"dt"},h("b",{},d.date.slice(5)+"(週"+d.wk+")"),h("span",{class:cls,style:"padding:2px 6px;font-size:13px"},st)),
-      tickOn&&!S.sv?h("button",{type:"button",class:"ib"+(d.tick?" primary":""),title:"四、五項勾選","aria-label":d.date+" 四、五項勾選",onclick:()=>{S.tickOpen=S.tickOpen===d.date?"":d.date;render()}},"☑"):null,
-      d.has&&!S.sv?h("button",{type:"button",class:"ib"+(!sg||sg.stale?" primary":""),title:sg&&!sg.stale?"重簽":"簽名","aria-label":d.date+(sg&&!sg.stale?" 重簽":" 簽名"),onclick:()=>diarySign(d)},"✍"):h("span",{style:"flex:0 0 36px"}),
+      tickOn&&!(S.sv||S.svPreview)?h("button",{type:"button",class:"ib"+(d.tick?" primary":""),title:"四、五項勾選","aria-label":d.date+" 四、五項勾選",onclick:()=>{S.tickOpen=S.tickOpen===d.date?"":d.date;render()}},"☑"):null,
+      d.has&&!(S.sv||S.svPreview)?h("button",{type:"button",class:"ib"+(!sg||sg.stale?" primary":""),title:sg&&!sg.stale?"重簽":"簽名","aria-label":d.date+(sg&&!sg.stale?" 重簽":" 簽名"),onclick:()=>diarySign(d)},"✍"):h("span",{style:"flex:0 0 36px"}),
       h("button",{type:"button",class:"ib",title:"下載這天的 PDF","aria-label":d.date+" 下載 PDF",onclick:()=>dOpenPrint(diaryModelsOf(P,D,[d]),P.short+" "+d.date+" 施工日誌")},"📄")));
     if(S.tickOpen===d.date&&tickOn)list.append(tickEditor(P,d))});
   if(!D.days.length)list.append(h("p",{class:"note"},"這個月份沒有資料。"));
@@ -2139,7 +2151,12 @@ function viewDiary(){const p=proj(),out=[];S.dMonth=S.dMonth||today().slice(0,7)
 
 // ---- 監造報表(電腦版):一、施工數量取自回報(同施工日誌);二~五由監造填 ----
 const SV_K=["sup","chk","mat","pre","saf","oth"];
-function svDefault(d){return{no:d.elapsed>0?String(d.elapsed).padStart(3,"0"):"",am:d.am||"",pm:d.pm||"",pre:d.has?(d.worked?"完成":"未施工"):"",sup:"",chk:"",mat:"",saf:"",oth:""}}
+function svItemsText(d){return (d.items||[]).map(x=>(x.code&&x.code!=="-"?x.code+" ":"")+x.name+(x.today?" "+dNum(x.today)+(x.unit||""):"")).join("、")}
+function svDefault(d){const nw=d.has&&!d.worked?"本日無施工"+(d.nowork?"("+d.nowork+")":""):"";
+  return{no:d.elapsed>0?String(d.elapsed).padStart(3,"0"):"",am:d.am||"",pm:d.pm||"",pre:d.has?(d.worked?"完成":"未施工"):"",
+    sup:d.worked?(svItemsText(d)||d.work||""):"",chk:"",mat:d.sample||"",saf:"",oth:nw||[d.work,d.notes].filter(Boolean).join("；"),imp:""}}
+function svIsAuto(d,k,v){if(S.svD.rows[d.date])return false;const a=svDefault(d)[k];return !!a&&!["no","am","pm","pre"].includes(k)&&(v===undefined?svRec(d)[k]:v)===a}
+function svFive(r){return [r.oth,r.imp].map(x=>String(x||"").trim()).filter(Boolean).join("\n")}
 function svRec(d){const D=S.svD;D.work=D.work||{};return D.work[d.date]=D.work[d.date]||Object.assign(svDefault(d),D.rows[d.date]||{})}
 function svPrj(p,D){const P=diaryPrj(D);P.layout1=p.sv1==="全部"?"單欄":"當日";P.layout2=p.sv2||"不附";return P}
 function svChg(p,date){if(p.chgN!==null&&p.chgN!==undefined&&p.chgN!=="")return p.chgN;return (p.ch||[]).filter(x=>x&&x<=date).length}
@@ -2153,8 +2170,8 @@ async function svSaveNow(d){const D=S.svD,p=proj();if(!D)return;clearTimeout((D.
     const st=document.getElementById("svst");if(st)st.textContent="✅ 已自動儲存";const b=document.getElementById("svday-"+d.date);if(b){b.classList.add("done");const sm=b.querySelector("small");if(sm)sm.textContent="已填"}}
   catch(e){const st=document.getElementById("svst");if(st)st.textContent="⚠ 沒有儲存成功:"+e.message}}
 async function svFlush(){const D=S.svD;if(!D||!D.t)return;const ds=Object.keys(D.t);for(const k of ds){const d=D.D.days.find(x=>x.date===k);if(d)await svSaveNow(d)}}
-function svText(lbl,rec,k,d,ph){const t=h("textarea",{"aria-label":lbl,placeholder:ph||"點這裡直接打字(留白時,報表這一格印「無」)"});t.value=rec[k]||"";
-  const fit=()=>{t.style.height="auto";t.style.height=Math.max(70,t.scrollHeight+4)+"px"};t.addEventListener("input",()=>{rec[k]=t.value;fit();svSaveSoon(d)});setTimeout(fit,0);
+function svText(lbl,rec,k,d,ph){const t=h("textarea",{"aria-label":lbl,placeholder:ph||"點這裡直接打字(留白時,報表這一格印「無」)",class:svIsAuto(d,k)?"auto":null,title:svIsAuto(d,k)?"從施工日誌帶入,請確認":null});t.value=rec[k]||"";
+  const fit=()=>{t.style.height="auto";t.style.height=Math.max(70,t.scrollHeight+4)+"px"};t.addEventListener("input",()=>{rec[k]=t.value;t.classList.remove("auto");fit();svSaveSoon(d)});setTimeout(fit,0);
   const ch=((S.svD.phr||{})[k]||[]).filter(x=>x);const chips=ch.length?h("div",{class:"chips"},h("span",{style:"font:12px var(--font);color:#667"},"常用:"),ch.slice(0,8).map(x=>h("button",{type:"button",title:x,onclick:()=>{const cur=t.value.trim();t.value=cur?(cur.split("\n").includes(x)?cur:cur+"\n"+x):x;rec[k]=t.value;fit();svSaveSoon(d)}},x.length>24?x.slice(0,24)+"…":x))):null;
   return [t,chips]}
 function svForm(p,P,D,d){const rec=svRec(d),items=diaryItems(P,d);
@@ -2172,13 +2189,13 @@ function svForm(p,P,D,d){const rec=svRec(d),items=diaryItems(P,d);
       h("tr",{},h("td",{colspan:"5",style:"background:#f8f1cf"},d.has&&!d.worked?"本日無施工"+(d.nowork?"("+d.nowork+")":"")+"。":"本日無施作工項。")));
   const [t2,c2]=svText("二、監督依照設計圖說施工",rec,"sup",d);
   const chk=h("input",{"aria-label":"施工抽查項目",placeholder:"例:鋼筋工程、模板工程(本日無抽查請留白,報表不顯示這一行)"});chk.value=rec.chk||"";chk.addEventListener("input",()=>{rec.chk=chk.value;svSaveSoon(d)});
-  const [t3,c3]=svText("三、查核材料規格及品質",rec,"mat",d),[t4,c4]=svText("四、(二)其他工地安全衛生督導事項",rec,"saf",d),[t5,c5]=svText("五、其他約定監造事項",rec,"oth",d);
+  const [t3,c3]=svText("三、查核材料規格及品質",rec,"mat",d),[t4,c4]=svText("四、(二)其他工地安全衛生督導事項",rec,"saf",d),[t5,c5]=svText("五、其他約定監造事項",rec,"oth",d),[t6,c6]=svText("重要督導",rec,"imp",d,"例:機關承辦至現場督導(會接在五的後面)");
   const pre=seg(["完成","未完成","未施工"],rec.pre||"",v=>{rec.pre=v;svSaveSoon(d)});
   const prev=D.days.filter(x=>x.date<d.date&&S.svD.rows[x.date]).pop();
   const bar=h("div",{class:"row",style:"margin-bottom:10px"},
-    h("button",{type:"button",class:"btn",disabled:prev?null:true,title:prev?"帶入 "+prev.date+" 的二~五項內容":"前面沒有已填的日期",onclick:()=>{const src=S.svD.rows[prev.date];["sup","chk","mat","saf","oth"].forEach(k=>rec[k]=src[k]||"");svSaveSoon(d);render()}},"⤵ 帶入前一天內容"),
+    h("button",{type:"button",class:"btn",disabled:prev?null:true,title:prev?"帶入 "+prev.date+" 的二~五項內容":"前面沒有已填的日期",onclick:()=>{const src=S.svD.rows[prev.date];["sup","chk","mat","saf","oth","imp"].forEach(k=>rec[k]=src[k]||"");svSaveSoon(d);render()}},"⤵ 帶入前一天內容"),
     h("button",{type:"button",class:"btn",onclick:async()=>{await svFlush();dOpenPrint(svModelsOf(p,P,D,[d]),P.short+" "+d.date+" 監造報表")}},"📄 這天 PDF"),
-    h("span",{id:"svst",class:"note"},S.svD.rows[d.date]?"已儲存(打字會自動存)":"還沒填(打字會自動存)"));
+    h("span",{id:"svst",class:"note"},S.svD.rows[d.date]?"已儲存(打字會自動存)":"還沒填(打字會自動存)。黃色框是從施工日誌帶入的內容,請確認或修改"));
   return h("div",{},bar,h("div",{class:"svp"},h("h3",{},"公共工程監造報表"),
     h("div",{class:"ln"},"表報編號：",no),
     h("div",{class:"ln"},"本日天氣：上午：",wx("am"),"下午：",wx("pm"),h("span",{style:"flex:1"}),"填報日期："+svRocLong(d.date)),
@@ -2186,16 +2203,67 @@ function svForm(p,P,D,d){const rec=svRec(d),items=diaryItems(P,d);
     h("div",{class:"sec"},"二、監督依照設計圖說施工（含約定之檢驗停留點及施工抽查等情形）：",t2,c2,h("div",{class:"ln"},"施工抽查項目：",chk)),
     h("div",{class:"sec"},"三、查核材料規格及品質（含約定之檢驗停留點、材料設備管制及檢（試）驗等抽驗情形）：",t3,c3),
     h("div",{class:"sec"},"四、督導工地職業安全衛生事項：",h("div",{class:"ln"},"（一）施工廠商施工前檢查事項辦理情形：",pre),"（二）其他工地安全衛生督導事項：",t4,c4),
-    h("div",{class:"sec"},"五、其他約定監造事項（含重要事項紀錄、主辦機關指示及通知廠商辦理事項等）：",t5,c5),
+    h("div",{class:"sec"},"五、其他約定監造事項（含重要事項紀錄、主辦機關指示及通知廠商辦理事項等）：",t5,c5,h("div",{style:"margin-top:6px"},"重要督導（印在五的後面）："),t6,c6),
     h("div",{class:"sec",style:"min-height:60px"},"監造單位簽章：")))}
-function svTable(p,P,D){const tb=h("tbody",{});
-  D.days.forEach(d=>{const rec=svRec(d);const ta=(k,lbl)=>{const t=h("textarea",{"aria-label":d.date+" "+lbl});t.value=rec[k]||"";t.addEventListener("input",()=>{rec[k]=t.value;svSaveSoon(d)});return t};
-    const pre=h("select",{"aria-label":d.date+" 施工前檢查"},["","完成","未完成","未施工"].map(x=>h("option",{value:x},x||"—")));pre.value=rec.pre||"";pre.addEventListener("change",()=>{rec.pre=pre.value;svSaveSoon(d)});
-    const chk=h("textarea",{"aria-label":d.date+" 抽查項目",style:"min-width:110px"});chk.value=rec.chk||"";chk.addEventListener("input",()=>{rec.chk=chk.value;svSaveSoon(d)});
-    tb.append(h("tr",{},h("td",{style:"white-space:nowrap"},h("b",{},d.date.slice(5)),h("div",{class:"note",style:"font-size:12px"},"週"+d.wk)),
-      h("td",{class:"wk"},d.has?(d.worked?[d.work,(d.items||[]).map(x=>x.name+" "+dNum(x.today)+(x.unit||"")).join("、")].filter(Boolean).join("；"):"未施工"+(d.nowork?"("+d.nowork+")":"")):"(沒有回報)"),
-      h("td",{},ta("sup","監督施工")),h("td",{},chk),h("td",{},ta("mat","材料品質")),h("td",{},pre),h("td",{},ta("saf","安衛督導")),h("td",{},ta("oth","其他事項"))))});
-  return h("div",{class:"tbl"},h("table",{class:"svt"},h("thead",{},h("tr",{},["日期","本日施工(廠商回報)","二、監督依照設計圖說施工","抽查項目","三、查核材料規格及品質","四(一)施工前檢查","四(二)安衛督導","五、其他約定監造事項"].map(x=>h("th",{},x)))),tb))}
+const MX_COLS=[{k:"no",t:"表報編號",lk:1,w:56},{k:"am",t:"上午天氣",lk:1,w:44},{k:"pm",t:"下午天氣",lk:1,w:44},
+  {a:(p,D,d)=>(D.project||{}).approved?(D.project.approved+" 日曆天"):"",t:"契約工期"},{a:(p,D)=>svRocS((D.project||{}).end),t:"預定完工日期"},{a:p=>svRocS(p.doneDate),t:"實際完工日期"},
+  {a:(p,D,d)=>svChg(p,d.date),t:"契約變更次數"},{a:(p,D,d)=>d.ext||0,t:"工期展延天數"},{a:p=>p.amt1?Number(p.amt1).toLocaleString("en-US"):"",t:"變更後契約金額"},
+  {a:(p,D,d)=>dPct(d.planned),t:"預定進度(%)"},{a:(p,D,d)=>dPct(d.actual),t:"實際進度(%)"},{one:1,t:"一、工程進行情況"},
+  {k:"chk",t:"二、施工抽查項目",w:120},{k:"sup",t:"二、監督依照設計圖說施工(施作工項)",w:220},{k:"mat",t:"三、查核材料規格及品質(取樣)",w:180},{k:"pre",t:"四(一)施工前檢查",sel:1,w:90},
+  {k:"saf",t:"四(二)其他安衛督導",w:150},{k:"oth",t:"五、其他約定監造事項(工項)",w:220},{k:"imp",t:"重要督導(五後面)",w:160}];
+function mxState(){const k=S.svD.key;if(!S.mx||S.mx.key!==k)S.mx={key:k,ed:{},unlock:false};return S.mx}
+function mxDirtyN(){const M=S.mx;return M?Object.keys(M.ed).length:0}
+function mxLeave(){const n=mxDirtyN();return !n||confirm("矩陣表有 "+n+" 天還沒儲存,確定不存就離開?")}
+function mxTSV(t){const rows=[];let row=[],cur="",q=false;t=t.replace(/\r\n?/g,"\n").replace(/\n$/,"");
+  for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'){if(t[i+1]==='"'){cur+='"';i++}else q=false}else cur+=c}else if(c==='"'&&cur==="")q=true;else if(c==="\t"){row.push(cur);cur=""}else if(c==="\n"){row.push(cur);rows.push(row);row=[];cur=""}else cur+=c}
+  row.push(cur);rows.push(row);return rows}
+async function mxSave(p,D,also){const M=mxState(),dates=new Set([...Object.keys(M.ed),...(also||[])]);if(!dates.size)return;
+  const items=[...dates].map(dt=>{const d=D.days.find(x=>x.date===dt);return{d,data:Object.assign({},svRec(d),M.ed[dt]||{})}}).filter(x=>x.d);
+  const st=document.getElementById("mxst");if(st)st.textContent="儲存中…";
+  try{for(let i=0;i<items.length;i+=31)await api("svSaveBatch",{pid:p.id,site:p.multi?S.dSite:"",items:items.slice(i,i+31).map(x=>({date:x.d.date,data:x.data}))});
+    items.forEach(x=>{Object.assign(svRec(x.d),x.data);S.svD.rows[x.d.date]=Object.assign({},x.data)});M.ed={};S.flash="已儲存 "+items.length+" 天。";render()}
+  catch(e){if(st)st.textContent="⚠ 沒有儲存成功:"+e.message}}
+function svMatrix(p,P,D){const M=mxState(),days=D.days,EK=MX_COLS.filter(c=>c.k&&(!c.lk||M.unlock)).map(c=>c.k),els=days.map(()=>({}));
+  const val=(d,k)=>{const e=M.ed[d.date];return e&&k in e?e[k]:(svRec(d)[k]||"")};
+  const stEl=h("span",{id:"mxst",class:"note"},"");
+  const saveBtn=h("button",{type:"button",class:"btn primary",style:"flex:0 0 auto",onclick:()=>mxSave(p,D)});
+  const upd=()=>{const n=mxDirtyN();saveBtn.textContent=n?"💾 儲存("+n+" 天)":"💾 儲存";saveBtn.disabled=!n;stEl.textContent=n?"有 "+n+" 天已修改、尚未儲存":"沒有修改"};
+  const set=(ri,k,v,el)=>{const d=days[ri];(M.ed[d.date]=M.ed[d.date]||{})[k]=v;const x=el||els[ri][k];if(x){if(x.value!==v)x.value=v;const td=x.closest("td");td.classList.add("dirty");td.classList.remove("auto");if(x.tagName==="TEXTAREA")fit(x)}upd()};
+  const fit=t=>{t.rows=Math.min(4,Math.max(1,t.value.split("\n").length))};
+  const focus=(ri,k)=>{const x=(els[ri]||{})[k];if(x){x.focus();if(x.select&&x.tagName==="TEXTAREA")x.setSelectionRange(x.value.length,x.value.length)}};
+  let lastFocus=null;
+  const autoN=days.reduce((n,d)=>n+(S.svD.rows[d.date]?0:EK.filter(k=>svIsAuto(d,k,val(d,k))).length),0);
+  const tb=h("tbody",{});
+  days.forEach((d,ri)=>{const tr=h("tr",{});
+    tr.append(h("td",{class:"dt",title:"開啟這天的單日報表",onclick:()=>{if(!mxLeave())return;M.ed={};S.svTab="每日填寫";S.svDate=d.date;render();window.scrollTo(0,0)}},d.date.slice(5).replace("-","/")+" ",h("small",{},"("+d.wk+")")));
+    MX_COLS.forEach(c=>{
+      if(c.a){tr.append(h("td",{class:"ro"},String(c.a(p,D,d)??"")));return}
+      if(c.one){const it=diaryItems(P,d);tr.append(h("td",{class:"one"},it.length?it.map(x=>(x.code&&x.code!=="-"?x.code+" ":"")+x.name+" "+dNum(x.today)+(x.unit||"")).join("、"):(d.has&&!d.worked?"本日無施工"+(d.nowork?"("+d.nowork+")":"")+"。":"本日無施作工項。")));return}
+      const k=c.k,v=val(d,k),dirty=!!(M.ed[d.date]&&k in M.ed[d.date]),locked=c.lk&&!M.unlock;
+      const td=h("td",{class:(dirty?"dirty ":"")+(!dirty&&svIsAuto(d,k,v)?"auto ":"")+(locked?"lk":""),style:"--w:"+(c.w||120)+"px"});
+      let x;
+      if(c.sel){x=h("select",{"aria-label":d.date+" "+c.t},["","完成","未完成","未施工"].map(o=>h("option",{value:o},o||"—")));x.value=v;x.addEventListener("change",()=>set(ri,k,x.value,x))}
+      else{x=h("textarea",{rows:String(Math.min(4,Math.max(1,String(v).split("\n").length))),"aria-label":d.date+" "+c.t,readonly:locked?true:null,title:locked?"自動帶入,要修改請按上方「解鎖」":null});x.value=v;x.addEventListener("input",()=>set(ri,k,x.value,x))}
+      if(!locked){els[ri][k]=x;
+        x.addEventListener("focus",()=>{lastFocus={ri,k}});
+        x.addEventListener("keydown",e=>{const ci=EK.indexOf(k);
+          if(e.key==="Enter"&&e.altKey&&x.tagName==="TEXTAREA"){e.preventDefault();const a=x.selectionStart,b=x.selectionEnd;x.value=x.value.slice(0,a)+"\n"+x.value.slice(b);x.setSelectionRange(a+1,a+1);set(ri,k,x.value,x);return}
+          if(e.key==="Enter"){e.preventDefault();focus(ri+(e.shiftKey?-1:1),k);return}
+          if((e.key==="ArrowDown"||e.key==="ArrowUp")&&!e.altKey&&!e.ctrlKey&&(x.tagName!=="TEXTAREA"||!x.value.includes("\n"))){e.preventDefault();focus(ri+(e.key==="ArrowDown"?1:-1),k);return}
+          if(e.key==="Tab"){e.preventDefault();const nk=EK[ci+(e.shiftKey?-1:1)];if(nk)focus(ri,nk);else focus(ri+(e.shiftKey?-1:1),e.shiftKey?EK[EK.length-1]:EK[0]);return}
+          if((e.ctrlKey||e.metaKey)&&(e.key==="d"||e.key==="D")){e.preventDefault();if(ri>0)set(ri,k,val(days[ri-1],k))}});
+        x.addEventListener("paste",e=>{const t=(e.clipboardData||window.clipboardData).getData("text/plain")||"";if(!/[\t\n]/.test(t.replace(/\r?\n$/,"")))return;e.preventDefault();
+          const rows=mxTSV(t),ci=EK.indexOf(k);rows.forEach((r,i)=>{if(ri+i>=days.length)return;r.forEach((cell,j)=>{const kk=EK[ci+j];if(!kk)return;let v=cell;if(kk==="pre"){v=v.replace(/[■□\s]/g,"");if(!["完成","未完成","未施工"].includes(v))v=""}set(ri+i,kk,v)})})})}
+      td.append(x);tr.append(td)});
+    tb.append(tr)});
+  const fillDown=()=>{if(!lastFocus){alert("請先點一格,再按「向下填滿」:會把這格的內容填到下面還沒填的格子。");return}const {ri,k}=lastFocus,v=val(days[ri],k);let n=0;for(let i=ri+1;i<days.length;i++){if(!String(val(days[i],k)).trim()){set(i,k,v);n++}}if(!n)alert("下面沒有空白的格子。")};
+  const confirmAll=h("button",{type:"button",class:"btn",style:"flex:0 0 auto",disabled:autoN?null:true,title:"把黃色(施工日誌帶入)的內容當作確認,連同修改一起儲存",onclick:()=>mxSave(p,D,days.filter(d=>!S.svD.rows[d.date]&&(d.has||Object.keys(M.ed).includes(d.date))).map(d=>d.date))},autoN?"✔ 帶入內容全部確認("+autoN+" 格)":"✔ 帶入內容都已確認");
+  upd();
+  return h("div",{},h("div",{class:"mxbar"},h("b",{},"監造報表矩陣表"),h("span",{class:"note"},days.length+" 份報表"),h("span",{style:"flex:1"}),stEl,confirmAll,
+      h("button",{type:"button",class:"btn",style:"flex:0 0 auto",onclick:()=>{M.unlock=!M.unlock;render()}},M.unlock?"🔓 已解鎖(按此鎖回)":"🔒 表報編號、天氣已鎖定(要修改請按此)"),
+      h("button",{type:"button",class:"btn",style:"flex:0 0 auto",onmousedown:e=>e.preventDefault(),onclick:fillDown},"⬇ 向下填滿"),saveBtn),
+    h("p",{class:"note",style:"font-size:12px;margin:0 0 6px"},"每一格直接點下去打字,填完按右上角「儲存」。",h("span",{class:"lg",style:"background:#fff6d6;border:1px solid #e0c46a"}),"施工日誌帶入,待確認　",h("span",{class:"lg",style:"background:#e3eefc"}),"已修改(尚未儲存)　Enter/↑↓ 換列(格子內換行用 Alt+Enter)・Tab 換欄・Ctrl+D 複製上一列・可從 Excel 複製多格貼上・點日期開啟單日報表。契約工期、金額等請按「⚙ 基本資料」修改。"),
+    h("div",{class:"mxw"},h("table",{class:"mx"},h("thead",{},h("tr",{},h("th",{class:"dt"},"填報日期"),MX_COLS.map(c=>h("th",{style:c.k?"min-width:"+(c.w||120)+"px":""},c.t)))),tb)))}
 // 列印/Excel:監造報表一天一頁
 function svLines(t,cpl){return String(t||"").split("\n").reduce((a,l)=>a+Math.max(1,Math.ceil(l.length/cpl)),0)}
 function svModel(p,P,D,d){const rec=svRec(d),items=diaryItems(P,d),pj=D.project||{},cells=[],hs=[];let r=0;
@@ -2219,14 +2287,14 @@ function svModel(p,P,D,d){const rec=svRec(d),items=diaryItems(P,d),pj=D.project|
   row(22,[[8,"四、督導工地職業安全衛生事項：",{h:"left"}]]);
   row(20,[[8,"（一）施工廠商施工前檢查事項辦理情形："+["完成","未完成","未施工"].map(x=>(rec.pre===x?"■":"□")+x).join(" "),{h:"left"}]]);
   {const [t,ht]=txt(rec.saf);row(20,[[8,"（二）其他工地安全衛生督導事項：",{h:"left"}]]);row(ht,[[8,t,{h:"left",va:"top"}]])}
-  sec("五、其他約定監造事項（含重要事項紀錄、主辦機關指示及通知廠商辦理事項等）：",rec.oth);
+  sec("五、其他約定監造事項（含重要事項紀錄、主辦機關指示及通知廠商辦理事項等）：",svFive(rec));
   row(56,[[8,"監造單位簽章：",{h:"left",va:"top"}]]);
   return{cells,widths:[12,12,12,12,12,12,12,12],heights:hs,sig:null,stale:false,date:d.date,sheet:String(Number(d.date.slice(8,10)))}}
-function svSummaryModel(p,D){const cells=[],hs=[];let r=0;const W=[11,30,30,16,26,12,22,26];
+function svSummaryModel(p,D){const cells=[],hs=[];let r=0;const W=[11,30,24,24,30,16,12,22];
   const row=(ht,vals,o)=>{r++;hs.push(ht);vals.forEach((v,i)=>cells.push(Object.assign({r,c:i+1,rs:1,cs:1,v:v===undefined||v===null?"":v,b:[1,1,1,1],sz:10,bold:false,h:i?"left":"center",va:"top",wrap:true},o||{})))};
   r++;hs.push(28);cells.push({r,c:1,rs:1,cs:8,v:"監造事項｜"+((D.project||{}).name||p.name)+"｜"+(Number(D.month.slice(0,4))-1911)+"年"+Number(D.month.slice(5,7))+"月",b:[0,0,0,0],sz:13,bold:true,h:"left",va:"center",wrap:false});
-  row(30,["日期","本日施工(廠商回報)","二、監督依照設計圖說施工","抽查項目","三、查核材料規格及品質","四(一)施工前檢查","四(二)安衛督導","五、其他約定監造事項"],{bold:true,h:"center",va:"center"});
-  D.days.forEach(d=>{const x=svRec(d),wk=d.has?(d.worked?d.work||"":"未施工"+(d.nowork?"("+d.nowork+")":"")):"";const v=[svRocS(d.date),wk,x.sup,x.chk,x.mat,x.pre,x.saf,x.oth];
+  row(30,SV_XCOLS.map(x=>x[0]),{bold:true,h:"center",va:"center"});
+  D.days.forEach(d=>{const x=svRec(d);const v=[Number(d.date.slice(5,7))+"月"+Number(d.date.slice(8))+"日"].concat(SV_XCOLS.slice(1).map(c=>x[c[1]]||""));
     row(Math.max(20,Math.max(...v.map((t,i)=>svLines(t,Math.max(6,W[i]-2))))*14+4),v)});
   return{cells,widths:W,heights:hs,sig:null,stale:false,date:"",sheet:"監造事項"}}
 function svModelsOf(p,P,D,days){const H="公共工程監造報表 第二聯　完成工程詳細表",L2=P.itemList&&P.itemList.length?(P.layout2||"不附"):"不附",out=[];
@@ -2244,29 +2312,68 @@ function svSetCard(p){const sec=h("section",{class:"card"},h("h2",{},"監造報�
   sec.append(h("button",{type:"button",class:"btn primary",onclick:async()=>{const n=v=>v===""?null:Number(v);const o={chgN:n(chgN.value),amt0:n(a0.value),amt1:n(a1.value),doneDate:dd.value,sv1:l1.value,sv2:l2.value};
     try{await api("svProject",Object.assign({pid:p.id},o));Object.assign(p,o);S.svSet=false;S.flash="已儲存監造報表基本資料。";render()}catch(e){S.err="沒有儲存成功:"+e.message;render()}}},"儲存"));
   return sec}
+
+// 監造事項 Excel:下載(已填的內容也帶出)→ 在電腦上填 → 上傳一次存整月
+const SV_XCOLS=[["日期",""],["工項(監造五)","oth"],["重要督導(監造五後)","imp"],["取樣(監造三)","mat"],["施作工項(監造二)","sup"],["抽查項目(監造二)","chk"],["施工前檢查(四之一:完成/未完成/未施工)","pre"],["其他安衛督導(四之二)","saf"]];
+function svXlsDate(v,ym){if(typeof v==="number"&&v>20000){const d=new Date(Math.round((v-25569)*86400000));return d.toISOString().slice(0,10)}
+  const t=String(v||"").replace(/\s/g,"");let m=t.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);if(m)return m[1]+"-"+m[2].padStart(2,"0")+"-"+m[3].padStart(2,"0");
+  m=t.match(/^(\d{2,3})[-/.年](\d{1,2})[-/.月](\d{1,2})/);if(m)return (Number(m[1])+1911)+"-"+m[2].padStart(2,"0")+"-"+m[3].padStart(2,"0");
+  m=t.match(/^(\d{1,2})[/.月-](\d{1,2})/);if(m&&ym)return ym.slice(0,4)+"-"+m[1].padStart(2,"0")+"-"+m[2].padStart(2,"0");return ""}
+function svXlsDownload(p,D){const pj=D.project||{},ym=D.month;
+  const a=[SV_XCOLS.map(x=>x[0])];
+  D.days.forEach(d=>{const r=svRec(d);a.push([Number(d.date.slice(5,7))+"月"+Number(d.date.slice(8))+"日"].concat(SV_XCOLS.slice(1).map(c=>r[c[1]]||"")))});
+  a.push([],["說明:"+(pj.name||p.name)+" "+(Number(ym.slice(0,4))-1911)+"年"+Number(ym.slice(5,7))+"月。工項、取樣、施作工項已先帶入施工日誌的內容,請確認或修改;填好後到 App「監造報表」按「⬆ 上傳監造事項」。第一列標題與日期請不要改。"]);
+  const ws=XLSX.utils.aoa_to_sheet(a);ws["!cols"]=[10,40,30,24,40,18,14,24].map(w=>({wch:w}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"監造事項");
+  return S.dl.save({filename:(p.short||p.name)+(p.multi&&S.dSite?"_"+S.dSite:"")+"_"+ym+"_監造事項.xlsx",data:new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})])})}
+async function svXlsUpload(p,D,file){const wb=XLSX.read(await file.arrayBuffer());const sn=wb.SheetNames.find(n=>/監造/.test(n))||wb.SheetNames[0];
+  const a=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:""});const hr=a.findIndex(r=>r.some(x=>String(x).replace(/\s/g,"")==="日期"));
+  if(hr<0)throw new Error("找不到「日期」標題列,請用 App 下載的監造事項表填寫。");
+  const H=a[hr].map(x=>String(x).replace(/\s/g,"")),col={};
+  H.forEach((x,i)=>{if(x==="日期")col.date=i;else if(/本日施工/.test(x))return;else if(/重要督導/.test(x))col.imp=i;else if(/抽查/.test(x))col.chk=i;else if(/施作工項|監督|^二/.test(x))col.sup=i;else if(/取樣|材料|^三/.test(x))col.mat=i;else if(/施工前|四之一|四\(一\)|四（一）/.test(x))col.pre=i;else if(/安衛|四之二|四\(二\)|四（二）/.test(x))col.saf=i;else if(/^工項|其他|^五/.test(x))col.oth=i});
+  const items=[],skip=[];
+  for(let i=hr+1;i<a.length;i++){const r=a[i]||[],dt=svXlsDate(r[col.date],D.month);if(!dt)continue;const d=D.days.find(x=>x.date===dt);
+    const v={};["sup","chk","mat","pre","saf","oth","imp"].forEach(k=>{if(col[k]!==undefined)v[k]=String(r[col[k]]??"").trim()});
+    if(v.pre!==undefined){const t=v.pre.replace(/[■□☑☐✓\s]/g,"");v.pre=["完成","未完成","未施工"].includes(t)?t:""}
+    if(!d){if(Object.values(v).some(Boolean))skip.push(dt);continue}
+    const cur=svRec(d);if(S.svD.rows[d.date]&&!Object.keys(v).some(k=>(cur[k]||"")!==v[k]))continue;
+    items.push({d,data:Object.assign({},cur,v)})}
+  if(!items.length){alert("沒有要更新的內容"+(skip.length?"(這些日期不在這個月份或在開工前:"+skip.join("、")+")":"")+"。");return}
+  if(!confirm("將更新 "+items.length+" 天的監造報表:\n"+items.map(x=>x.d.date.slice(5)).join("、")+(skip.length?"\n\n略過(不在這個月份或在開工前):"+skip.join("、"):"")+"\n\n確定上傳?"))return;
+  const site=p.multi?S.dSite:"";await api("svSaveBatch",{pid:p.id,site,items:items.map(x=>({date:x.d.date,data:x.data}))});
+  items.forEach(x=>{const w=svRec(x.d);Object.assign(w,x.data);S.svD.rows[x.d.date]=Object.assign({},x.data)});S.flash="已上傳 "+items.length+" 天的監造報表,可以下載月報了。";render()}
+function svXlsCard(p,D){const fi=h("input",{type:"file",accept:".xlsx,.xls,.xlsm",hidden:true});
+  fi.addEventListener("change",async()=>{const f=fi.files[0];fi.value="";if(!f)return;try{await svFlush();await svXlsUpload(p,D,f)}catch(e){S.err="上傳失敗:"+(e.message||e);render()}});
+  return h("section",{class:"card"},h("h2",{},"📥 用 Excel 一次填整個月"),
+    h("p",{class:"note"},"不想在線上一天一天填:先下載這個月的「監造事項」表(欄位:日期、工項、重要督導、取樣、施作工項…,一天一列,施工日誌的內容與已填的內容都會先帶出),在自己電腦用 Excel 填好,再上傳,一次存進每天的監造報表。上傳後就能按上面的「⬇ 月報 PDF / Excel」下載整月日報。"),
+    h("div",{class:"row"},h("button",{type:"button",class:"btn",style:"flex:0 0 auto",onclick:async()=>{try{await svFlush();await svXlsDownload(p,D)}catch(e){if(!(e&&e.code==="declined")){S.err="下載失敗:"+(e.message||e);render()}}}},"⬇ 下載監造事項(Excel)"),
+      h("button",{type:"button",class:"btn primary",style:"flex:0 0 auto",onclick:()=>fi.click()},"⬆ 上傳監造事項"),fi))}
 function viewSv(){const p=proj(),out=[];
   if(["土方暫置","機動修繕"].includes(ptype(p)))return [h("section",{class:"card"},h("p",{class:"note"},"這個工程沒有施工日誌,也沒有監造報表。請從上方選單選擇其他工程。"))];
   S.svMonth=S.svMonth||today().slice(0,7);const head=h("section",{class:"card"},h("h2",{},"📝 監造報表｜"+(p.short||p.name)));out.push(head);
   if(S.flash){head.append(h("div",{class:"msg ok"},S.flash));S.flash=""}
   const row=h("div",{class:"row",style:"align-items:flex-end"});head.append(row);
-  if(!S.sv)row.append(h("button",{type:"button",class:"btn",style:"flex:0 0 auto",onclick:()=>{S.view="diary";try{location.hash="diary"}catch(e){}render()}},"← 回到施工日誌"));
+  if(!S.sv){if(!S.svPreview)row.append(h("button",{type:"button",class:"btn",style:"flex:0 0 auto",onclick:()=>{S.view="diary";try{location.hash="diary"}catch(e){}render()}},"← 回到施工日誌"));
+    row.append(h("button",{type:"button",class:"btn"+(S.svPreview?" primary":""),style:"flex:0 0 auto",onclick:()=>{S.svPreview=!S.svPreview;render();window.scrollTo(0,0)}},S.svPreview?"結束預覽,回到管理者畫面":"👁 用監造畫面預覽"));
+    if(S.svPreview)head.append(h("div",{class:"msg"},"正在預覽監造看到的畫面(藍色)。你還是管理者身分:看得到全部工程;真正的監造只看得到「可看範圍」內的工程,也看不到照片與單價。"))}
   if(p.multi){const opts=(p.siteInfo||[]).filter(x=>x.status!=="結案").map(x=>x.name);if(!S.dSite||!opts.includes(S.dSite))S.dSite=opts[0]||"";
-    const ss=h("select",{"aria-label":"派工單"},opts.map(n=>h("option",{value:n},n)));ss.value=S.dSite;ss.addEventListener("change",async()=>{await svFlush();S.dSite=ss.value;S.svD=null;render()});
+    const ss=h("select",{"aria-label":"派工單"},opts.map(n=>h("option",{value:n},n)));ss.value=S.dSite;ss.addEventListener("change",async()=>{if(!mxLeave()){render();return}await svFlush();S.dSite=ss.value;S.svD=null;render()});
     row.append(h("label",{class:"f"},"派工單(每張各一份)",ss));if(!opts.length){head.append(h("p",{class:"note"},"這個工程還沒有派工地點。"));return out}}
-  const mi=h("input",{type:"month","aria-label":"月份"});mi.value=S.svMonth;mi.addEventListener("change",async()=>{if(mi.value){await svFlush();S.svMonth=mi.value;S.svD=null;render()}});row.append(h("label",{class:"f",style:"flex:0 0 170px"},"月份",mi));
+  const mi=h("input",{type:"month","aria-label":"月份"});mi.value=S.svMonth;mi.addEventListener("change",async()=>{if(mi.value){if(!mxLeave()){render();return}await svFlush();S.svMonth=mi.value;S.svD=null;render()}});row.append(h("label",{class:"f",style:"flex:0 0 170px"},"月份",mi));
   if(window.innerWidth<900)head.append(h("div",{class:"msg warn"},"監造報表是電腦版,請用電腦開啟比較好填寫。"));
   const site=p.multi?S.dSite:"",key=p.id+"|"+site+"|"+S.svMonth;
-  if(!S.svD||S.svD.key!==key){S.svD={key,loading:true};Promise.all([api("diary",{pid:p.id,site,month:S.svMonth}),api("svList",{pid:p.id,site,month:S.svMonth})]).then(([D,L])=>{if(S.svD&&S.svD.key===key){S.svD={key,D,rows:L.rows||{},phr:L.phr||{}};render()}}).catch(e=>{S.svD=null;S.err="讀取失敗:"+e.message;render()})}
+  if(!S.svD||S.svD.key!==key){S.svD={key,loading:true};Promise.all([api("diary",{pid:p.id,site,month:S.svMonth}),api("svList",{pid:p.id,site,month:S.svMonth})]).then(([D,L])=>{if(S.svD&&S.svD.key===key){const st=(D.project||{}).start;if(st)D.days=(D.days||[]).filter(x=>x.date>=st);S.svD={key,D,rows:L.rows||{},phr:L.phr||{}};render()}}).catch(e=>{S.svD=null;S.err="讀取失敗:"+e.message;render()})}
   if(S.svD.loading){head.append(h("p",{class:"note"},"讀取中…"));return out}
   const D=S.svD.D,P=svPrj(p,D);
-  head.append(h("div",{class:"row"},seg(["每日填寫","監造事項總表"],S.svTab||"每日填寫",v=>{S.svTab=v;render()}),
-    h("button",{type:"button",class:"btn",style:"flex:0 0 auto",onclick:async()=>{await svFlush();dOpenPrint(svModelsOf(p,P,D,D.days),P.short+" "+D.month+" 監造報表")}},"⬇ 整月 PDF"),
-    h("button",{type:"button",class:"btn",style:"flex:0 0 auto",onclick:async()=>{await svFlush();try{const b=buildXlsx([svSummaryModel(p,D),...svModelsOf(p,P,D,D.days)]);await S.dl.save({filename:P.short+"_"+D.month+"_監造報表.xlsx",data:b})}catch(e){if(!(e&&e.code==="declined")){S.err="Excel 產生失敗:"+(e.message||e);render()}}}},"⬇ 整月 Excel"),
+  head.append(h("div",{class:"row"},seg(["每日填寫","矩陣表"],S.svTab==="矩陣表"?"矩陣表":"每日填寫",v=>{if(v!=="矩陣表"&&!mxLeave()){render();return}if(S.mx)S.mx.ed={};S.svTab=v;render()}),
+    h("button",{type:"button",class:"btn",style:"flex:0 0 auto",onclick:async()=>{await svFlush();dOpenPrint(svModelsOf(p,P,D,D.days),P.short+" "+D.month+" 監造報表")}},"⬇ 月報 PDF(整月日報)"),
+    h("button",{type:"button",class:"btn",style:"flex:0 0 auto",onclick:async()=>{await svFlush();try{const b=buildXlsx([svSummaryModel(p,D),...svModelsOf(p,P,D,D.days)]);await S.dl.save({filename:P.short+"_"+D.month+"_監造報表.xlsx",data:b})}catch(e){if(!(e&&e.code==="declined")){S.err="Excel 產生失敗:"+(e.message||e);render()}}}},"⬇ 月報 Excel"),
     h("button",{type:"button",class:"btn",style:"flex:0 0 auto",onclick:()=>{S.svSet=!S.svSet;render()}},S.svSet?"收起基本資料":"⚙ 基本資料(契約金額、版面)")));
   if(!p.amt0&&!S.svSet)head.append(h("div",{class:"msg"},"還沒填契約金額,報表的「契約金額」會是空白。請按「⚙ 基本資料」填寫。"));
   if(S.svSet)out.push(svSetCard(p));
+  if(D.days.length)out.push(svXlsCard(p,D));
   if(!D.days.length){out.push(h("section",{class:"card"},h("p",{class:"note"},"這個月份沒有資料(還沒開工,或月份在未來)。")));return out}
-  if((S.svTab||"每日填寫")==="監造事項總表"){out.push(h("section",{class:"card"},h("p",{class:"note"},"一天一列,像 Excel 一樣直接打字,會自動儲存。和「每日填寫」是同一份資料,兩邊都可以改。"),h("span",{id:"svst",class:"note"},""),svTable(p,P,D)));return out}
+  if(S.svTab==="矩陣表"){out.push(h("section",{class:"card"},svMatrix(p,P,D)));return out}
   if(!S.svDate||!D.days.some(x=>x.date===S.svDate))S.svDate=(D.days.find(x=>x.date===today())||D.days[D.days.length-1]).date;
   const d=D.days.find(x=>x.date===S.svDate);
   const list=h("div",{class:"svdays",role:"list"},h("div",{class:"note",style:"font-size:12px;padding:0 6px 4px"},"本月 "+D.days.length+" 天,已填 "+D.days.filter(x=>S.svD.rows[x.date]).length+" 天"),
@@ -2447,10 +2554,11 @@ function applyLayoutMode(){
 function render(){applyLayoutMode();const main=$("#main");if(!S.loaded){return}
   const sel=$("#proj");{const ap=liveProjects();const sig=ap.map(p=>p.id+p.short).join("|");if(sel.dataset.sig!==sig){sel.dataset.sig=sig;sel.replaceChildren(...ap.map(p=>h("option",{value:p.id},p.short||p.name)))}}
   const p=proj();if(p){S.pid=p.id;sel.value=p.id}
-  const allowV=S.sub?["report","log"]:S.sv?["sv","diary"]:null;
+  const svLook=!!(S.sv||S.svPreview);document.documentElement.dataset.role=svLook?"sv":"";
+  const allowV=S.sub?["report","log"]:svLook?["sv","diary"]:null;
   if(allowV){S.boss=false;if(!allowV.includes(S.view))S.view=allowV[0]}
-  document.querySelectorAll("nav button").forEach(b=>{b.setAttribute("aria-current",String(b.dataset.v===S.view));b.hidden=allowV?!allowV.includes(b.dataset.v):b.dataset.v==="sv"});
-  $("nav").hidden=S.boss;sel.hidden=S.boss;$("header b").textContent=S.boss?"松青工程總覽":S.sv?"監造報表":"現場回報";
+  document.querySelectorAll("nav button").forEach(b=>{b.setAttribute("aria-current",String(b.dataset.v===S.view));b.hidden=allowV?!allowV.includes(b.dataset.v):b.dataset.v==="sv"&&!(S.canOffice&&document.documentElement.dataset.layout==="desktop")});
+  $("nav").hidden=S.boss;sel.hidden=S.boss;$("header b").textContent=S.boss?"松青工程總覽":svLook?"監造報表":"現場回報";
   const eb=$("#exitBoss");if(eb)eb.hidden=!S.boss;const lo=$("#logout");if(lo)lo.hidden=!G.key;
   if(S.demo)S.reports=demoData();
     let out=[];if(S.err){out.push(h("div",{class:"msg warn full-span"},S.err));S.err=""}

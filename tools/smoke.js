@@ -212,5 +212,7 @@ ok(r.ok&&r.rows['2026-11-18'].pm==='晴'&&r.rows['2026-11-18'].no==='006'&&Objec
 ok(r.phr.sup[0]==='抽查鋼筋綁紮','常用句子');
 ok(!m.call({key:k,action:'svList',pid:'yanggong1',site:'實踐國小',month:'2026-11'}).ok&&!m.call({key:k,action:'svList',pid:'xingong-north',site:'新莊分案B',month:'2026-11'}).ok,'監造不能看範圍外的工程或派工單');
 ok(m.call({key:k,action:'svProject',pid:'ntpu',chgN:1,amt0:166600000,doneDate:'',sv1:'全部',sv2:'每月'}).ok&&m.run("projById_('ntpu').amt0")===166600000&&m.run("projById_('ntpu').sv2")==='每月','監造可以填契約金額與報表版面');
+r=m.call({key:k,action:'svSaveBatch',pid:'ntpu',site:'',items:[{date:'2026-11-18',data:{no:'006',sup:'Excel上傳18'}},{date:'2026-11-20',data:{no:'008',sup:'Excel上傳20',pre:'未施工'}}]});
+const L2=m.call({key:k,action:'svList',pid:'ntpu',site:'',month:'2026-11'}).rows;ok(r.ok&&r.n===2&&L2['2026-11-18'].sup==='Excel上傳18'&&L2['2026-11-20'].pre==='未施工'&&Object.keys(L2).length===3,'監造報表 Excel 上傳一次存多天');
 ok(!m.call({key:'field123',action:'svSave',pid:'ntpu',date:'2026-11-18',data:{}}).ok,'現場不能改監造報表');}
 console.log('全部通過');
