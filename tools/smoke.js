@@ -198,4 +198,19 @@ ok(!m.call({key:k,action:'report',id:own.id,data:{pid:'xingong-north',site:'新�
 ok(m.call({key:k,action:'report',id:sid,data:{pid:'xingong-north',site:'新莊分案A',date:'2026-11-26',traffic:3,entries:[]}}).ok,'下包可以改自己的回報');
 ok(['saveConfig','deleteReport','saveAccount','photoZip','sign','saveProject'].every(a=>!m.call({key:k,action:a}).ok),'下包不能用管理功能');
 ok(m.call({key:k,action:'photoByUrl',urls:['https://drive.google.com/file/d/ZZZ/view']}).files.length===0,'下包不能取範圍外的照片');}
+// 監造:只看得到範圍內工程,可以填監造報表,不能回報
+{ok(m.call({key:'admin123',action:'saveAccount',name:'監造乙',accRole:'監造',status:'啟用',scope:['ntpu','xingong-north/新莊分案A']}).ok,'新增監造帳號');
+const k=m.call({action:'login',name:'監造乙',newPin:'2468'}).token;
+let r=m.call({key:k,action:'load'});ok(r.ok&&r.role==='sv'&&r.projects.map(p=>p.id).join()==='ntpu,xingong-north','監造只看到範圍內的工程');
+ok(r.reports.every(x=>!x.photos.length&&x.entries.every(e=>!e.photo)),'監造看不到現場照片');
+ok(!m.call({key:k,action:'report',data:{pid:'ntpu',date:'2026-11-26',entries:[]}}).ok&&!m.call({key:k,action:'saveProject',project:{id:'ntpu'}}).ok,'監造不能回報、不能改工程');
+r=m.call({key:k,action:'svSave',pid:'ntpu',site:'',date:'2026-11-18',data:{no:'006',am:'晴',pm:'雨',sup:'抽查鋼筋綁紮',chk:'鋼筋工程',mat:'',pre:'完成',saf:'',oth:'機關至現場督導'}});ok(r.ok,'監造儲存當日報表');
+m.call({key:k,action:'svSave',pid:'ntpu',site:'',date:'2026-11-19',data:{no:'007',sup:'抽查鋼筋綁紮'}});
+m.call({key:k,action:'svSave',pid:'ntpu',site:'',date:'2026-11-18',data:{no:'006',am:'晴',pm:'晴',sup:'抽查鋼筋綁紮',chk:'鋼筋工程',pre:'完成',oth:'機關至現場督導'}});
+r=m.call({key:k,action:'svList',pid:'ntpu',site:'',month:'2026-11'});
+ok(r.ok&&r.rows['2026-11-18'].pm==='晴'&&r.rows['2026-11-18'].no==='006'&&Object.keys(r.rows).length===2&&m.sheets['監造報表'].d.length===3,'修改同一天不會重複,表報編號保留 006');
+ok(r.phr.sup[0]==='抽查鋼筋綁紮','常用句子');
+ok(!m.call({key:k,action:'svList',pid:'yanggong1',site:'實踐國小',month:'2026-11'}).ok&&!m.call({key:k,action:'svList',pid:'xingong-north',site:'新莊分案B',month:'2026-11'}).ok,'監造不能看範圍外的工程或派工單');
+ok(m.call({key:k,action:'svProject',pid:'ntpu',chgN:1,amt0:166600000,doneDate:'',sv1:'全部',sv2:'每月'}).ok&&m.run("projById_('ntpu').amt0")===166600000&&m.run("projById_('ntpu').sv2")==='每月','監造可以填契約金額與報表版面');
+ok(!m.call({key:'field123',action:'svSave',pid:'ntpu',date:'2026-11-18',data:{}}).ok,'現場不能改監造報表');}
 console.log('全部通過');

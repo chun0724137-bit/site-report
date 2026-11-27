@@ -122,6 +122,21 @@ const ok = (c, msg) => { if (c) { pass++; console.log('ok', msg) } else { fail++
     await ev(() => { location.hash = 'boss' }); await wait(300);
     ok(await ev(() => !S.boss && S.view === 'report'), '下包打不開老闆版'); }
 
+  // 13. 監造登入:藍色、只有監造報表與日誌,打字自動存,可產生 PDF/Excel
+  { await page.goto(base); await ev(() => { localStorage.clear(); localStorage.setItem('gkey', 'admin123') }); await boot();
+    await ev(async () => { await api('saveAccount', { name: '監造測試', accRole: '監造', status: '啟用', scope: ['ntpu'] }) });
+    const tk = await ev(async () => (await fetch(G.url, { method: 'POST', body: JSON.stringify({ action: 'login', name: '監造測試', newPin: '1357' }) }).then(r => r.json())).token);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await ev(t => { localStorage.clear(); localStorage.setItem('gkey', t) }, tk); await boot(); await wait(1500);
+    const v = await ev(() => ({ role: document.documentElement.dataset.role, view: S.view, nav: [...document.querySelectorAll('nav button')].filter(b => !b.hidden).map(b => b.dataset.v).join() }));
+    ok(v.role === 'sv' && v.view === 'sv' && v.nav === 'sv,diary', '監造登入是藍色,只有監造報表與日誌(' + v.nav + ')');
+    const ta = page.locator('textarea[aria-label^="二、監督"]'); await ta.fill('抽查模板組立'); await wait(1800);
+    ok(await ev(async () => { const d = S.svDate; const L = await api('svList', { pid: proj().id, site: '', month: d.slice(0, 7) }); return (L.rows[d] || {}).sup === '抽查模板組立' }), '監造報表打字自動儲存');
+    ok(await ev(async () => { const p = proj(), D = S.svD.D, P = svPrj(p, D); const b = buildXlsx([svSummaryModel(p, D), ...svModelsOf(p, P, D, D.days)]); const wb = XLSX.read(await b.arrayBuffer()); return wb.SheetNames[0] === '監造事項' && wb.SheetNames.length === D.days.length + 1 }), '監造 Excel 有監造事項與每日報表');
+    await ev(() => { S.svTab = '監造事項總表'; render() });
+    ok(await ev(() => document.querySelectorAll('.svt tbody tr').length === S.svD.D.days.length), '監造事項總表一天一列');
+    await page.setViewportSize({ width: 420, height: 900 }); }
+
   ok(!errors.length, '頁面沒有程式錯誤' + (errors.length ? ':' + errors.slice(0, 3).join(' | ') : ''));
   await browser.close(); srv.close();
   console.log(fail ? '有 ' + fail + ' 項失敗' : '全部通過(' + pass + ' 項)'); process.exit(fail ? 1 : 0);

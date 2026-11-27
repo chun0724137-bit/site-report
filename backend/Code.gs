@@ -4,7 +4,8 @@
  * 執行身分:我;存取權:所有人。通行碼在「設定」分頁。
  */
 var HEAD = {
-  '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型', '常用機具', '勾選方式', '工地負責人', '承攬廠商', '核定工期', '展延天數', '日誌第一聯', '日誌二聯', '第一次展延天數', '第二次展延天數', '監造單位', '不鎖修改', '封存檔', '封存日'],
+  '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型', '常用機具', '勾選方式', '工地負責人', '承攬廠商', '核定工期', '展延天數', '日誌第一聯', '日誌二聯', '第一次展延天數', '第二次展延天數', '監造單位', '不鎖修改', '封存檔', '封存日', '契約變更次數', '原契約金額', '變更後契約金額', '實際完工日', '監造第一聯', '監造二聯'],
+  '監造報表': ['工程代號', '派工地點', '日期', '表報編號', '上午天氣', '下午天氣', '監督施工', '抽查項目', '材料品質', '施工前檢查', '安衛督導', '其他事項', '修改人', '修改時間'],
   '派工地點': ['工程代號', '地點', '狀態', '區域', '工作性質', '開工日', '預定完工日', '實際完工日', '派工工項'],
   '設定': ['類別', '值', '屬性'],
   '預定進度': ['工程簡稱', '版本', '生效日', '日期', '累計預定進度'],
@@ -514,7 +515,7 @@ function menuSetupBackup() { setupWeeklyBackup(); SpreadsheetApp.getUi().alert('
 /* ===== 封存:已完工的工程搬到「現場回報封存」資料夾裡自己的試算表,主檔不再讀它 ===== */
 var ARCHIVE_FOLDER = '現場回報封存';
 /** 有工程資料的表格:[分頁, 對應欄, 用代號或簡稱] */
-var ARCHIVE_TABLES = [['每日回報', '工程代號', 'id'], ['簽名', '工程代號', 'id'], ['日誌勾選', '工程代號', 'id'], ['派工地點', '工程代號', 'id'], ['派工預定進度', '工程代號', 'id'], ['預定進度', '工程簡稱', 'short']];
+var ARCHIVE_TABLES = [['每日回報', '工程代號', 'id'], ['簽名', '工程代號', 'id'], ['日誌勾選', '工程代號', 'id'], ['派工地點', '工程代號', 'id'], ['派工預定進度', '工程代號', 'id'], ['預定進度', '工程簡稱', 'short'], ['監造報表', '工程代號', 'id']];
 function archiveSheetsOf_(p) { return [ITEM_PREFIX + p.short, SOIL_PREFIX + p.short]; }
 function hdrRows_(name, v) { return name === '每日回報' && v && str_((v[0] || [])[0]) === '年度' ? 2 : 1; }
 function projRowSet_(sh, id, field, value) {
@@ -656,7 +657,8 @@ function projects_() {
       machines: machs,
       tick: str_(r['勾選方式']) || '手勾', layout1: str_(r['日誌第一聯']) || '當日', layout2: str_(r['日誌二聯']) || '不附', signer: str_(r['工地負責人']), company: str_(r['承攬廠商']), approved: num_(r['核定工期']), ext: num_(r['展延天數']) || 0,
       chExt: [num_(r['第一次展延天數']) || 0, num_(r['第二次展延天數']) || 0],
-      supervisor: str_(r['監造單位']), nolock: str_(r['不鎖修改']) === '是', archive: str_(r['封存檔']), archivedAt: date_(r['封存日'])
+      supervisor: str_(r['監造單位']), nolock: str_(r['不鎖修改']) === '是', archive: str_(r['封存檔']), archivedAt: date_(r['封存日']),
+      chgN: num_(r['契約變更次數']), amt0: num_(r['原契約金額']), amt1: num_(r['變更後契約金額']), doneDate: date_(r['實際完工日']), sv1: str_(r['監造第一聯']) || '當日', sv2: str_(r['監造二聯']) || '不附'
     };
   }).filter(function (p) { return p.id; }).sort(function (a, b) { return a.order - b.order; });
 }
@@ -2090,6 +2092,45 @@ var ACTIONS = {
       catch (err) { return { error: '讀不到這張照片' }; }
     }) };
   },
+  /** 監造報表:某工程(派工單)某月每天監造填的內容,另附常用句子 */
+  svList: function (q, role) {
+    if (role !== 'admin' && role !== 'office' && role !== 'sv') throw new Error('沒有監造報表的權限');
+    var pid = str_(q.pid), site = str_(q.site), ym = str_(q.month), rows = {}, phr = {};
+    var F = SV_FIELDS_;
+    read_('監造報表').rows.forEach(function (r) {
+      if (str_(r['工程代號']) !== pid || str_(r['派工地點']) !== site) return;
+      var d = date_(r['日期']), o = svRow_(r);
+      if (d.slice(0, 7) === ym) rows[d] = o;
+      ['sup', 'chk', 'mat', 'saf', 'oth'].forEach(function (k) { var v = o[k]; if (v && v.length <= 80) { (phr[k] = phr[k] || {}); phr[k][v] = (phr[k][v] || 0) + 1; } });
+    });
+    var out = {}; Object.keys(phr).forEach(function (k) { out[k] = Object.keys(phr[k]).sort(function (a, b) { return phr[k][b] - phr[k][a]; }).slice(0, 12); });
+    return { rows: rows, phr: out };
+  },
+  svSave: function (q, role) {
+    if (role !== 'admin' && role !== 'office' && role !== 'sv') throw new Error('沒有監造報表的權限');
+    var pid = str_(q.pid), site = str_(q.site), d = str_(q.date), x = q.data || {};
+    if (!pid || !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error('資料不完整');
+    var rec = { '工程代號': pid, '派工地點': site, '日期': d, '修改人': str_(q._me), '修改時間': now_() };
+    Object.keys(SV_FIELDS_).forEach(function (k) { rec[SV_FIELDS_[k]] = str_(x[k]).slice(0, 2000); });
+    var sh = sheet_('監造報表'), t = read_('監造報表'), hit = null;
+    t.rows.forEach(function (r) { if (str_(r['工程代號']) === pid && str_(r['派工地點']) === site && date_(r['日期']) === d) hit = r; });
+    if (hit) {
+      var row = t.head.map(function (hd) { return hd in rec ? rec[hd] : hit[hd]; });
+      sh.getRange(hit._row, 3, 1, 2).setNumberFormat('@');
+      sh.getRange(hit._row, 1, 1, row.length).setValues([row]);
+    } else { sh.getRange(sh.getLastRow() + 1, 3, 1, 2).setNumberFormat('@'); append_('監造報表', [rec]); }
+    return { row: svRow_(rec) };
+  },
+  /** 監造報表用的工程資料:契約變更次數、契約金額、實際完工日、報表版面(監造或內業可改) */
+  svProject: function (q, role) {
+    if (role !== 'admin' && role !== 'office' && role !== 'sv') throw new Error('沒有監造報表的權限');
+    var id = str_(q.pid), t = read_('工程'), sh = sheet_('工程'), hit = null;
+    t.rows.forEach(function (r) { if (str_(r['工程代號']) === id) hit = r; });
+    if (!hit) throw new Error('找不到工程');
+    var map = { chgN: '契約變更次數', amt0: '原契約金額', amt1: '變更後契約金額', doneDate: '實際完工日', sv1: '監造第一聯', sv2: '監造二聯' };
+    for (var k in map) if (q[k] !== undefined && t.head.indexOf(map[k]) >= 0) sh.getRange(hit._row, t.head.indexOf(map[k]) + 1).setValue(q[k] === null ? '' : q[k]);
+    return {};
+  },
   archiveProject: function (q, role) { if (role !== 'admin') throw new Error('只有管理者可以封存工程'); return archiveProject_(q); },
   restoreProject: function (q, role) { if (role !== 'admin') throw new Error('只有管理者可以還原工程'); return restoreProject_(q); },
   backupNow: function (q, role) { if (role !== 'admin') throw new Error('只有管理者可以備份'); return backupNow_(); },
@@ -2190,7 +2231,7 @@ function safe_(v) { return str_(v).replace(/[\\\/:*?"<>|]/g, '_').slice(0, 80); 
 var WRITES = { saveSitePlan: 1, undoChange: 1, importItems: 1, saveTick: 1, sign: 1, importPlan: 1, saveAccount: 1, saveSiteItems: 1, report: 1, deleteReport: 1, addSite: 1, siteStatus: 1, settle: 1, setActive: 1, saveConfig: 1, saveProject: 1 };
 
 /* ===== 帳號與資安 ===== */
-var ROLE_MAP = { '管理者': 'admin', '現場': 'field', '內業': 'office', '老闆': 'office', '下包': 'sub' };
+var ROLE_MAP = { '管理者': 'admin', '現場': 'field', '內業': 'office', '老闆': 'office', '下包': 'sub', '監造': 'sv' };
 var TOKEN_DAYS = 30, MAX_FAIL = 5, LOCK_SEC = 900;
 function secret_() {
   var P = PropertiesService.getScriptProperties(), s = P.getProperty('AUTH_SECRET');
@@ -2297,8 +2338,16 @@ function scopeOf_(txt) {
 /** site 給空字串表示「整個工程」:只有勾整個工程的才算在範圍內 */
 function inScope_(sc, pid, site) { var o = sc[pid]; if (!o) return false; return o.all || (!!site && o.sites.indexOf(site) >= 0); }
 function projInScope_(sc, pid) { return !!sc[pid]; }
+var SV_FIELDS_ = { no: '表報編號', am: '上午天氣', pm: '下午天氣', sup: '監督施工', chk: '抽查項目', mat: '材料品質', pre: '施工前檢查', saf: '安衛督導', oth: '其他事項' };
+function svRow_(r) { var o = {}; Object.keys(SV_FIELDS_).forEach(function (k) { o[k] = str_(r[SV_FIELDS_[k]]); }); o.by = str_(r['修改人']); o.at = dt_(r['修改時間']) || str_(r['修改時間']); return o; }
+var SV_ACTIONS = { load: 1, diary: 1, svList: 1, svSave: 1, svProject: 1 };
 var SUB_ACTIONS = { load: 1, reports: 1, report: 1, diary: 1, upload: 1, photoByUrl: 1, photoFiles: 1 };
-function subCheck_(action, q, user, sc) {
+function subCheck_(action, q, user, sc, role) {
+  if (role === 'sv') {
+    if (!SV_ACTIONS[action]) throw new Error('監造帳號沒有這個權限');
+    if (action !== 'load' && !inScope_(sc, str_(q.pid), str_(q.site))) throw new Error('沒有這個工程或派工單的權限');
+    return;
+  }
   if (!SUB_ACTIONS[action]) throw new Error('下包帳號沒有這個權限');
   if (action === 'diary' || action === 'photoFiles') {
     if (!inScope_(sc, str_(q.pid), str_(q.site))) throw new Error('沒有這個工程或派工單的權限');
@@ -2323,8 +2372,9 @@ function subCheck_(action, q, user, sc) {
   }
 }
 function subReport_(r) { var o = {}; for (var k in r) o[k] = r[k]; o.crew = {}; o.crewOt = {}; return o; }
-function subFilter_(action, out, sc) {
-  if (out.reports) out.reports = out.reports.filter(function (r) { return inScope_(sc, r.pid, r.site); }).map(subReport_);
+function svReport_(r) { var o = subReport_(r); o.photos = []; o.entries = (r.entries || []).map(function (e) { var x = {}; for (var k in e) x[k] = e[k]; x.photo = ''; return x; }); return o; }
+function subFilter_(action, out, sc, role) {
+  if (out.reports) out.reports = out.reports.filter(function (r) { return inScope_(sc, r.pid, r.site); }).map(role === 'sv' ? svReport_ : subReport_);
   if (action !== 'load') return out;
   out.projects = (out.projects || []).filter(function (p) { return projInScope_(sc, p.id); });
   out.sites = (out.sites || []).filter(function (x) { return inScope_(sc, x[0], x[1]); });
@@ -2370,12 +2420,12 @@ function handle_(q) {
       if (action === 'report' && q.data) q.data.by = user.name;
       if (action === 'deleteReport') q.by = user.name;
     }
-    var sc = role === 'sub' ? scopeOf_(user.scope) : null;
-    if (sc) subCheck_(action, q, user, sc);
+    var sc = role === 'sub' || role === 'sv' ? scopeOf_(user.scope) : null;
+    if (sc) subCheck_(action, q, user, sc, role);
     var lock = null;
     if (WRITES[action]) { lock = LockService.getScriptLock(); lock.waitLock(25000); }
     try {
-      q._me = user.name; var out = fn(q, role, c) || {}; if (sc) out = subFilter_(action, out, sc); out.ok = true; out.me = user.name; out.legacy = user.legacy;
+      q._me = user.name; var out = fn(q, role, c) || {}; if (sc) out = subFilter_(action, out, sc, role); out.ok = true; out.me = user.name; out.legacy = user.legacy;
       if (WRITES[action]) audit_(user.name, role, action, str_(q.id) || str_(q.pid) || '');
       return out;
     } finally { if (lock) lock.releaseLock(); }
