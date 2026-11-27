@@ -2436,10 +2436,23 @@ function scopeEditor(a){const cur=new Set(String(a.scope||"").split(/\n/).filter
     if(p.multi){const g=h("div",{class:"sug",style:"margin:0 0 8px 22px"});(p.siteInfo||[]).forEach(si=>{const k=p.id+"/"+si.name,cb=h("input",{type:"checkbox"});cb.checked=cur.has(k);cb.addEventListener("change",()=>{cb.checked?cur.add(k):cur.delete(k)});g.append(h("label",{class:"tag",style:"display:inline-flex;gap:4px;align-items:center"},cb,si.name+(si.status==="結案"?"(結案)":"")))});if((p.siteInfo||[]).length)box.append(g)}});
   box.append(h("div",{class:"row"},h("button",{type:"button",class:"btn primary",onclick:async()=>{try{const j=await api("saveAccount",{name:a.name,accRole:a.role,status:a.status,scope:[...cur]});S.accounts=j.accounts;S.scopeOpen="";S.flash="已儲存「"+a.name+"」的可看範圍。";render()}catch(e){S.err="沒有儲存成功:"+e.message;render()}}},"儲存範圍"),h("button",{type:"button",class:"btn",onclick:()=>{S.scopeOpen="";render()}},"取消")));
   return box}
+function loginTime(v){const x=Number(v);if(/^\d{5}(\.\d+)?$/.test(String(v))&&x>30000){const d=new Date(Math.round((x-25569)*86400000));const p=n=>String(n).padStart(2,"0");return d.getUTCFullYear()+"-"+p(d.getUTCMonth()+1)+"-"+p(d.getUTCDate())+" "+p(d.getUTCHours())+":"+p(d.getUTCMinutes())}return String(v||"")}
 function accountsAdmin(){
   const sec=h("section",{class:"card"},
     h("h2",{},"🔐 系統登入人員管理"),
     h("p",{class:"note"},"在此新增同仁姓名與角色（也會同步寫入試算表「人員」分頁）。同仁第一次用姓名登入時會自行設定 PIN 碼；離職時按「停用」即可立即收回權限。至少需建立一位「管理者」，建立後舊版共用通行碼會自動停用。"));
+  const nIn=h("input",{type:"text",placeholder:"輸入同仁姓名，例：陳小明"});
+  const rSel=h("select",{},["現場","內業","老闆","管理者","下包","監造"].map(x=>h("option",{value:x},x)));
+  sec.append(h("div",{class:"sheet",style:"margin:8px 0 12px"},h("b",{},"＋ 新增人員"),
+    h("div",{class:"row"},
+      h("label",{class:"f",style:"flex:1 1 110px"},"角色權限",rSel),
+      h("label",{class:"f",style:"flex:2 1 140px"},"新增人員姓名",nIn),
+      h("button",{type:"button",class:"btn primary",style:"flex:0 0 auto;align-self:flex-end",onclick:async()=>{
+        const nm=nIn.value.trim();if(!nm){nIn.focus();return}
+        try{const j=await api("saveAccount",{name:nm,accRole:rSel.value,status:"啟用"});S.accounts=j.accounts;nIn.value="";if(rSel.value==="下包"||rSel.value==="監造")S.scopeOpen=nm;render()}catch(e){S.err="請先將新版 Code.gs 貼到 Google 試算表 Apps Script 並重新部署，即可啟用雲端人員管理（"+e.message+"）";render()}
+      }},"＋ 新增人員")
+    )
+  ));
   const list=S.accounts||[];
   if(list.length){
     list.forEach(a=>{
@@ -2462,7 +2475,7 @@ function accountsAdmin(){
         h("div",{style:"flex:1;min-width:140px"},
           h("b",{},a.name+" "),
           h("span",{class:"pill "+(isOff?"warn":"ok")},isOff?"已停用":(a.hasPin?"已設PIN":"待首次登入設PIN")),
-          a.lastLogin?h("div",{class:"note",style:"font-size:12px"},"最後登入："+a.lastLogin):null,
+          a.lastLogin?h("div",{class:"note",style:"font-size:12px"},"最後登入："+loginTime(a.lastLogin)):null,
           (a.role==="下包"||a.role==="監造")?h("div",{class:"note",style:"font-size:12px"},"可看範圍："+(scopeLabel(a.scope)||"（還沒設定，登入後看不到任何工程）")+" ",h("button",{type:"button",class:"acc",onclick:()=>{S.scopeOpen=S.scopeOpen===a.name?"":a.name;render()}},S.scopeOpen===a.name?"收起":"設定範圍")):null
         ),
         h("div",{class:"row",style:"flex:0 0 auto;gap:6px;flex-wrap:nowrap"},
@@ -2481,18 +2494,6 @@ function accountsAdmin(){
   }else{
     sec.append(h("div",{class:"msg warn"},"目前尚未建立任何登入人員。請先在下方新增至少一位「管理者」（例如您自己），再新增現場與內業同仁。"));
   }
-  const nIn=h("input",{type:"text",placeholder:"輸入同仁姓名，例：陳小明"});
-  const rSel=h("select",{},["現場","內業","老闆","管理者","下包","監造"].map(x=>h("option",{value:x},x)));
-  sec.append(
-    h("div",{class:"row"},
-      h("label",{class:"f",style:"flex:1 1 110px"},"角色權限",rSel),
-      h("label",{class:"f",style:"flex:2 1 140px"},"新增人員姓名",nIn),
-      h("button",{type:"button",class:"btn primary",style:"flex:0 0 auto;align-self:flex-end",onclick:async()=>{
-        const nm=nIn.value.trim();if(!nm){nIn.focus();return}
-        try{const j=await api("saveAccount",{name:nm,accRole:rSel.value,status:"啟用"});S.accounts=j.accounts;nIn.value="";if(rSel.value==="下包"||rSel.value==="監造")S.scopeOpen=nm;render()}catch(e){S.err="請先將新版 Code.gs 貼到 Google 試算表 Apps Script 並重新部署，即可啟用雲端人員管理（"+e.message+"）";render()}
-      }},"＋ 新增人員")
-    )
-  );
   return sec;
 }
 function siteDispEditor(p,siteName){
