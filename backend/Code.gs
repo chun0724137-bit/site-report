@@ -4,7 +4,7 @@
  * 執行身分:我;存取權:所有人。通行碼在「設定」分頁。
  */
 var HEAD = {
-  '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型', '常用機具', '勾選方式', '工地負責人', '承攬廠商', '核定工期', '展延天數', '日誌第一聯', '日誌二聯', '第一次展延天數', '第二次展延天數', '監造單位', '不鎖修改', '封存檔', '封存日', '契約變更次數', '原契約金額', '變更後契約金額', '實際完工日', '監造第一聯', '監造二聯'],
+  '工程': ['工程代號', '工程名稱', '簡稱', '開口契約', '狀態', '開工日', '完工日', '備註', '排序', '施工地點', '機關名稱', '日誌方式', '第一次變更日', '第二次變更日', '工程類型', '常用機具', '勾選方式', '工地負責人', '承攬廠商', '核定工期', '展延天數', '日誌第一聯', '日誌二聯', '第一次展延天數', '第二次展延天數', '監造單位', '不鎖修改', '封存檔', '封存日', '契約變更次數', '原契約金額', '變更後契約金額', '實際完工日', '監造第一聯', '監造二聯', '直接工程費'],
   '監造報表': ['工程代號', '派工地點', '日期', '表報編號', '上午天氣', '下午天氣', '監督施工', '抽查項目', '材料品質', '施工前檢查', '安衛督導', '其他事項', '修改人', '修改時間', '重要督導'],
   '派工地點': ['工程代號', '地點', '狀態', '區域', '工作性質', '開工日', '預定完工日', '實際完工日', '派工工項'],
   '設定': ['類別', '值', '屬性'],
@@ -658,7 +658,7 @@ function projects_() {
       tick: str_(r['勾選方式']) || '手勾', layout1: str_(r['日誌第一聯']) || '當日', layout2: str_(r['日誌二聯']) || '不附', signer: str_(r['工地負責人']), company: str_(r['承攬廠商']), approved: num_(r['核定工期']), ext: num_(r['展延天數']) || 0,
       chExt: [num_(r['第一次展延天數']) || 0, num_(r['第二次展延天數']) || 0],
       supervisor: str_(r['監造單位']), nolock: str_(r['不鎖修改']) === '是', archive: str_(r['封存檔']), archivedAt: date_(r['封存日']),
-      chgN: num_(r['契約變更次數']), amt0: num_(r['原契約金額']), amt1: num_(r['變更後契約金額']), doneDate: date_(r['實際完工日']), sv1: str_(r['監造第一聯']) || '當日', sv2: str_(r['監造二聯']) || '不附'
+      chgN: num_(r['契約變更次數']), amt0: num_(r['原契約金額']), amt1: num_(r['變更後契約金額']), doneDate: date_(r['實際完工日']), sv1: str_(r['監造第一聯']) || '當日', sv2: str_(r['監造二聯']) || '不附', direct: num_(r['直接工程費'])
     };
   }).filter(function (p) { return p.id; }).sort(function (a, b) { return a.order - b.order; });
 }
@@ -2019,7 +2019,7 @@ var ACTIONS = {
     if (role !== 'admin' && role !== 'office') throw new Error('只有管理者或內業可以管理工程');
     var p = q.project || {}, id = str_(p.id), t = read_('工程'), sh = sheet_('工程'), hit = null;
     t.rows.forEach(function (r) { if (str_(r['工程代號']) === id) hit = r; });
-    var map = { name: '工程名稱', short: '簡稱', status: '狀態', start: '開工日', end: '完工日', note: '備註', tick: '勾選方式', layout1: '日誌第一聯', layout2: '日誌二聯', signer: '工地負責人', company: '承攬廠商', approved: '核定工期', ext: '展延天數', supervisor: '監造單位' };
+    var map = { name: '工程名稱', short: '簡稱', status: '狀態', start: '開工日', end: '完工日', note: '備註', tick: '勾選方式', layout1: '日誌第一聯', layout2: '日誌二聯', signer: '工地負責人', company: '承攬廠商', approved: '核定工期', ext: '展延天數', supervisor: '監造單位', direct: '直接工程費' };
     if (hit) {
       for (var k in map) if (p[k] !== undefined) sh.getRange(hit._row, t.head.indexOf(map[k]) + 1, 1, 1).setValues([[p[k]]]);
       if (p.multi !== undefined) sh.getRange(hit._row, t.head.indexOf('開口契約') + 1, 1, 1).setValues([[p.multi ? '是' : '否']]);

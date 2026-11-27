@@ -1308,13 +1308,14 @@ function isOver(p,it){return it&&it.mode!=='現場填百分比'&&Number(it.qty)>
 function itemStat(p,it){const ct=catTag(it),head=it.code+(ct?" "+ct:"");if(it.mode==="現場填百分比")return head+"｜一式｜累計 "+fmt(ratioOf(p,it)*100)+"%";return head+"｜"+(it.qty===null||it.qty===undefined?"":"契約 "+fmt(it.qty)+" "+it.unit+"｜")+"累計 "+fmt(doneQty(p,it))}
 function progOf(p){let total=0,done=0;const cats={};p.items.forEach(it=>{if(!it.prog)return;const a=amt(it),d=doneAmt(p,it);total+=a;done+=d;const c=cats[it.cat]=cats[it.cat]||{name:it.cat,total:0,done:0};c.total+=a;c.done+=d});
   const sites={};if(p.multi)p.items.forEach(it=>{if(!it.prog||it.mode!=="數量")return;const s=(((p.sums||{})[it.code])||{}).s||{};Object.keys(s).forEach(k=>{sites[k]=(sites[k]||0)+(Number(it.price)||0)*s[k]})});
+  if(p.multi)total=Number(p.direct)||0;
   return{total,done,cats:Object.values(cats),sites}}
 const money=n=>Math.round(Number(n)||0).toLocaleString("en-US");
 function viewProg(){const out=[];out.push(S.boss?bossTabs():h("button",{type:"button",class:"btn",onclick:()=>{S.view="all";render();window.scrollTo(0,0)}},"← 回到總覽"));
   liveProjects().forEach(p=>{if(!p.items.length)return;const g=progOf(p);const pc=g.total?g.done/g.total*100:null;const open=S.progOpen===p.id;
     const sec=h("section",{class:"card"},h("div",{class:"row"},h("b",{},p.short||p.name),h("span",{class:"pct",style:"text-align:right"},pc===null?"–":fmt(pc)+"%")),
       pc===null?null:h("div",{class:"bar"},h("i",{style:"width:"+Math.max(0,Math.min(100,pc))+"%"})),
-      h("p",{class:"note"},(p.multi?"全案累計已執行 ":"已完成 ")+money(g.done)+" 元"+(g.total?" ／ 直接工程費 "+money(g.total)+" 元":"(契約未列數量,只顯示已執行金額)")+(p.status==="未開工"?"｜"+(p.note||"尚未開工"):"")));
+      h("p",{class:"note"},(p.multi?"全案累計已執行 ":"已完成 ")+money(g.done)+" 元"+(g.total?" ／ 直接工程費 "+money(g.total)+" 元":p.multi?"(還沒設定直接工程費,請到「設定 → 施工日誌設定」填寫)":"(契約未列數量,只顯示已執行金額)")+(p.status==="未開工"?"｜"+(p.note||"尚未開工"):"")));
     if(p.multi){
       const wos=allWorkOrdersOf(p);
       sec.append(h("h2",{},"📋 各派工單(分案)施工進度"));
@@ -2384,14 +2385,14 @@ function viewSv(){const p=proj(),out=[];
 function diarySetAdmin(p){const sec=h("section",{class:"card"},h("h2",{},"施工日誌設定|"+(p.short||p.name)));
   if(!S.canOffice){sec.append(h("p",{class:"note"},"只有內業或管理者可以修改。"));return sec}
   const f=(label,val,type)=>{const i=h("input",{type:type||"text"});i.value=val===null||val===undefined?"":val;return[h("label",{class:"f"},label,i),i]};
-  const [l1,co]=f("承攬廠商名稱",p.company),[l7,sv]=f("監造單位(回報機關文字用)",p.supervisor),[l2,ap]=f("核定工期(天)",p.approved,"number"),[l3,ex]=f("其他展延天數(天)(不含變更)",p.ext||0,"number"),[l4,sg]=f("預設工地負責人(簽名人)",p.signer),[l5,st]=f("開工日期",p.start,"date"),[l6,en]=f("完工日期(留空則依核定工期推算)",p.end,"date");
+  const [l1,co]=f("承攬廠商名稱",p.company),[l7,sv]=f("監造單位(回報機關文字用)",p.supervisor),[l2,ap]=f("核定工期(天)",p.approved,"number"),[l3,ex]=f("其他展延天數(天)(不含變更)",p.ext||0,"number"),[l4,sg]=f("預設工地負責人(簽名人)",p.signer),[l5,st]=f("開工日期",p.start,"date"),[l6,en]=f("完工日期(留空則依核定工期推算)",p.end,"date"),[l8,dc]=f("直接工程費(元)(開口契約全案進度的分母,不含管理費、職安、保險、品管、營業稅等非工程金額)",p.direct,"number");
   const tk=h("select",{},[["手勾","手勾(印空白方框)"],["自動","可在 App 勾選(預設依有無施工)"]].map(x=>h("option",{value:x[0]},x[1])));tk.value=p.tick||"手勾";
   const ly1=h("select",{},[["當日","只列當日有施工的項目"],["單欄","列出全部項目(單欄一排)"],["雙欄","列出全部項目(左右兩排)"]].map(x=>h("option",{value:x[0]},x[1])));ly1.value=p.layout1||"當日";
   const ly2=h("select",{},[["不附","不附"],["每月","每月附一份(整月表)"],["每天","每天都附"]].map(x=>h("option",{value:x[0]},x[1])));ly2.value=p.layout2||"不附";
   const msg=h("div",{class:"msg ok",hidden:true});
   const chInfo=(p.ch||[]).map((d,i)=>d?"第"+"一二"[i]+"次變更 "+d+(Number((p.chExt||[])[i])?"，展延 "+(p.chExt||[])[i]+" 天(從變更日起算)":""):"").filter(Boolean);
-  sec.append(l1,l7,h("div",{class:"row"},l2,l3),chInfo.length?h("p",{class:"note"},"📌 "+chInfo.join("；")+"。變更的展延天數請在「匯入契約項目」的變更裡填。"):null,l4,h("div",{class:"row"},l5,l6),h("label",{class:"f"},"第一聯施工項目怎麼列",ly1),h("label",{class:"f"},"要不要附二聯(完成工程詳細表)",ly2),h("label",{class:"f"},"四、五項勾選",tk),
-    h("button",{type:"button",class:"btn primary",onclick:async()=>{try{await api("saveProject",{project:{id:p.id,company:co.value.trim(),supervisor:sv.value.trim(),approved:ap.value===""?"":Number(ap.value),ext:ex.value===""?0:Number(ex.value),signer:sg.value.trim(),start:st.value,end:en.value,tick:tk.value,layout1:ly1.value,layout2:ly2.value}});S.dData=null;await reload(true);msg.hidden=false;msg.textContent="已儲存"}catch(e){S.err="沒有存成功:"+e.message;render()}}},"儲存日誌設定"),msg);
+  sec.append(l1,l7,p.multi?l8:null,h("div",{class:"row"},l2,l3),chInfo.length?h("p",{class:"note"},"📌 "+chInfo.join("；")+"。變更的展延天數請在「匯入契約項目」的變更裡填。"):null,l4,h("div",{class:"row"},l5,l6),h("label",{class:"f"},"第一聯施工項目怎麼列",ly1),h("label",{class:"f"},"要不要附二聯(完成工程詳細表)",ly2),h("label",{class:"f"},"四、五項勾選",tk),
+    h("button",{type:"button",class:"btn primary",onclick:async()=>{try{await api("saveProject",{project:Object.assign({id:p.id,company:co.value.trim(),supervisor:sv.value.trim(),approved:ap.value===""?"":Number(ap.value),ext:ex.value===""?0:Number(ex.value),signer:sg.value.trim(),start:st.value,end:en.value,tick:tk.value,layout1:ly1.value,layout2:ly2.value},p.multi?{direct:dc.value===""?"":Number(dc.value)}:{})});S.dData=null;await reload(true);msg.hidden=false;msg.textContent="已儲存"}catch(e){S.err="沒有存成功:"+e.message;render()}}},"儲存日誌設定"),msg);
   const fi=h("input",{type:"file",accept:".xlsx,.xls,.xlsm"}),pm=h("div",{class:"msg",hidden:true});
   fi.addEventListener("change",async()=>{const file=fi.files[0];if(!file)return;pm.hidden=false;pm.className="msg";pm.textContent="讀取中…";
     try{if(typeof XLSX==="undefined")throw new Error("Excel 讀取元件還在載入,請稍等幾秒再選一次");const wb=XLSX.read(await file.arrayBuffer(),{type:"array"});const ws=wb.Sheets["預定進度"]||wb.Sheets[wb.SheetNames[0]];

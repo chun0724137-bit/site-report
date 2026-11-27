@@ -160,6 +160,7 @@ const ok = (c, msg) => { if (c) { pass++; console.log('ok', msg) } else { fail++
     ok(await ev(() => document.documentElement.dataset.role === '' && !document.querySelector('nav button[data-v=report]').hidden), '結束預覽回到管理者畫面');
     await page.setViewportSize({ width: 420, height: 900 }); }
 
+  ok(await ev(() => { const p = Object.assign({}, S.projects.find(x => x.id === 'yanggong1')), a = progOf(p).total; p.direct = 1000000; return a === 0 && progOf(p).total === 1000000 }), '開口契約全案進度用直接工程費當分母');
   ok(!errors.length, '頁面沒有程式錯誤' + (errors.length ? ':' + errors.slice(0, 3).join(' | ') : ''));
   await browser.close(); srv.close();
   console.log(fail ? '有 ' + fail + ' 項失敗' : '全部通過(' + pass + ' 項)'); process.exit(fail ? 1 : 0);

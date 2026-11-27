@@ -215,4 +215,5 @@ ok(m.call({key:k,action:'svProject',pid:'ntpu',chgN:1,amt0:166600000,doneDate:''
 r=m.call({key:k,action:'svSaveBatch',pid:'ntpu',site:'',items:[{date:'2026-11-18',data:{no:'006',sup:'Excel上傳18'}},{date:'2026-11-20',data:{no:'008',sup:'Excel上傳20',pre:'未施工'}}]});
 const L2=m.call({key:k,action:'svList',pid:'ntpu',site:'',month:'2026-11'}).rows;ok(r.ok&&r.n===2&&L2['2026-11-18'].sup==='Excel上傳18'&&L2['2026-11-20'].pre==='未施工'&&Object.keys(L2).length===3,'監造報表 Excel 上傳一次存多天');
 ok(!m.call({key:'field123',action:'svSave',pid:'ntpu',date:'2026-11-18',data:{}}).ok,'現場不能改監造報表');}
+m.call({key:'admin123',action:'saveProject',project:{id:'xingong-north',direct:63490800}});ok(m.run("projById_('xingong-north').direct")===63490800,'開口契約直接工程費存檔');
 console.log('全部通過');
