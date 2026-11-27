@@ -161,6 +161,17 @@ const ok = (c, msg) => { if (c) { pass++; console.log('ok', msg) } else { fail++
     await page.setViewportSize({ width: 420, height: 900 }); }
 
   ok(await ev(() => { const p = Object.assign({}, S.projects.find(x => x.id === 'yanggong1')), a = progOf(p).total; p.direct = 1000000; return a === 0 && progOf(p).total === 1000000 }), '開口契約全案進度用直接工程費當分母');
+  // 15. 取消簽認、總覽改版、結算下載
+  { await page.goto(base); await ev(() => { localStorage.clear(); localStorage.setItem('gkey', 'admin123') }); await boot();
+    await ev(() => { S.pid = 'ntpu'; S.view = 'log'; S.logTab = '每日紀錄與照片'; render() }); await wait(300);
+    ok(await ev(() => !/施工日誌簽認|確認數量並線上簽名|日誌下載/.test(document.querySelector('#main').innerText)), '紀錄頁沒有日誌簽認與日誌下載');
+    await ev(() => { S.view = 'diary'; S.dData = null; render() }); await wait(1500);
+    ok(await ev(() => !document.querySelector('button[aria-label$=" 簽名"]') && !/簽名/.test(document.querySelector('#main').innerText)), '日誌頁沒有簽名');
+    await ev(() => { S.view = 'all'; render() }); await wait(300);
+    const at = await ev(() => document.querySelector('#main').innerText);
+    ok(!/人員月小計/.test(at) && /本月最新回報/.test(at) && /今天|昨天|\d{2}\/\d{2}\(/.test(at), '總覽沒有人員月小計、最新回報依日期分組');
+    ok(await ev(async () => { const p = S.projects.find(x => x.id === 'yanggong1'); let got = null; S.dl.pick = async () => null; const sv = S.dl.save; S.dl.save = async o => { got = o }; await settle(p, '實踐國小'); S.dl.save = sv; return !!got && /結算資料_\d{8}\.xlsx$/.test(got.filename) && got.data.size === 4 }), '結算資料直接下載 Excel'); }
+
   ok(!errors.length, '頁面沒有程式錯誤' + (errors.length ? ':' + errors.slice(0, 3).join(' | ') : ''));
   await browser.close(); srv.close();
   console.log(fail ? '有 ' + fail + ' 項失敗' : '全部通過(' + pass + ' 項)'); process.exit(fail ? 1 : 0);

@@ -1587,6 +1587,18 @@ function makeSettlement_(pid, site) {
   }
 }
 
+/** 結算資料直接給 App 下載(不留在雲端硬碟):暫時建立試算表 → 轉成 Excel → 刪除暫存檔 */
+function settleXlsx_(pid, site) {
+  var D = settleData_(pid, site), name = safe_((D.p.short || '') + '_' + site + '_結算資料_' + today_().replace(/-/g, ''));
+  var book = SpreadsheetApp.create(name), file = DriveApp.getFileById(book.getId());
+  try {
+    writeSettlement_(book, D);
+    SpreadsheetApp.flush();
+    var blob = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + book.getId() + '/export?format=xlsx', { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } }).getBlob();
+    return { name: name + '.xlsx', data: Utilities.base64Encode(blob.getBytes()) };
+  } finally { try { file.setTrashed(true); } catch (e) { } }
+}
+
 /** 試算表選單 */
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('現場回報').addItem('重新整理日誌與報表', 'menuDiaries').addItem('產生結算資料…', 'menuSettle').addSeparator().addItem('立即備份', 'menuBackup').addItem('啟用每週自動備份', 'menuSetupBackup').addToUi();
@@ -1954,7 +1966,7 @@ var ACTIONS = {
   },
   settle: function (q, role) {
     if (role !== 'admin') throw new Error('只有管理者可以產生結算資料');
-    return makeSettlement_(str_(q.pid), str_(q.site));
+    return q.download ? settleXlsx_(str_(q.pid), str_(q.site)) : makeSettlement_(str_(q.pid), str_(q.site));
   },
   setActive: function (q, role) {
     if (role !== 'admin') throw new Error('只有管理者可以調整大按鈕');

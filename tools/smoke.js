@@ -216,4 +216,5 @@ r=m.call({key:k,action:'svSaveBatch',pid:'ntpu',site:'',items:[{date:'2026-11-18
 const L2=m.call({key:k,action:'svList',pid:'ntpu',site:'',month:'2026-11'}).rows;ok(r.ok&&r.n===2&&L2['2026-11-18'].sup==='Excel上傳18'&&L2['2026-11-20'].pre==='未施工'&&Object.keys(L2).length===3,'監造報表 Excel 上傳一次存多天');
 ok(!m.call({key:'field123',action:'svSave',pid:'ntpu',date:'2026-11-18',data:{}}).ok,'現場不能改監造報表');}
 m.call({key:'admin123',action:'saveProject',project:{id:'xingong-north',direct:63490800}});ok(m.run("projById_('xingong-north').direct")===63490800,'開口契約直接工程費存檔');
+{const n0=m.books.length;const r=m.call({key:'admin123',action:'settle',pid:'yanggong1',site:'實踐國小',download:true});ok(r.ok&&/結算資料_\d{8}\.xlsx$/.test(r.name)&&r.data==='UEsDBA==','結算資料直接下載 Excel');ok(!m.call({key:'field123',action:'settle',pid:'yanggong1',site:'實踐國小',download:true}).ok,'現場不能下載結算資料');}
 console.log('全部通過');
