@@ -1412,7 +1412,18 @@ function siteAdmin(p){const sec=h("section",{class:"card"},h("h2",{},"派工地�
       sec.append(h("div",{class:"sheet"},h("label",{class:"f"},"派工地點名稱",ni),h("p",{class:"note"},"還沒有派工單也可以先新增,現場馬上可以選這個地點回報(工項用契約項目搜尋)。之後上傳派工單時,「派工地點名稱」選這個名稱,工項與派工數量就會補進來,之前的回報都保留。"),h("button",{type:"button",class:"btn primary",disabled:S.busy,onclick:add},"新增")))}
     if(S.flash&&/派工地點/.test(S.flash))sec.append(h("div",{class:"msg ok"},S.flash))}
   const list=(p.siteInfo||[]).filter(s=>s.status!=="結案");
-  list.forEach(s=>{const k=p.id+"|"+s.name,done=s.status==="完工";const row=h("div",{class:"proj"},h("div",{class:"h"},h("b",{},s.name),h("span",{class:"pill "+(done?"ok":"warn")},done?"完工 "+(s.done||""):"施工中")));
+  const lastRep={};S.reports.forEach(r=>{if(r.pid===p.id&&r.site&&(!lastRep[r.site]||r.date>lastRep[r.site]))lastRep[r.site]=r.date});
+  const dAmt=n=>((p.dispatch||{})[n]||[]).reduce((a,[c,q])=>{const it=(p.items||[]).find(i=>i.code===c);return a+(it?(Number(it.price)||0)*(Number(q)||0):0)},0);
+  const doneAmtS=n=>(p.items||[]).reduce((a,it)=>a+(Number(it.price)||0)*Number(((((p.sums||{})[it.code])||{}).s||{})[n]||0),0);
+  const q=(S.siteQ||"").trim(),match=x=>!q||x.name.includes(q);
+  const act=list.filter(x=>x.status!=="完工"&&match(x)).sort((a,b)=>{const ra=lastRep[a.name]||"",rb=lastRep[b.name]||"";if(ra!==rb)return ra<rb?1:-1;const sa=a.start||"",sb=b.start||"";return sa===sb?a.name.localeCompare(b.name):sa<sb?1:-1});
+  const fin=list.filter(x=>x.status==="完工"&&match(x)).sort((a,b)=>(a.done||"")<(b.done||"")?1:-1);
+  if(list.length>6){const si=h("input",{type:"search",placeholder:"🔍 搜尋派工地點(例:金山、公館)","aria-label":"搜尋派工地點"});si.value=S.siteQ||"";si.addEventListener("input",()=>{S.siteQ=si.value;clearTimeout(S.siteQT);S.siteQT=setTimeout(()=>{render();const x=document.querySelector('input[aria-label="搜尋派工地點"]');if(x){x.focus();x.setSelectionRange(x.value.length,x.value.length)}},250)});sec.append(si)}
+  const head=(s,k,done)=>{const open=S.siteOpen===k,da=dAmt(s.name),dn=doneAmtS(s.name),lr=lastRep[s.name];
+    return h("button",{type:"button",class:"h",style:"width:100%;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;padding:0;display:block","aria-expanded":String(open),onclick:()=>{S.siteOpen=open?"":k;render()}},
+      h("div",{style:"display:flex;gap:8px;align-items:center"},h("span",{style:"color:var(--mute)"},open?"▾":"▸"),h("b",{style:"flex:1"},s.name),h("span",{class:"pill "+(done?"ok":"warn")},done?"完工 "+(s.done||""):"施工中")),
+      h("div",{class:"note",style:"font-size:13px;margin:2px 0 0 18px"},[da?"派工 "+money(da)+" 元｜已完成 "+(dn/da*100).toFixed(1)+"%":dn?"已完成 "+money(dn)+" 元(還沒有派工單)":"還沒有派工單",lr?"最近回報 "+lr.slice(5).replace("-","/"):s.start?"開工 "+s.start:""].filter(Boolean).join("｜")))};
+  const rowOf=s=>{const k=p.id+"|"+s.name,done=s.status==="完工";const row=h("div",{class:"proj"},head(s,k,done));if(S.siteOpen!==k){sec.append(row);return}
     if(S.siteAsk===k){const di=h("input",{type:"date",id:"f_done","aria-label":s.name+"完工日期"});di.value=today();
       row.append(h("label",{class:"f"},"完工日期",di),h("div",{class:"row"},h("button",{type:"button",class:"btn",onclick:()=>{S.siteAsk="";render()}},"取消"),h("button",{type:"button",class:"btn primary",disabled:S.busy,onclick:()=>setSite(p,s.name,"完工",di.value)},"確認完工")))}
     else row.append(h("div",{class:"row"},done?h("button",{type:"button",class:"btn",disabled:S.busy,onclick:()=>setSite(p,s.name,"施工中")},"恢復施工"):h("button",{type:"button",class:"btn primary",onclick:()=>{S.siteAsk=k;S.siteDone="";render()}},"分案完工"),
@@ -1430,7 +1441,10 @@ function siteAdmin(p){const sec=h("section",{class:"card"},h("h2",{},"派工地�
     if(S.spOpen===k)row.append(sitePlanUpload(p,s.name));
     if(S.siteDone===k)row.append(h("div",{class:"msg ok"},"已設為完工。要結算的話,按上面的「⬇ 下載結算資料(Excel)」。"));
     if(S.settled&&S.settled.k===k)row.append(h("div",{class:"msg ok"},"已下載「"+S.settled.name+"」。"));
-    sec.append(row)});
+    sec.append(row)};
+  act.forEach(rowOf);
+  if(fin.length){const op=S.finOpen||!!q;sec.append(h("button",{type:"button",class:"btn block",style:"margin-top:6px",onclick:()=>{S.finOpen=!S.finOpen;render()}},(op?"▾":"▸")+" 已完工("+fin.length+" 個)"));if(op)fin.forEach(rowOf)}
+  if(q&&!act.length&&!fin.length)sec.append(h("p",{class:"note"},"找不到「"+q+"」。"));
   if(!list.length)sec.append(h("p",{class:"note"},"還沒有派工地點。請按上方「📋 上傳新派工單」。"));
   return sec}
 // 分案預定進度:讀施工日誌。優先「網圖項目進度表」的每日表(日期、累計預定);每日表空白時,用上面的工作項目
@@ -2437,10 +2451,10 @@ function diarySetAdmin(p){const sec=h("section",{class:"card"},h("h2",{},"施工
   return sec}
 function scopeLabel(t){return String(t||"").split(/\n/).filter(Boolean).map(x=>{const i=x.indexOf("/"),pid=i<0?x:x.slice(0,i),pj=S.projects.find(p=>p.id===pid);return (pj?pj.short||pj.name:pid)+(i<0?"(整個工程)":"／"+x.slice(i+1))}).join("、")}
 function scopeEditor(a){const cur=new Set(String(a.scope||"").split(/\n/).filter(Boolean));
-  const box=h("div",{class:"sheet"},h("div",{class:"t"},"🔒 「"+a.name+"」可看範圍"),h("p",{class:"note"},a.role==="監造"?"勾選這位監造負責的工程或派工單(可以多選)。監造只能填監造報表、看施工日誌,看不到單價、工人名單、照片,也不能改回報。":"勾選這位下包可以看、可以回報的工程或派工單(可以多選)。開口契約可以只勾其中幾張派工單。下包看不到單價、金額、工人名單、日誌、總覽與設定。"));
-  S.projects.filter(p=>p.status!=="封存").forEach(p=>{const all=h("input",{type:"checkbox"});all.checked=cur.has(p.id);all.addEventListener("change",()=>{all.checked?cur.add(p.id):cur.delete(p.id)});
+  const box=h("div",{class:"sheet"},h("div",{class:"t"},"🔒 「"+a.name+"」可看範圍"),h("p",{class:"note"},"已完工的派工單不會列出(已勾選的會保留)。"),h("p",{class:"note"},a.role==="監造"?"勾選這位監造負責的工程或派工單(可以多選)。監造只能填監造報表、看施工日誌,看不到單價、工人名單、照片,也不能改回報。":"勾選這位下包可以看、可以回報的工程或派工單(可以多選)。開口契約可以只勾其中幾張派工單。下包看不到單價、金額、工人名單、日誌、總覽與設定。"));
+  S.projects.filter(p=>!["封存","完工"].includes(p.status)||cur.has(p.id)||[...cur].some(x=>x.startsWith(p.id+"/"))).forEach(p=>{const all=h("input",{type:"checkbox"});all.checked=cur.has(p.id);all.addEventListener("change",()=>{all.checked?cur.add(p.id):cur.delete(p.id)});
     box.append(h("label",{class:"f",style:"flex-direction:row;gap:6px;align-items:center;font-weight:700"},all,(p.short||p.name)+(p.multi?"(整個開口契約)":"")));
-    if(p.multi){const g=h("div",{class:"sug",style:"margin:0 0 8px 22px"});(p.siteInfo||[]).forEach(si=>{const k=p.id+"/"+si.name,cb=h("input",{type:"checkbox"});cb.checked=cur.has(k);cb.addEventListener("change",()=>{cb.checked?cur.add(k):cur.delete(k)});g.append(h("label",{class:"tag",style:"display:inline-flex;gap:4px;align-items:center"},cb,si.name+(si.status==="結案"?"(結案)":"")))});if((p.siteInfo||[]).length)box.append(g)}});
+    if(p.multi){const g=h("div",{class:"sug",style:"margin:0 0 8px 22px"});(p.siteInfo||[]).filter(si=>!["完工","結案"].includes(si.status)||cur.has(p.id+"/"+si.name)).forEach(si=>{const k=p.id+"/"+si.name,cb=h("input",{type:"checkbox"});cb.checked=cur.has(k);cb.addEventListener("change",()=>{cb.checked?cur.add(k):cur.delete(k)});g.append(h("label",{class:"tag",style:"display:inline-flex;gap:4px;align-items:center"},cb,si.name+(["完工","結案"].includes(si.status)?"("+si.status+")":"")))});if(g.children.length)box.append(g)}});
   box.append(h("div",{class:"row"},h("button",{type:"button",class:"btn primary",onclick:async()=>{try{const j=await api("saveAccount",{name:a.name,accRole:a.role,status:a.status,scope:[...cur]});S.accounts=j.accounts;S.scopeOpen="";S.flash="已儲存「"+a.name+"」的可看範圍。";render()}catch(e){S.err="沒有儲存成功:"+e.message;render()}}},"儲存範圍"),h("button",{type:"button",class:"btn",onclick:()=>{S.scopeOpen="";render()}},"取消")));
   return box}
 function loginTime(v){const x=Number(v);if(/^\d{5}(\.\d+)?$/.test(String(v))&&x>30000){const d=new Date(Math.round((x-25569)*86400000));const p=n=>String(n).padStart(2,"0");return d.getUTCFullYear()+"-"+p(d.getUTCMonth()+1)+"-"+p(d.getUTCDate())+" "+p(d.getUTCHours())+":"+p(d.getUTCMinutes())}return String(v||"")}
@@ -2456,11 +2470,12 @@ function accountsAdmin(){
       h("label",{class:"f",style:"flex:2 1 140px"},"新增人員姓名",nIn),
       h("button",{type:"button",class:"btn primary",style:"flex:0 0 auto;align-self:flex-end",onclick:async()=>{
         const nm=nIn.value.trim();if(!nm){nIn.focus();return}
-        try{const j=await api("saveAccount",{name:nm,accRole:rSel.value,status:"啟用"});S.accounts=j.accounts;nIn.value="";if(rSel.value==="下包"||rSel.value==="監造")S.scopeOpen=nm;render()}catch(e){S.err="請先將新版 Code.gs 貼到 Google 試算表 Apps Script 並重新部署，即可啟用雲端人員管理（"+e.message+"）";render()}
+        try{const j=await api("saveAccount",{name:nm,accRole:rSel.value,status:"啟用"});S.accounts=j.accounts;nIn.value="";if(rSel.value==="下包"||rSel.value==="監造"){S.scopeOpen=nm;S.scopeScroll=true}render()}catch(e){S.err="請先將新版 Code.gs 貼到 Google 試算表 Apps Script 並重新部署，即可啟用雲端人員管理（"+e.message+"）";render()}
       }},"＋ 新增人員")
     )
   ));
   const list=S.accounts||[];
+  {const sa=list.find(a=>(a.role==="下包"||a.role==="監造")&&a.name===S.scopeOpen);if(sa){const ed=scopeEditor(sa);ed.id="scopeEd";sec.append(ed);if(S.scopeScroll){S.scopeScroll=false;setTimeout(()=>{const e=document.getElementById("scopeEd");if(e)e.scrollIntoView({behavior:"smooth",block:"start"})},50)}}}
   if(list.length){
     list.forEach(a=>{
       const isOff=a.status==="停用";
@@ -2483,7 +2498,7 @@ function accountsAdmin(){
           h("b",{},a.name+" "),
           h("span",{class:"pill "+(isOff?"warn":"ok")},isOff?"已停用":(a.hasPin?"已設PIN":"待首次登入設PIN")),
           a.lastLogin?h("div",{class:"note",style:"font-size:12px"},"最後登入："+loginTime(a.lastLogin)):null,
-          (a.role==="下包"||a.role==="監造")?h("div",{class:"note",style:"font-size:12px"},"可看範圍："+(scopeLabel(a.scope)||"（還沒設定，登入後看不到任何工程）")+" ",h("button",{type:"button",class:"acc",onclick:()=>{S.scopeOpen=S.scopeOpen===a.name?"":a.name;render()}},S.scopeOpen===a.name?"收起":"設定範圍")):null
+          (a.role==="下包"||a.role==="監造")?h("div",{class:"note",style:"font-size:12px"},"可看範圍："+(scopeLabel(a.scope)||"（還沒設定，登入後看不到任何工程）")+" ",h("button",{type:"button",class:"acc",onclick:()=>{S.scopeOpen=S.scopeOpen===a.name?"":a.name;S.scopeScroll=!!S.scopeOpen;render()}},S.scopeOpen===a.name?"收起":"設定範圍")):null
         ),
         h("div",{class:"row",style:"flex:0 0 auto;gap:6px;flex-wrap:nowrap"},
           a.hasPin?h("button",{type:"button",class:"acc",onclick:async()=>{
@@ -2497,7 +2512,6 @@ function accountsAdmin(){
         )
       ));
     });
-    const sa=list.find(a=>(a.role==="下包"||a.role==="監造")&&a.name===S.scopeOpen);if(sa)sec.append(scopeEditor(sa));
   }else{
     sec.append(h("div",{class:"msg warn"},"目前尚未建立任何登入人員。請先在下方新增至少一位「管理者」（例如您自己），再新增現場與內業同仁。"));
   }

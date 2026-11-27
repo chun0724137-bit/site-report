@@ -175,11 +175,23 @@ const ok = (c, msg) => { if (c) { pass++; console.log('ok', msg) } else { fail++
       const a = XLSX.utils.sheet_to_json(wb.Sheets['數量計算表'], { header: 1, defval: '' });
       return /結算資料_\d{8}\.xlsx$/.test(got.filename) && wb.SheetNames.join() === '數量計算表,明細,派工單' && a[3][0] === '契約項次' && a.length > 5 }), '結算資料在瀏覽器產生 Excel(三張分頁)'); }
 
+  // 18. 派工地點縮成一行,點開才有按鈕;已完工收在最下面
+  { await ev(() => { S.pid = 'yanggong1'; S.view = 'set'; S.siteOpen = ''; render() }); await wait(300);
+    ok(await ev(() => ![...document.querySelectorAll('#main button')].some(b => b.textContent === '分案完工') && /派工|還沒有派工單/.test(document.querySelector('#main').innerText)), '派工地點平常縮成一行');
+    await page.locator('button[aria-expanded]', { hasText: '實踐國小' }).click(); await wait(200);
+    ok(await ev(() => [...document.querySelectorAll('#main button')].some(b => b.textContent === '分案完工')), '點開派工地點才出現按鈕'); }
+
   // 16. 手動新增派工地點
   { await ev(() => { S.pid = 'yanggong1'; S.view = 'set'; S.siteAddOpen = false; render() }); await wait(300);
     await page.getByRole('button', { name: /手動新增派工地點/ }).click(); await wait(200);
     await page.locator('input[placeholder^="例:金山北23"]').fill('臨時派工測試'); await page.getByRole('button', { name: '新增', exact: true }).click(); await wait(1500);
     ok(await ev(() => (S.projects.find(p => p.id === 'yanggong1').siteInfo || []).some(x => x.name === '臨時派工測試') && /已新增派工地點/.test(document.querySelector('#main').innerText)), '手動新增派工地點'); }
+
+  // 17. 新增下包後,範圍設定出現在新增人員下面(清單上方)
+  { await ev(() => { S.view = 'set'; render(); const sec = [...document.querySelectorAll('#main section.card')].find(x => /系統登入人員管理/.test(x.textContent)); if (sec) sec.classList.remove('fold') });
+    await page.locator('.sheet', { hasText: '＋ 新增人員' }).locator('select').selectOption('下包'); await page.locator('input[placeholder^="輸入同仁姓名"]').fill('下包位置測試');
+    await page.getByRole('button', { name: '＋ 新增人員' }).click(); await wait(1200);
+    ok(await ev(() => { const ed = document.getElementById('scopeEd'), first = [...document.querySelectorAll('#main .entry')].find(x => /已設PIN|待首次登入/.test(x.textContent)); return !!ed && /下包位置測試/.test(ed.textContent) && !!first && (ed.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING) }), '新增下包後,範圍設定在人員清單上方'); }
 
   ok(!errors.length, '頁面沒有程式錯誤' + (errors.length ? ':' + errors.slice(0, 3).join(' | ') : ''));
   await browser.close(); srv.close();
