@@ -172,4 +172,30 @@ m.call({key:'admin123',action:'saveProject',project:{id:'ntpu',status:'施工中
 for(let i=0;i<9;i++)m.call({key:'admin123',action:'backupNow'});r=m.call({key:'admin123',action:'backupInfo'});ok(r.ok&&r.list.length===8,'備份保留最近 8 份');
 m.run('setupWeeklyBackup()');ok(m.call({key:'admin123',action:'backupInfo'}).weekly===true,'每週自動備份已啟用');
 ok(!m.call({key:'field123',action:'archiveProject',pid:'ntpu'}).ok,'現場帳號不能封存');}
+// 開工日前不能填數量;下包只看得到可看範圍
+{const T=m.sheets['派工地點'],hd=T.d[0],ci=k=>hd.indexOf(k);
+m.call({key:'admin123',action:'addSite',pid:'xingong-north',sites:['新莊分案A','新莊分案B']});
+T.d.forEach(r=>{if(r[ci('工程代號')]==='xingong-north'&&r[ci('地點')]==='新莊分案A')r[ci('開工日')]='2026-11-23'});
+let r=m.call({key:'admin123',action:'report',data:{pid:'xingong-north',site:'新莊分案A',date:'2026-11-22',by:'t',entries:[{code:'1.1',name:'x',unit:'式',mode:'數量',qty:2}]}});ok(!r.ok&&/2026-11-23 開工/.test(r.error),'開工日前不能填數量:'+r.error);
+r=m.call({key:'admin123',action:'report',data:{pid:'xingong-north',site:'新莊分案A',date:'2026-11-22',by:'t',work:'整地',entries:[]}});ok(r.ok,'開工日前沒填數量可以送出');
+r=m.call({key:'admin123',action:'report',data:{pid:'xingong-north',site:'新莊分案A',date:'2026-11-23',by:'t',tech:1,crew:{'某工人':1},entries:[{code:'1.1',name:'x',unit:'式',mode:'數量',qty:2}]}});ok(r.ok,'開工日當天可以填數量');
+m.call({key:'admin123',action:'report',data:{pid:'xingong-north',site:'新莊分案B',date:'2026-11-24',by:'t',entries:[{code:'1.1',name:'x',unit:'式',mode:'數量',qty:5}]}});
+ok(m.call({key:'admin123',action:'saveAccount',name:'下包甲',accRole:'下包',status:'啟用',scope:['xingong-north/新莊分案A','tamsui']}).ok,'新增下包帳號');
+const k=m.call({action:'login',name:'下包甲',newPin:'1234'}).token;
+r=m.call({key:k,action:'load'});
+ok(r.ok&&r.role==='sub'&&r.projects.map(p=>p.id).join()==='xingong-north,tamsui','下包只看到範圍內的工程');
+ok(r.sites.every(x=>x[0]!=='xingong-north'||x[1]==='新莊分案A')&&r.reports.every(x=>(x.pid==='xingong-north'&&x.site==='新莊分案A')||x.pid==='tamsui'),'下包只看到範圍內的派工單與回報');
+ok(r.reports.every(x=>!Object.keys(x.crew).length)&&!r.config.workers.length,'下包看不到工人姓名');
+ok(Object.values(r.items).every(a=>a.every(x=>x[3]===null))&&!r.accounts.length,'下包看不到單價與人員名單');
+ok(r.sums['xingong-north']['1.1'].q===2,'下包的累計只算自己的派工單');
+ok(!m.call({key:k,action:'diary',pid:'xingong-north',month:'2026-11',site:'新莊分案B'}).ok&&!m.call({key:k,action:'diary',pid:'xingong-north',month:'2026-11'}).ok,'下包不能看其他派工單或整個開口契約');
+ok(m.call({key:k,action:'diary',pid:'xingong-north',month:'2026-11',site:'新莊分案A'}).ok,'下包可以看自己派工單的進度(回報機關用)');
+ok(!m.call({key:k,action:'report',data:{pid:'xingong-north',site:'新莊分案B',date:'2026-11-26',entries:[]}}).ok&&!m.call({key:k,action:'report',data:{pid:'ntpu',date:'2026-11-26',entries:[]}}).ok,'下包不能回報範圍外的工程');
+r=m.call({key:k,action:'report',data:{pid:'xingong-north',site:'新莊分案A',date:'2026-11-26',traffic:2,crew:{'x':1},entries:[]}});const sid=r.id;
+ok(r.ok&&m.call({key:'admin123',action:'reports'}).reports.find(x=>x.id===sid).by==='下包甲','下包可以回報自己的派工單');
+const own=m.call({key:'admin123',action:'reports'}).reports.find(x=>x.site==='新莊分案A'&&x.date==='2026-11-23');
+ok(!m.call({key:k,action:'report',id:own.id,data:{pid:'xingong-north',site:'新莊分案A',date:'2026-11-23',entries:[]}}).ok,'下包不能改松青人員的回報');
+ok(m.call({key:k,action:'report',id:sid,data:{pid:'xingong-north',site:'新莊分案A',date:'2026-11-26',traffic:3,entries:[]}}).ok,'下包可以改自己的回報');
+ok(['saveConfig','deleteReport','saveAccount','photoZip','sign','saveProject'].every(a=>!m.call({key:k,action:a}).ok),'下包不能用管理功能');
+ok(m.call({key:k,action:'photoByUrl',urls:['https://drive.google.com/file/d/ZZZ/view']}).files.length===0,'下包不能取範圍外的照片');}
 console.log('全部通過');

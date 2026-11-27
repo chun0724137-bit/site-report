@@ -11,7 +11,7 @@ var HEAD = {
   '派工預定進度': ['工程代號', '地點', '日期', '預定進度'],
   '簽名': ['工程代號', '日期', '簽名人', '簽名圖', '簽名時間', '資料指紋', '登入者', '派工地點'],
   '日誌勾選': ['工程代號', '派工地點', '日期', '勾選', '修改人', '修改時間'],
-  '人員': ['姓名', '角色', '狀態', 'PIN雜湊', '鹽', '最後登入', '備註'],
+  '人員': ['姓名', '角色', '狀態', 'PIN雜湊', '鹽', '最後登入', '備註', '可看範圍'],
   '操作紀錄': ['時間', '人員', '角色', '動作', '內容'],
   '每日回報': ['回報編號', '日期', '工程代號', '工程', '派工地點', '上午天氣', '下午天氣', '回報人', '技術工', '普通工', '體力工', '義交', '工作項目', '人員出工與加班', '機具', '施工項目', '出土', '材料與物料', '取樣', '備註', '明日預定', '現場照片', '修繕地點', '未施工原因', '送出時間', '最後修改人', '修改時間', '修改前內容', '原始資料JSON']
 };
@@ -714,10 +714,22 @@ function qtyAt_(it, p, date) {
   return q;
 }
 
+function planStarts_() {
+  var out = {};
+  try {
+    read_('派工預定進度').rows.forEach(function (r) {
+      var k = str_(r['工程代號']) + '|' + str_(r['地點']), d = date_(r['日期']), v = num_(r['預定進度']);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || v === null) return;
+      if (!out[k] || d < out[k]) out[k] = d;
+    });
+  } catch (e) { }
+  return out;
+}
 function sites_() {
+  var ps = planStarts_();
   return read_('派工地點').rows.map(function (r) {
     return [str_(r['工程代號']), str_(r['地點']), str_(r['狀態']) || '施工中',
-      { area: str_(r['區域']), kind: str_(r['工作性質']), start: date_(r['開工日']), plan: date_(r['預定完工日']), done: date_(r['實際完工日']) }];
+      { area: str_(r['區域']), kind: str_(r['工作性質']), start: date_(r['開工日']), plan: date_(r['預定完工日']), done: date_(r['實際完工日']), pstart: ps[str_(r['工程代號']) + '|' + str_(r['地點'])] || '' }];
   }).filter(function (s) { return s[0] && s[1]; });
 }
 
@@ -1615,7 +1627,8 @@ function accountsList_() {
       status: str_(r['狀態']) || '啟用',
       hasPin: !!str_(r['PIN雜湊']),
       lastLogin: dt_(r['最後登入']),
-      note: str_(r['備註'])
+      note: str_(r['備註']),
+      scope: str_(r['可看範圍'])
     };
   }).filter(Boolean);
 }
@@ -1845,6 +1858,9 @@ var ACTIONS = {
     var ps = projects_(), p = null; ps.forEach(function (x) { if (x.id === d.pid) p = x; });
     if (!p) throw new Error('找不到工程');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(str_(d.date))) throw new Error('日期格式不正確');
+    var st0 = startOf_(p, str_(d.site));
+    if (st0 && str_(d.date) < st0 && (d.entries || []).some(function (e) { var v = num_(e && e.qty); return e && e.code && e.code !== '-' && v !== null && v !== 0; }))
+      throw new Error((str_(d.site) || p.short || p.name) + ' 是 ' + st0 + ' 開工,' + str_(d.date) + ' 不能填施工數量');
     if (id) {
       var old = null; read_('每日回報').rows.forEach(function (r) { if (str_(r['回報編號']) === id) old = r; });
       if (!old) throw new Error('找不到要修改的回報');
@@ -1965,7 +1981,7 @@ var ACTIONS = {
     if (role !== 'admin') throw new Error('只有管理者可以管理登入人員');
     var name = str_(q.name), accRole = str_(q.accRole) || '現場', status = str_(q.status) || '啟用', note = str_(q.note);
     if (!name) throw new Error('請輸入人員姓名');
-    var sh = sheet_('人員'), t = read_('人員'), hit = null;
+    var sh = sheet_('人員'), t = read_('人員'), hit = null, scope = q.scope === undefined ? undefined : scopeText_(q.scope);
     t.rows.forEach(function (r) { if (str_(r['姓名']) === name) hit = r; });
     if (q.del && hit) {
       sh.deleteRow(hit._row);
@@ -1975,8 +1991,9 @@ var ACTIONS = {
       sh.getRange(hit._row, t.head.indexOf('角色') + 1, 1, 2).setValues([[accRole, status]]);
       if (q.note !== undefined) sh.getRange(hit._row, t.head.indexOf('備註') + 1, 1, 1).setValues([[note]]);
       if (q.resetPin) sh.getRange(hit._row, t.head.indexOf('PIN雜湊') + 1, 1, 2).setValues([['', '']]);
+      if (scope !== undefined && t.head.indexOf('可看範圍') >= 0) sh.getRange(hit._row, t.head.indexOf('可看範圍') + 1).setValue(scope);
     } else {
-      append_('人員', [{ '姓名': name, '角色': accRole, '狀態': status, 'PIN雜湊': '', '鹽': '', '最後登入': '', '備註': note }]);
+      append_('人員', [{ '姓名': name, '角色': accRole, '狀態': status, 'PIN雜湊': '', '鹽': '', '最後登入': '', '備註': note, '可看範圍': scope || '' }]);
     }
     return { accounts: accountsList_() };
   },
@@ -2173,7 +2190,7 @@ function safe_(v) { return str_(v).replace(/[\\\/:*?"<>|]/g, '_').slice(0, 80); 
 var WRITES = { saveSitePlan: 1, undoChange: 1, importItems: 1, saveTick: 1, sign: 1, importPlan: 1, saveAccount: 1, saveSiteItems: 1, report: 1, deleteReport: 1, addSite: 1, siteStatus: 1, settle: 1, setActive: 1, saveConfig: 1, saveProject: 1 };
 
 /* ===== 帳號與資安 ===== */
-var ROLE_MAP = { '管理者': 'admin', '現場': 'field', '內業': 'office', '老闆': 'office' };
+var ROLE_MAP = { '管理者': 'admin', '現場': 'field', '內業': 'office', '老闆': 'office', '下包': 'sub' };
 var TOKEN_DAYS = 30, MAX_FAIL = 5, LOCK_SEC = 900;
 function secret_() {
   var P = PropertiesService.getScriptProperties(), s = P.getProperty('AUTH_SECRET');
@@ -2186,7 +2203,7 @@ function people_() {
   var rs = read_('人員').rows, out = [];
   rs.forEach(function (r) {
     var name = str_(r['姓名']); if (!name) return;
-    out.push({ row: r._row, name: name, role: ROLE_MAP[str_(r['角色'])] || 'field', active: str_(r['狀態']) !== '停用', hash: str_(r['PIN雜湊']), salt: str_(r['鹽']) });
+    out.push({ row: r._row, name: name, role: ROLE_MAP[str_(r['角色'])] || 'field', active: str_(r['狀態']) !== '停用', hash: str_(r['PIN雜湊']), salt: str_(r['鹽']), scope: str_(r['可看範圍']) });
   });
   return out;
 }
@@ -2207,7 +2224,7 @@ function auth_(key, c, ppl) {
       var u = null; ppl.forEach(function (p) { if (p.name === name) u = p; });
       if (!u || !u.active || !u.hash) return null;
       if (sign_(name, exp, u.hash) !== parts[1]) return null;
-      return { name: u.name, role: u.role, legacy: false };
+      return { name: u.name, role: u.role, legacy: false, scope: u.scope };
     } catch (e) { return null; }
   }
   if (hasAdmin) return null;   // 已建立管理者帳號後,舊的共用通行碼自動失效
@@ -2262,6 +2279,84 @@ function changePin_(q, user) {
   return { token: makeToken_(nu) };
 }
 
+/* ===== 下包:只看得到「可看範圍」內的工程/派工單 ===== */
+/** 可看範圍文字:一行(或用、分隔)一個「工程代號」或「工程代號/派工地點」 */
+function scopeText_(v) {
+  var a = Array.isArray(v) ? v : String(v || '').split(/[\n、,，;；]+/);
+  var out = []; a.forEach(function (x) { x = str_(x); if (x && out.indexOf(x) < 0) out.push(x); }); return out.join('\n');
+}
+function scopeOf_(txt) {
+  var sc = {};
+  scopeText_(txt).split('\n').forEach(function (x) {
+    if (!x) return; var i = x.indexOf('/'), pid = i < 0 ? x : x.slice(0, i), site = i < 0 ? '' : x.slice(i + 1);
+    var o = sc[pid] = sc[pid] || { all: false, sites: [] };
+    if (!site) o.all = true; else if (o.sites.indexOf(site) < 0) o.sites.push(site);
+  });
+  return sc;
+}
+/** site 給空字串表示「整個工程」:只有勾整個工程的才算在範圍內 */
+function inScope_(sc, pid, site) { var o = sc[pid]; if (!o) return false; return o.all || (!!site && o.sites.indexOf(site) >= 0); }
+function projInScope_(sc, pid) { return !!sc[pid]; }
+var SUB_ACTIONS = { load: 1, reports: 1, report: 1, diary: 1, upload: 1, photoByUrl: 1, photoFiles: 1 };
+function subCheck_(action, q, user, sc) {
+  if (!SUB_ACTIONS[action]) throw new Error('下包帳號沒有這個權限');
+  if (action === 'diary' || action === 'photoFiles') {
+    if (!inScope_(sc, str_(q.pid), str_(q.site))) throw new Error('沒有這個工程或派工單的權限');
+  }
+  if (action === 'report') {
+    var d = q.data || {};
+    if (!inScope_(sc, str_(d.pid), str_(d.site))) throw new Error('沒有這個工程或派工單的權限');
+    d.crew = {}; d.crewOt = {};   // 下包不回報工人姓名
+    if (str_(q.id)) {
+      var old = null; read_('每日回報').rows.forEach(function (r) { if (str_(r['回報編號']) === str_(q.id)) old = r; });
+      if (old && (!inScope_(sc, str_(old['工程代號']), str_(old['派工地點'])) || str_(old['回報人']) !== user.name)) throw new Error('下包只能修改自己送出的回報');
+    }
+  }
+  if (action === 'photoByUrl') {
+    var ok = {};
+    reports_('0000-00', '9999-99', false).reports.forEach(function (r) {
+      if (!inScope_(sc, r.pid, r.site)) return;
+      (r.photos || []).forEach(function (x) { if (x && x.url) ok[x.url] = 1; });
+      (r.entries || []).forEach(function (e) { if (e.photo) ok[e.photo] = 1; });
+    });
+    q.urls = (q.urls || []).filter(function (u) { return ok[u]; });
+  }
+}
+function subReport_(r) { var o = {}; for (var k in r) o[k] = r[k]; o.crew = {}; o.crewOt = {}; return o; }
+function subFilter_(action, out, sc) {
+  if (out.reports) out.reports = out.reports.filter(function (r) { return inScope_(sc, r.pid, r.site); }).map(subReport_);
+  if (action !== 'load') return out;
+  out.projects = (out.projects || []).filter(function (p) { return projInScope_(sc, p.id); });
+  out.sites = (out.sites || []).filter(function (x) { return inScope_(sc, x[0], x[1]); });
+  var dp = {}; Object.keys(out.dispatch || {}).forEach(function (pid) { Object.keys(out.dispatch[pid]).forEach(function (st) { if (inScope_(sc, pid, st)) { dp[pid] = dp[pid] || {}; dp[pid][st] = out.dispatch[pid][st]; } }); });
+  out.dispatch = dp;
+  var sm = {};
+  Object.keys(out.sums || {}).forEach(function (pid) {
+    if (!projInScope_(sc, pid)) return;
+    if (sc[pid].all) { sm[pid] = out.sums[pid]; return; }
+    sm[pid] = {};
+    Object.keys(out.sums[pid]).forEach(function (code) {
+      var s = out.sums[pid][code], ns = { q: 0, p: null, pd: '', s: {} };
+      Object.keys(s.s || {}).forEach(function (st) { if (sc[pid].sites.indexOf(st) >= 0) { ns.s[st] = s.s[st]; ns.q += s.s[st]; } });
+      sm[pid][code] = ns;
+    });
+  });
+  out.sums = sm;
+  if (out.items) { var it = {}; Object.keys(out.items).forEach(function (pid) { if (projInScope_(sc, pid)) it[pid] = out.items[pid].map(function (x) { var y = x.slice(); y[3] = null; return y; }); }); out.items = it; }
+  if (out.heads) { var hh = {}; Object.keys(out.heads).forEach(function (pid) { if (projInScope_(sc, pid)) hh[pid] = out.heads[pid]; }); out.heads = hh; }
+  if (out.config) { out.config.workers = []; out.config.crews = []; }
+  out.stale = []; out.sigs = {}; out.accounts = [];
+  return out;
+}
+/** 工程或派工單的開工日:派工單用「開工日」,沒填用預定進度第一天;一般工程用工程開工日 */
+function startOf_(p, site) {
+  if (p.multi && site) {
+    var st = ''; sites_().forEach(function (x) { if (x[0] === p.id && x[1] === site) st = x[3].start || x[3].pstart || ''; });
+    return st;
+  }
+  return p.multi ? '' : (p.start || '');
+}
+
 function handle_(q) {
   try {
     var action = str_(q.action);
@@ -2275,10 +2370,12 @@ function handle_(q) {
       if (action === 'report' && q.data) q.data.by = user.name;
       if (action === 'deleteReport') q.by = user.name;
     }
+    var sc = role === 'sub' ? scopeOf_(user.scope) : null;
+    if (sc) subCheck_(action, q, user, sc);
     var lock = null;
     if (WRITES[action]) { lock = LockService.getScriptLock(); lock.waitLock(25000); }
     try {
-      q._me = user.name; var out = fn(q, role, c) || {}; out.ok = true; out.me = user.name; out.legacy = user.legacy;
+      q._me = user.name; var out = fn(q, role, c) || {}; if (sc) out = subFilter_(action, out, sc); out.ok = true; out.me = user.name; out.legacy = user.legacy;
       if (WRITES[action]) audit_(user.name, role, action, str_(q.id) || str_(q.pid) || '');
       return out;
     } finally { if (lock) lock.releaseLock(); }

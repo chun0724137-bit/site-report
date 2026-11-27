@@ -92,6 +92,28 @@ const ok = (c, msg) => { if (c) { pass++; console.log('ok', msg) } else { fail++
   await ev(() => { S.pid = 'ntpu'; S.view = 'report'; S.repMode = 'daily'; S.draft = newDraft(); const d = S.draft; d.entries = [{ code: '4.5', name: '路緣石', unit: 'M', mode: '數量', qty: 1, loc: '' }]; d.photos = [{ url: 'https://drive.google.com/file/d/E1/view', cap: '' }]; render() });
   ok(await ev(() => S.draft.photos[0].name === '路緣石'), '只有一個工項時照片自動帶入工項');
 
+  // 11. 數量表:開工日前的格子鎖住
+  { const T = m.sheets['派工地點'], hd = T.d[0]; const td = await ev(() => today());
+    T.d.forEach(r => { if (r[hd.indexOf('工程代號')] === 'yanggong1' && r[hd.indexOf('地點')] === '實踐國小') r[hd.indexOf('開工日')] = td });
+    await ev(async () => { await reload(false); S.pid = 'yanggong1'; S.view = 'grid'; S.gridSite = '實踐國小'; S.gridMonth = today().slice(0, 7); render() }); await wait(500);
+    const st = await ev(d => { const a = [...document.querySelectorAll('.qgrid input.gc[aria-label$=" ' + d.slice(0, 8) + '01"]')], b = document.querySelector('.qgrid input.gc[aria-label$=" ' + d + '"]'); return [a.some(x => x.disabled) && a.every(x => x.disabled || x.closest('td').classList.contains('bad')) && a.some(x => x.value) === !!document.querySelector('.qgrid td.bad'), b && !b.disabled] }, td);
+    ok(td.slice(8) === '01' || (st[0] && st[1]), '數量表開工日前的格子不能填');
+    T.d.forEach(r => { if (r[hd.indexOf('工程代號')] === 'yanggong1' && r[hd.indexOf('地點')] === '實踐國小') r[hd.indexOf('開工日')] = '' }); }
+
+  // 12. 下包登入:只看到範圍內的派工單,沒有工人名單
+  { await ev(async () => { await api('saveAccount', { name: '下包測試', accRole: '下包', status: '啟用', scope: ['yanggong1/實踐國小'] }) });
+    const tk = await ev(async () => (await fetch(G.url, { method: 'POST', body: JSON.stringify({ action: 'login', name: '下包測試', newPin: '5678' }) }).then(r => r.json())).token);
+    await ev(t => { localStorage.clear(); localStorage.setItem('gkey', t) }, tk); await boot();
+    const v = await ev(() => ({ nav: [...document.querySelectorAll('nav button')].filter(b => !b.hidden).map(b => b.dataset.v).join(), proj: [...document.querySelectorAll('#proj option')].map(o => o.value).join(), sites: proj().sites.join() }));
+    ok(v.nav === 'report,log' && v.proj === 'yanggong1' && v.sites === '實踐國小', '下包只看到回報、紀錄和自己的派工單(' + v.nav + '|' + v.proj + '|' + v.sites + ')');
+    await ev(() => { S.view = 'report'; S.repMode = 'daily'; S.draft = newDraft(); S.draft.site = '實踐國小'; render() });
+    const t = await ev(() => document.querySelector('#main').innerText);
+    ok(!/工人出工/.test(t) && /義交/.test(t), '下包回報沒有工人出工,保留義交');
+    await ev(() => { S.view = 'log'; render() });
+    ok(!/數量表/.test(await ev(() => [...document.querySelectorAll('#main .seg button')].map(b => b.textContent).join())), '下包紀錄沒有數量表');
+    await ev(() => { location.hash = 'boss' }); await wait(300);
+    ok(await ev(() => !S.boss && S.view === 'report'), '下包打不開老闆版'); }
+
   ok(!errors.length, '頁面沒有程式錯誤' + (errors.length ? ':' + errors.slice(0, 3).join(' | ') : ''));
   await browser.close(); srv.close();
   console.log(fail ? '有 ' + fail + ' 項失敗' : '全部通過(' + pass + ' 項)'); process.exit(fail ? 1 : 0);
