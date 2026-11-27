@@ -140,6 +140,8 @@ const ok = (c, msg) => { if (c) { pass++; console.log('ok', msg) } else { fail++
     await page.locator('.mx tbody tr').nth(2).locator('textarea[aria-label$="二、施工抽查項目"]').press('Control+d');
     await page.getByRole('button', { name: /💾 儲存/ }).click(); await wait(1500);
     ok(await ev(async () => { const D = S.svD.D, L = await api('svList', { pid: proj().id, site: '', month: D.month }); return L.rows[D.days[1].date].chk === '模板工程' && L.rows[D.days[2].date].chk === '模板工程' && mxDirtyN() === 0 }), '矩陣表按儲存一次存好(含 Ctrl+D 複製上一列)');
+    await ev(() => { S.svTab = '每日填寫'; render() }); await wait(300);
+    ok(await ev(() => { const p = proj(), D = S.svD.D, P = svPrj(p, D), d = D.days[0], m = svModel(p, P, D, d), items = diaryItems(P, d); return document.querySelectorAll('.svp table')[1].querySelectorAll('tr').length >= 12 && m.cells.filter(c => c.c === 1 && c.cs === 4).length >= 11 && !/帶入前一天/.test(document.querySelector('#main').innerText) && !!document.getElementById('svDayPdf') }), '施工項目固定 10 列、這天 PDF 在工具列、沒有帶入前一天');
     ok(await ev(async () => { const st = S.svD.D.project.start; return !st || S.svD.D.days.every(d => d.date >= st) }), '監造報表不列開工前的日期');
     ok(await ev(async () => { const p = proj(), D = S.svD.D; let got = null; const sv = S.dl.save; S.dl.save = async o => { got = o }; await svXlsDownload(p, D); S.dl.save = sv;
       const wb = XLSX.read(await got.data.arrayBuffer()), a = XLSX.utils.sheet_to_json(wb.Sheets['監造事項'], { header: 1, defval: '' });
