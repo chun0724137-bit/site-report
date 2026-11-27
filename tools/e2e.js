@@ -92,6 +92,14 @@ const ok = (c, msg) => { if (c) { pass++; console.log('ok', msg) } else { fail++
   await ev(() => { S.pid = 'ntpu'; S.view = 'report'; S.repMode = 'daily'; S.draft = newDraft(); const d = S.draft; d.entries = [{ code: '4.5', name: '路緣石', unit: 'M', mode: '數量', qty: 1, loc: '' }]; d.photos = [{ url: 'https://drive.google.com/file/d/E1/view', cap: '' }]; render() });
   ok(await ev(() => S.draft.photos[0].name === '路緣石'), '只有一個工項時照片自動帶入工項');
 
+  // 10b. 契約匯入:用 A 欄完整編碼,大項標題漏填也分得出來
+  ok(await ev(() => { const H = ['', '項次', '項目及說明', '單位', '數量', '單價'], R = [H,
+    ['壹.甲.三.', '三', '大宗資材類', '', '', ''], ['壹.甲.三.1', '1', '混凝土', 'M3', '', 3000],
+    ['壹.甲.四.', '', '結構類', '', '', ''], ['壹.甲.四.1', '1', '植筋', '支', '', 100], ['壹.甲.四.', '', '(續)', '', '', ''],
+    ['壹.甲.五.1', '1', '鐵板租金', '日噸', '', 67], ['壹.乙.一.', '一', '環保清潔費', '式', '', 1]];
+    const o = impParse(R, impGuess(R, 'new'), true), c = o.filter(x => !x.head).map(x => x.code + x.name).join();
+    return c === '3.1混凝土,4.1植筋(續),5.1鐵板租金' && o.some(x => x.head && x.code === '5') }), '契約匯入看 A 欄編碼分大項');
+
   // 11. 數量表:開工日前的格子鎖住
   { const T = m.sheets['派工地點'], hd = T.d[0]; const td = await ev(() => today());
     T.d.forEach(r => { if (r[hd.indexOf('工程代號')] === 'yanggong1' && r[hd.indexOf('地點')] === '實踐國小') r[hd.indexOf('開工日')] = td });

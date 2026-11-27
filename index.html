@@ -1514,8 +1514,18 @@ function impGuess(aoa,mode){
   return{hr,dr,m,lab,ncol}}
 function impParse(aoa,g,onlyDirect){
   const m=g.m,out=[],pc=aoa.slice(g.dr).some(r=>/^[一二三四五六七八九十壹貳參叁肆伍陸柒捌玖拾]+\.\d/.test(String((r||[])[m.code]??"").trim()));
-  let top="",topFirst="",cat="",catNo=0,last=null,lastHead=null;
+  let top="",topFirst="",cat="",catNo=0,last=null,lastHead=null,secFirst="";
+  // 標單最左邊常有完整編碼欄(例「壹.甲.四.1」):有的話優先用它判斷大項,不怕項次欄漏填大項標題
+  const AC=/^[壹貳參叁肆伍陸柒捌玖拾]\.[甲乙丙丁戊]\./,ac=pc?-1:(()=>{let best=-1,bn=0;for(let c=0;c<g.ncol;c++){if(c===m.code)continue;let n=0;for(let i=g.dr;i<aoa.length;i++)if(AC.test(String((aoa[i]||[])[c]??"").replace(/\s/g,"")))n++;if(n>bn){bn=n;best=c}}return bn>=5?best:-1})();
   for(let i=g.dr;i<aoa.length;i++){const r=aoa[i]||[];const code=String(r[m.code]??"").replace(/\s/g,""),name=String(r[m.name]??"").trim(),unit=m.unit>=0?String(r[m.unit]??"").trim():"",qty=m.qty>=0?impNum(r[m.qty]):null,price=m.price>=0?impNum(r[m.price]):null;
+    if(ac>=0){const A=String(r[ac]??"").replace(/\s/g,"");if(AC.test(A)){const P=A.split("."),sec=P[1];if(!secFirst)secFirst=sec;
+      if(sec!==secFirst){if(onlyDirect){last=null;continue}}
+      else{const big=cnum(P[2]),sub=P.slice(3).filter(Boolean);
+        if(big&&sub.every(x=>/^\d+$/.test(x))){
+          if(/^(小計|合計|總計)/.test(name)){last=null;continue}
+          if(!sub.length){if(big===catNo&&!code&&!unit&&qty===null&&price===null){if(last)last.name+=name;continue}catNo=big;cat=name.replace(/\s+/g,"");const o={code:String(big),name,head:2,cat};out.push(o);lastHead=o;last=null;continue}
+          if(big!==catNo){catNo=big;cat="第"+P[2]+"大項(Excel 沒有標題列)";out.push({code:String(big),name:cat,head:2,cat})}
+          const it={code:big+"."+sub.join("."),name,unit,qty,price,cat};it.mode=/^(式|一式)$/.test(unit)&&(qty===1||qty===null)?"現場填百分比":"數量";lastHead=null;out.push(it);last=it;continue}}}}
     if(!code){if(!name)continue;if(!unit&&qty===null&&price===null){if(last&&!/^(小計|合計|總計)/.test(name))last.name+=name;else if(lastHead){lastHead.name+=name;if(lastHead.head===2){lastHead.cat=lastHead.name;cat=lastHead.name}}}else last=null;continue}
     if(/小計|合計|總計/.test(name)){last=null;continue}
     let it=null;
