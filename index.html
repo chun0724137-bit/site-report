@@ -2387,28 +2387,36 @@ function svXlsCard(p,D){const fi=h("input",{type:"file",accept:".xlsx,.xls,.xlsm
       h("button",{type:"button",class:"btn primary",style:"flex:0 0 auto",onclick:()=>fi.click()},"⬆ 上傳監造事項"),fi))}
 function viewSv(){const p=proj(),out=[];
   if(["土方暫置","機動修繕"].includes(ptype(p)))return [h("section",{class:"card"},h("p",{class:"note"},"這個工程沒有施工日誌,也沒有監造報表。請從上方選單選擇其他工程。"))];
-  S.svMonth=S.svMonth||today().slice(0,7);const head=h("section",{class:"card"},h("h2",{},"📝 監造報表｜"+(p.short||p.name)));out.push(head);
-  if(S.flash){head.append(h("div",{class:"msg ok"},S.flash));S.flash=""}
-  const row=h("div",{class:"row",style:"align-items:flex-end"});head.append(row);
-  if(!S.sv){if(!S.svPreview)row.append(h("button",{type:"button",class:"btn",style:"flex:0 0 auto",onclick:()=>{S.view="diary";try{location.hash="diary"}catch(e){}render()}},"← 回到施工日誌"));
-    row.append(h("button",{type:"button",class:"btn"+(S.svPreview?" primary":""),style:"flex:0 0 auto",onclick:()=>{S.svPreview=!S.svPreview;render();window.scrollTo(0,0)}},S.svPreview?"結束預覽,回到管理者畫面":"👁 用監造畫面預覽"));
-    if(S.svPreview)head.append(h("div",{class:"msg"},"正在預覽監造看到的畫面(藍色)。你還是管理者身分:看得到全部工程;真正的監造只看得到「可看範圍」內的工程,也看不到照片與單價。"))}
+  S.svMonth=S.svMonth||today().slice(0,7);const head=h("section",{class:"card"});out.push(head);
+  const A="flex:0 0 auto",btn=(t,f,o)=>h("button",Object.assign({type:"button",class:"btn",style:A+";padding:7px 12px;font-size:14px",onclick:f},o||{}),t),lab=t=>h("span",{class:"note",style:A+";font-size:13px"},t),sep=()=>h("span",{style:A+";width:1px;height:26px;background:var(--line);margin:0 2px"});
+  const bar=h("div",{class:"row",style:"align-items:center;gap:8px"},h("b",{style:A+";font-size:16px"},"📝 監造報表"));head.append(bar);
+  const tags=h("div",{class:"row",style:"gap:8px;margin-top:8px"});
+  const tag=(t,bg,fg,act,f)=>h("span",{style:A+";font-size:13px;border-radius:8px;padding:4px 10px;background:"+bg+";color:"+fg},t,act?h("button",{type:"button",style:"border:0;background:transparent;color:inherit;text-decoration:underline;cursor:pointer;font:inherit;margin-left:8px;padding:0",onclick:f},act):null);
+  if(S.flash){head.append(h("div",{class:"msg ok",style:"margin-top:8px"},S.flash));S.flash=""}
+  if(!S.sv&&!S.svPreview)bar.append(btn("← 日誌",()=>{S.view="diary";try{location.hash="diary"}catch(e){}render()}));
   if(p.multi){const opts=(p.siteInfo||[]).filter(x=>x.status!=="結案").map(x=>x.name);if(!S.dSite||!opts.includes(S.dSite))S.dSite=opts[0]||"";
-    const ss=h("select",{"aria-label":"派工單"},opts.map(n=>h("option",{value:n},n)));ss.value=S.dSite;ss.addEventListener("change",async()=>{if(!mxLeave()){render();return}await svFlush();S.dSite=ss.value;S.svD=null;render()});
-    row.append(h("label",{class:"f"},"派工單(每張各一份)",ss));if(!opts.length){head.append(h("p",{class:"note"},"這個工程還沒有派工地點。"));return out}}
-  const mi=h("input",{type:"month","aria-label":"月份"});mi.value=S.svMonth;mi.addEventListener("change",async()=>{if(mi.value){if(!mxLeave()){render();return}await svFlush();S.svMonth=mi.value;S.svD=null;render()}});row.append(h("label",{class:"f",style:"flex:0 0 170px"},"月份",mi));
-  if(window.innerWidth<900)head.append(h("div",{class:"msg warn"},"監造報表是電腦版,請用電腦開啟比較好填寫。"));
+    const ss=h("select",{"aria-label":"派工單",style:A+";width:auto;max-width:240px;padding:7px 10px"},opts.map(n=>h("option",{value:n},n)));ss.value=S.dSite;ss.addEventListener("change",async()=>{if(!mxLeave()){render();return}await svFlush();S.dSite=ss.value;S.svD=null;render()});
+    bar.append(ss);if(!opts.length){head.append(h("p",{class:"note"},"這個工程還沒有派工地點。"));return out}}
+  const mi=h("input",{type:"month","aria-label":"月份",style:A+";width:170px;padding:6px 10px"});mi.value=S.svMonth;mi.addEventListener("change",async()=>{if(mi.value){if(!mxLeave()){render();return}await svFlush();S.svMonth=mi.value;S.svD=null;render()}});bar.append(mi);
+  if(!S.sv)tags.append(S.svPreview?tag("👁 預覽監造畫面中","#E6F1FB","#0C447C","結束預覽",()=>{S.svPreview=false;render();window.scrollTo(0,0)}):tag("","transparent","inherit","👁 用監造畫面預覽",()=>{S.svPreview=true;render();window.scrollTo(0,0)}));
+  if(window.innerWidth<900)tags.append(tag("⚠ 監造報表是電腦版,請用電腦開啟比較好填寫","var(--warn-bg)","var(--warn)"));
   const site=p.multi?S.dSite:"",key=p.id+"|"+site+"|"+S.svMonth;
   if(!S.svD||S.svD.key!==key){S.svD={key,loading:true};Promise.all([api("diary",{pid:p.id,site,month:S.svMonth}),api("svList",{pid:p.id,site,month:S.svMonth})]).then(([D,L])=>{if(S.svD&&S.svD.key===key){const st=(D.project||{}).start;if(st)D.days=(D.days||[]).filter(x=>x.date>=st);S.svD={key,D,rows:L.rows||{},phr:L.phr||{}};render()}}).catch(e=>{S.svD=null;S.err="讀取失敗:"+e.message;render()})}
-  if(S.svD.loading){head.append(h("p",{class:"note"},"讀取中…"));return out}
+  if(S.svD.loading){if(tags.children.length)head.append(tags);head.append(h("p",{class:"note"},"讀取中…"));return out}
   const D=S.svD.D,P=svPrj(p,D);
-  head.append(h("div",{class:"row"},seg(["每日填寫","矩陣表"],S.svTab==="矩陣表"?"矩陣表":"每日填寫",v=>{if(v!=="矩陣表"&&!mxLeave()){render();return}if(S.mx)S.mx.ed={};S.svTab=v;render()}),
-    h("button",{type:"button",class:"btn",style:"flex:0 0 auto",onclick:async()=>{await svFlush();dOpenPrint(svModelsOf(p,P,D,D.days),P.short+" "+D.month+" 監造報表")}},"⬇ 月報 PDF(整月日報)"),
-    h("button",{type:"button",class:"btn",style:"flex:0 0 auto",onclick:async()=>{await svFlush();try{const b=buildXlsx([svSummaryModel(p,D),...svModelsOf(p,P,D,D.days)]);await S.dl.save({filename:P.short+"_"+D.month+"_監造報表.xlsx",data:b})}catch(e){if(!(e&&e.code==="declined")){S.err="Excel 產生失敗:"+(e.message||e);render()}}}},"⬇ 月報 Excel"),
-    h("button",{type:"button",class:"btn",style:"flex:0 0 auto",onclick:()=>{S.svSet=!S.svSet;render()}},S.svSet?"收起基本資料":"⚙ 基本資料(契約金額、版面)")));
-  if(!p.amt0&&!S.svSet)head.append(h("div",{class:"msg"},"還沒填契約金額,報表的「契約金額」會是空白。請按「⚙ 基本資料」填寫。"));
+  const sg=seg(["每日填寫","矩陣表"],S.svTab==="矩陣表"?"矩陣表":"每日填寫",v=>{if(v!=="矩陣表"&&!mxLeave()){render();return}if(S.mx)S.mx.ed={};S.svTab=v;render()});sg.style.flex="0 0 auto";sg.style.margin="0";sg.querySelectorAll("button").forEach(x=>{x.style.whiteSpace="nowrap";x.style.padding="7px 16px";x.style.fontSize="14px"});
+  const fi=h("input",{type:"file",accept:".xlsx,.xls,.xlsm",hidden:true});fi.addEventListener("change",async()=>{const f=fi.files[0];fi.value="";if(!f)return;try{await svFlush();await svXlsUpload(p,D,f)}catch(e){S.err="上傳失敗:"+(e.message||e);render()}});
+  const has=D.days.length>0;
+  bar.append(sg,sep(),lab("月報"),
+    btn("⬇ PDF(整月日報)",async()=>{await svFlush();dOpenPrint(svModelsOf(p,P,D,D.days),P.short+" "+D.month+" 監造報表")},{disabled:has?null:true}),
+    btn("⬇ Excel(整月)",async()=>{await svFlush();try{const b=buildXlsx([svSummaryModel(p,D),...svModelsOf(p,P,D,D.days)]);await S.dl.save({filename:P.short+"_"+D.month+"_監造報表.xlsx",data:b})}catch(e){if(!(e&&e.code==="declined")){S.err="Excel 產生失敗:"+(e.message||e);render()}}},{disabled:has?null:true}),
+    sep(),lab("Excel 填整月"),
+    btn("⬇ 下載監造事項(空白版)",async()=>{try{await svFlush();await svXlsDownload(p,D)}catch(e){if(!(e&&e.code==="declined")){S.err="下載失敗:"+(e.message||e);render()}}},{disabled:has?null:true,title:"範例樣式:一天一列,欄位照監造事項表;施工日誌的內容會先帶入,填好再上傳"}),
+    btn("⬆ 上傳監造事項",()=>fi.click(),{class:"btn primary",disabled:has?null:true,title:"上傳填好的監造事項,一次存進每天的報表"}),fi,
+    h("span",{style:"flex:1"}),btn(S.svSet?"收起基本資料":"⚙ 基本資料",()=>{S.svSet=!S.svSet;render()}));
+  if(!p.amt0&&!S.svSet)tags.append(tag("⚠ 還沒填契約金額","#FAEEDA","#854F0B","去填",()=>{S.svSet=true;render()}));
+  if(tags.children.length)head.append(tags);
   if(S.svSet)out.push(svSetCard(p));
-  if(D.days.length)out.push(svXlsCard(p,D));
   if(!D.days.length){out.push(h("section",{class:"card"},h("p",{class:"note"},"這個月份沒有資料(還沒開工,或月份在未來)。")));return out}
   if(S.svTab==="矩陣表"){out.push(h("section",{class:"card"},svMatrix(p,P,D)));return out}
   if(!S.svDate||!D.days.some(x=>x.date===S.svDate))S.svDate=(D.days.find(x=>x.date===today())||D.days[D.days.length-1]).date;
