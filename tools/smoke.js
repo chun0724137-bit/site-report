@@ -217,4 +217,5 @@ const L2=m.call({key:k,action:'svList',pid:'ntpu',site:'',month:'2026-11'}).rows
 ok(!m.call({key:'field123',action:'svSave',pid:'ntpu',date:'2026-11-18',data:{}}).ok,'現場不能改監造報表');}
 m.call({key:'admin123',action:'saveProject',project:{id:'xingong-north',direct:63490800}});ok(m.run("projById_('xingong-north').direct")===63490800,'開口契約直接工程費存檔');
 {const n0=m.books.length;const r=m.call({key:'admin123',action:'settle',pid:'yanggong1',site:'實踐國小',download:true});ok(r.ok&&/結算資料_\d{8}\.xlsx$/.test(r.name)&&r.data==='UEsDBA==','結算資料直接下載 Excel');ok(!m.call({key:'field123',action:'settle',pid:'yanggong1',site:'實踐國小',download:true}).ok,'現場不能下載結算資料');}
+{const r=m.call({key:'admin123',action:'settle',pid:'yanggong1',site:'實踐國小',data:true});ok(r.ok&&Array.isArray(r.rows)&&r.site==='實踐國小'&&m.books.length>0,'結算只回傳數字(Excel 在瀏覽器產生,不經雲端)');}
 console.log('全部通過');

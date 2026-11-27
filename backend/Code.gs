@@ -1966,6 +1966,7 @@ var ACTIONS = {
   },
   settle: function (q, role) {
     if (role !== 'admin') throw new Error('只有管理者可以產生結算資料');
+    if (q.data) { var D = settleData_(str_(q.pid), str_(q.site)); return { name: D.p.name, short: D.p.short, agency: D.p.agency, site: D.site, info: D.info, rows: D.rows }; }
     return q.download ? settleXlsx_(str_(q.pid), str_(q.site)) : makeSettlement_(str_(q.pid), str_(q.site));
   },
   setActive: function (q, role) {

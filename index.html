@@ -1510,12 +1510,38 @@ function sitePlanUpload(p,site){const X=S.sp=S.sp||{};const box=h("div",{class:"
   if(X.msg)box.append(h("div",{class:"msg "+(X.ok?"ok":"warn")},X.msg));
   return box}
 async function setSite(p,site,status,date){S.busy=true;render();try{await api("siteStatus",{pid:p.id,site,status,date});S.siteAsk="";S.siteDone=status==="完工"?p.id+"|"+site:"";await reload(true)}catch(e){S.err="沒有存成功:"+e.message}S.busy=false;render()}
+function settleModels(J){const rows=J.rows||[],n=rows.length,last=4+n,agency=J.agency||J.name,title=J.site+(J.info.kind||"");
+  const num=v=>{const x=Number(v);return isFinite(x)?x:0},sumF=f=>String(f||"").split("+").reduce((a,t)=>a+t.split("*").reduce((m,y)=>m*num(y),1),0),r0=x=>Math.round(x);
+  const mk=(sheet,widths,w,sub,head,data,extra)=>{const cells=[],hs=[];let r=0;const B=[1,1,1,1],N=[0,0,0,0];
+    const line=(ht,list)=>{r++;hs.push(ht);let c=1;list.forEach(x=>{const [cs,v,o]=x;cells.push(Object.assign({r,c,rs:1,cs,v:v===null||v===undefined?"":v,b:B,sz:12,bold:false,h:"left",va:"center",wrap:true},o||{}));c+=cs})};
+    if(sub!==null){line(24,[[w,agency,{b:N,sz:15,bold:true,h:"center"}]]);line(22,[[w,title,{b:N,sz:13,bold:true,h:"center"}]]);line(24,[[w,sub,{b:N,sz:15,bold:true,h:"center"}]])}
+    else extra.head.forEach(x=>line(x[0],[[w,x[1],x[2]]]));
+    line(30,head.map(t=>[1,t,{bold:true,h:"center",bg:"#DDEBE8"}]));
+    data.forEach(d=>line(d.ht||22,d.v.map((v,i)=>[1,v,Object.assign({},(d.o||[])[i]||{})])));
+    if(extra&&extra.note)line(20,[[w,extra.note,{b:N,sz:11}]]);
+    return{cells,widths,heights:hs,sig:null,stale:false,date:"",sheet}};
+  const q=rows.map(x=>sumF(x.formula)),amt=rows.map((x,i)=>r0(num(x.price)*q[i])),tot=amt.reduce((a,b)=>a+b,0);
+  const F="#,##0.##",M="#,##0";
+  const s1=mk("數量計算表",[10,30,52,30,13,7,11,13],8,"工程數量計算表",["契約項次","工程項目","施作項目及說明(由每日回報自動產生)","計算公式","合計施作數量","單位","單價","複價"],
+    rows.map((x,i)=>{const rr=5+i;return{ht:Math.max(22,Math.ceil(String(x.desc).length/40)*16+6),v:[x.code,x.name,x.desc,x.formula,{f:x.formula||"0",v:q[i]},x.unit,x.price===null?"":num(x.price),{f:"ROUND(N(G"+rr+")*E"+rr+",0)",v:amt[i]}],o:[{h:"center"},{},{},{},{h:"right",fmt:F},{h:"center"},{h:"right",fmt:F},{h:"right",fmt:M}]}}).concat([{v:["合  計","","","","","","",{f:"SUM(H5:H"+last+")",v:tot}],o:[{h:"center",bold:true},{},{},{},{},{},{},{h:"right",fmt:M,bold:true}]}]),
+    {note:"說明:計算式由現場每日回報產生,可直接修改「計算公式」與「合計施作數量」,明細與派工單會跟著更新。"});
+  const s2=mk("明細",[10,36,7,11,11,13,11,13,11,11],10,"工程數量明細表",["契約項次","工程項目","單位","契約單價","設計數量","設計金額","結算數量","結算金額","增加","減少"],
+    rows.map((x,i)=>{const rr=5+i;return{v:[x.code,x.name,x.unit,x.price===null?"":num(x.price),{f:"G"+rr,v:q[i]},{f:"ROUND(N(D"+rr+")*N(E"+rr+"),0)",v:amt[i]},{f:"數量計算表!E"+rr,v:q[i]},{f:"ROUND(N(D"+rr+")*N(G"+rr+"),0)",v:amt[i]},{f:"IF(H"+rr+"-F"+rr+">0,H"+rr+"-F"+rr+",0)",v:0},{f:"IF(H"+rr+"-F"+rr+">0,0,H"+rr+"-F"+rr+")",v:0}],o:[{h:"center"},{},{h:"center"},{h:"right",fmt:F},{h:"right",fmt:F},{h:"right",fmt:M},{h:"right",fmt:F},{h:"right",fmt:M},{h:"right",fmt:M},{h:"right",fmt:M}]}})
+      .concat([{v:["合計","","","","",{f:"SUM(F5:F"+last+")",v:tot},"",{f:"SUM(H5:H"+last+")",v:tot},{f:"SUM(I5:I"+last+")",v:0},{f:"SUM(J5:J"+last+")",v:0}],o:[{h:"center",bold:true},{},{},{},{},{h:"right",fmt:M},{},{h:"right",fmt:M},{h:"right",fmt:M},{h:"right",fmt:M}]}]),
+    {note:"備註:設計數量預設與結算數量相同。"});
+  const s3=mk("派工單",[6,10,28,24,9,34,10,7,11,13],10,null,["項次","區域","施工地點","工作性質","編號","工作項目","數量","單位","單價","複價"],
+    rows.map((x,i)=>{const rr=5+i;return{v:[i?"":"1",i?"":(J.info.area||""),i?"":J.site,i?"":(J.info.kind||""),x.code,x.name,{f:"明細!E"+rr,v:q[i]},x.unit,x.price===null?"":num(x.price),{f:"ROUND(N(G"+rr+")*N(I"+rr+"),0)",v:amt[i]}],o:[{h:"center"},{h:"center"},{},{},{h:"center"},{},{h:"right",fmt:F},{h:"center"},{h:"right",fmt:F},{h:"right",fmt:M}]}})
+      .concat([{v:["","","","","","","","","總計",{f:"SUM(J5:J"+last+")",v:tot}],o:[{},{},{},{},{},{},{},{},{h:"center",bold:true},{h:"right",fmt:M,bold:true}]}]),
+    {head:[[24,agency,{b:[0,0,0,0],sz:15,bold:true,h:"center"}],[22,(J.name||"")+"【派工單】",{b:[0,0,0,0],sz:13,bold:true,h:"center"}],[20,"開工日期:"+(J.info.start||"")+"　預定完工日期:"+(J.info.plan||"")+"　實際完工日期:"+(J.info.done||""),{b:[0,0,0,0],sz:12,h:"center"}]]});
+  return [s1,s2,s3]}
 async function settle(p,site){const k=p.id+"|"+site,d=new Date(),fn=((p.short||p.name)+"_"+site+"_結算資料_"+d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0")).replace(/[\/:*?"<>|]/g,"-")+".xlsx";
   let handle=null;try{handle=await S.dl.pick(fn)}catch(e){return}
   S.busy=true;S.settling=k;S.settled=null;render();
-  try{const j=await api("settle",{pid:p.id,site,download:true});const bin=atob(j.data),u8=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
-    S.busy=false;render();await S.dl.save({filename:fn,handle,data:new Blob([u8],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})});S.settled={k,name:handle?handle.name:fn}}
-  catch(e){if(!(e&&e.code==="declined"))S.err="結算資料沒有下載成功:"+e.message}S.busy=false;S.settling="";render()}
+  try{const j=await api("settle",{pid:p.id,site,data:true});if(!j.rows)throw new Error("後台還是舊版,請先更新 Code.gs 並部署新版本");
+    const b=buildXlsx(settleModels(j));S.busy=false;render();await S.dl.save({filename:fn,handle,data:b});S.settled={k,name:handle?handle.name:fn}}
+  catch(e){if(!(e&&e.code==="declined")){if(handle&&handle.remove)try{await handle.remove()}catch(x){}const m="結算資料沒有下載成功:"+(e&&e.message||e);S.err=m;alert(m)}}
+  S.busy=false;S.settling="";render()}
+
 // ---- 內業:上傳預算書/詳細價目表新增工程、匯入變更 ----
 const CNUM={"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9,"十":10,"壹":1,"貳":2,"參":3,"叁":3,"肆":4,"伍":5,"陸":6,"柒":7,"捌":8,"玖":9,"拾":10};
 function cnum(t){t=String(t||"").trim();if(!t)return 0;if(t.length===1)return CNUM[t]||0;if(/^[十拾]/.test(t))return 10+(CNUM[t[1]]||0);if(/[十拾]$/.test(t))return(CNUM[t[0]]||0)*10;if(/[十拾]/.test(t))return(CNUM[t[0]]||0)*10+(CNUM[t[2]]||0);return 0}
@@ -1921,7 +1947,8 @@ function buildXlsx(models){
   const fonts=[],fk={},borders=[{k:"0000"}],bk={"0000":0},xfs=[],xk={};
   const fontId=(sz,b)=>{const k=sz+"|"+(b?1:0);if(!(k in fk)){fk[k]=fonts.length;fonts.push({sz,b})}return fk[k]};
   const borderId=bits=>{const k=bits.join("");if(!(k in bk)){bk[k]=borders.length;borders.push({k})}return bk[k]};
-  const xf=(sz,b,bits,h,va,wrap)=>{const key=[fontId(sz||11,b),borderId(bits),h||"",va||"",wrap?1:0].join("|");if(!(key in xk)){xk[key]=xfs.length+1;xfs.push({f:fontId(sz||11,b),b:borderId(bits),h,va,wrap})}return xk[key]};
+  const nfs=[],nfk={},fills=[],flk={};const nfId=f=>{if(!f)return 0;if(!(f in nfk)){nfk[f]=164+nfs.length;nfs.push(f)}return nfk[f]};const fillId=c=>{if(!c)return 0;if(!(c in flk)){flk[c]=2+fills.length;fills.push(c)}return flk[c]};
+  const xf=(sz,b,bits,h,va,wrap,fmt,bg)=>{const key=[fontId(sz||11,b),borderId(bits),h||"",va||"",wrap?1:0,fmt||"",bg||""].join("|");if(!(key in xk)){xk[key]=xfs.length+1;xfs.push({f:fontId(sz||11,b),b:borderId(bits),h,va,wrap,n:nfId(fmt),fl:fillId(bg)})}return xk[key]};
   fontId(11,false);
   const files=[],sheetsMeta=[],media=[];
   models.forEach((M,si)=>{
@@ -1930,13 +1957,14 @@ function buildXlsx(models){
       const hh=c.h||(typeof c.v==="number"?"center":"left"),vv=c.va==="center"?"center":(c.va||"center");
       for(let i=0;i<c.rs;i++)for(let j=0;j<c.cs;j++){
         const bits=[i===0?c.b[0]:0,j===c.cs-1?c.b[1]:0,i===c.rs-1?c.b[2]:0,j===0?c.b[3]:0];
-        const s=xf(c.sz,c.bold,bits,hh,vv,true);
+        const s=xf(c.sz,c.bold,bits,hh,vv,c.wrap!==false,c.fmt,c.bg);
         grid[(c.r+i)+","+(c.c+j)]={s,v:(i===0&&j===0)?c.v:"",r:c.r+i,c:c.c+j}}
       if(c.rs>1||c.cs>1)merges.push(xCol(c.c)+c.r+":"+xCol(c.c+c.cs-1)+(c.r+c.rs-1))});
     let sd="";
     for(let r=1;r<=rowsMax;r++){const rc=Object.values(grid).filter(g=>g.r===r).sort((a,b)=>a.c-b.c);
       sd+='<row r="'+r+'" ht="'+(M.heights[r-1]||15)+'" customHeight="1">'+rc.map(g=>{const ref=xCol(g.c)+r;
         if(g.v===""||g.v===null||g.v===undefined)return'<c r="'+ref+'" s="'+g.s+'"/>';
+        if(typeof g.v==="object"&&g.v.f)return'<c r="'+ref+'" s="'+g.s+'"><f>'+xEsc(g.v.f)+"</f>"+(typeof g.v.v==="number"&&isFinite(g.v.v)?"<v>"+g.v.v+"</v>":"")+"</c>";
         if(typeof g.v==="number")return'<c r="'+ref+'" s="'+g.s+'"><v>'+g.v+"</v></c>";
         return'<c r="'+ref+'" s="'+g.s+'" t="inlineStr"><is><t xml:space="preserve">'+xEsc(g.v)+"</t></is></c>"}).join("")+"</row>"}
     const cols=M.widths.map((w,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+w.toFixed(2)+'" customWidth="1"/>').join("");
@@ -1950,10 +1978,10 @@ function buildXlsx(models){
       files.push({name:"xl/drawings/_rels/drawing"+mi+".xml.rels",data:enc.encode(X+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image'+mi+'.png"/></Relationships>')});
       files.push({name:"xl/media/image"+mi+".png",data:u8});sheetsMeta.push({si,drawing:mi})}
     else sheetsMeta.push({si})});
-  const styles=X+'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="'+fonts.length+'">'+fonts.map(f=>'<font>'+(f.b?"<b/>":"")+'<sz val="'+f.sz+'"/><name val="標楷體"/><family val="1"/><charset val="136"/></font>').join("")+'</fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="'+borders.length+'">'+borders.map(b=>{const k=b.k,s=(i,n)=>k[i]==="1"?'<'+n+' style="thin"><color auto="1"/></'+n+'>':'<'+n+'/>';return"<border>"+s(3,"left")+s(1,"right")+s(0,"top")+s(2,"bottom")+"<diagonal/></border>"}).join("")+'</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="'+(xfs.length+1)+'"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+xfs.map(x=>'<xf numFmtId="0" fontId="'+x.f+'" fillId="0" borderId="'+x.b+'" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment'+(x.h?' horizontal="'+x.h+'"':"")+(x.va?' vertical="'+x.va+'"':"")+(x.wrap?' wrapText="1"':"")+"/></xf>").join("")+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  const styles=X+'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+(nfs.length?'<numFmts count="'+nfs.length+'">'+nfs.map((f,i)=>'<numFmt numFmtId="'+(164+i)+'" formatCode="'+xEsc(f).replace(/"/g,"&quot;")+'"/>').join("")+"</numFmts>":"")+'<fonts count="'+fonts.length+'">'+fonts.map(f=>'<font>'+(f.b?"<b/>":"")+'<sz val="'+f.sz+'"/><name val="標楷體"/><family val="1"/><charset val="136"/></font>').join("")+'</fonts><fills count="'+(2+fills.length)+'"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>'+fills.map(c=>'<fill><patternFill patternType="solid"><fgColor rgb="FF'+c.replace("#","")+'"/><bgColor indexed="64"/></patternFill></fill>').join("")+'</fills><borders count="'+borders.length+'">'+borders.map(b=>{const k=b.k,s=(i,n)=>k[i]==="1"?'<'+n+' style="thin"><color auto="1"/></'+n+'>':'<'+n+'/>';return"<border>"+s(3,"left")+s(1,"right")+s(0,"top")+s(2,"bottom")+"<diagonal/></border>"}).join("")+'</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="'+(xfs.length+1)+'"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+xfs.map(x=>'<xf numFmtId="'+x.n+'" fontId="'+x.f+'" fillId="'+x.fl+'" borderId="'+x.b+'" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"'+(x.n?' applyNumberFormat="1"':"")+(x.fl?' applyFill="1"':"")+'><alignment'+(x.h?' horizontal="'+x.h+'"':"")+(x.va?' vertical="'+x.va+'"':"")+(x.wrap?' wrapText="1"':"")+"/></xf>").join("")+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
   const n=models.length;
   const ct=X+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+models.map((m,i)=>'<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join("")+sheetsMeta.filter(s=>s.drawing).map(s=>'<Override PartName="/xl/drawings/drawing'+s.drawing+'.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>').join("")+"</Types>";
-  const wb=X+'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'+models.map((m,i)=>'<sheet name="'+xEsc(m.sheet)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>').join("")+"</sheets></workbook>";
+  const wb=X+'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'+models.map((m,i)=>'<sheet name="'+xEsc(m.sheet)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>').join("")+'</sheets><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>';
   const wbr=X+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+models.map((m,i)=>'<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>').join("")+'<Relationship Id="rId'+(n+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
   const rels=X+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
   const all=[{name:"[Content_Types].xml",data:enc.encode(ct)},{name:"_rels/.rels",data:enc.encode(rels)},{name:"xl/workbook.xml",data:enc.encode(wb)},{name:"xl/_rels/workbook.xml.rels",data:enc.encode(wbr)},{name:"xl/styles.xml",data:enc.encode(styles)},...files];

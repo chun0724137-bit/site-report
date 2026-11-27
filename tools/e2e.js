@@ -170,7 +170,10 @@ const ok = (c, msg) => { if (c) { pass++; console.log('ok', msg) } else { fail++
     await ev(() => { S.view = 'all'; render() }); await wait(300);
     const at = await ev(() => document.querySelector('#main').innerText);
     ok(!/人員月小計/.test(at) && /本月最新回報/.test(at) && /今天|昨天|\d{2}\/\d{2}\(/.test(at), '總覽沒有人員月小計、最新回報依日期分組');
-    ok(await ev(async () => { const p = S.projects.find(x => x.id === 'yanggong1'); let got = null; S.dl.pick = async () => null; const sv = S.dl.save; S.dl.save = async o => { got = o }; await settle(p, '實踐國小'); S.dl.save = sv; return !!got && /結算資料_\d{8}\.xlsx$/.test(got.filename) && got.data.size === 4 }), '結算資料直接下載 Excel'); }
+    ok(await ev(async () => { const p = S.projects.find(x => x.id === 'yanggong1'); let got = null; S.dl.pick = async () => null; const sv = S.dl.save; S.dl.save = async o => { got = o }; await settle(p, '實踐國小'); S.dl.save = sv; if (!got) return false;
+      const wb = XLSX.read(await got.data.arrayBuffer()); window._settleB64 = btoa(String.fromCharCode(...new Uint8Array(await got.data.arrayBuffer())));
+      const a = XLSX.utils.sheet_to_json(wb.Sheets['數量計算表'], { header: 1, defval: '' });
+      return /結算資料_\d{8}\.xlsx$/.test(got.filename) && wb.SheetNames.join() === '數量計算表,明細,派工單' && a[3][0] === '契約項次' && a.length > 5 }), '結算資料在瀏覽器產生 Excel(三張分頁)'); }
 
   ok(!errors.length, '頁面沒有程式錯誤' + (errors.length ? ':' + errors.slice(0, 3).join(' | ') : ''));
   await browser.close(); srv.close();
