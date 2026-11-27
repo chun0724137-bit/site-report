@@ -1404,6 +1404,13 @@ function siteAdmin(p){const sec=h("section",{class:"card"},h("h2",{},"派工地�
       if(D.wb)dispatchImport(p,D,box);
       if(D.msg)box.append(h("div",{class:"msg "+(D.ok?"ok":"warn")},D.msg));
       sec.append(box)}}
+  if(S.canOffice){sec.append(h("button",{type:"button",class:"btn"+(S.siteAddOpen?" primary":""),onclick:()=>{S.siteAddOpen=!S.siteAddOpen;render()}},S.siteAddOpen?"收起手動新增":"＋ 手動新增派工地點(臨時派工,派工單之後再上傳)"));
+    if(S.siteAddOpen){const ni=h("input",{type:"text",placeholder:"例:金山北23 臨時坑洞修補"});
+      const add=async()=>{const v=ni.value.trim();if(!v){ni.focus();return}if((p.siteInfo||[]).some(x=>x.name===v)){alert("已經有「"+v+"」這個派工地點。");return}
+        try{S.busy=true;render();await api("addSite",{pid:p.id,sites:[v]});await reload(true);S.siteAddOpen=false;S.flash="已新增派工地點「"+v+"」,現場現在就能選它回報。派工單來了以後,按「📋 上傳新派工單」,派工地點名稱選「"+v+"」就會補上工項與數量。"}catch(e){S.err="沒有新增成功:"+e.message}S.busy=false;render()};
+      ni.addEventListener("keydown",e=>{if(e.key==="Enter")add()});
+      sec.append(h("div",{class:"sheet"},h("label",{class:"f"},"派工地點名稱",ni),h("p",{class:"note"},"還沒有派工單也可以先新增,現場馬上可以選這個地點回報(工項用契約項目搜尋)。之後上傳派工單時,「派工地點名稱」選這個名稱,工項與派工數量就會補進來,之前的回報都保留。"),h("button",{type:"button",class:"btn primary",disabled:S.busy,onclick:add},"新增")))}
+    if(S.flash&&/派工地點/.test(S.flash))sec.append(h("div",{class:"msg ok"},S.flash))}
   const list=(p.siteInfo||[]).filter(s=>s.status!=="結案");
   list.forEach(s=>{const k=p.id+"|"+s.name,done=s.status==="完工";const row=h("div",{class:"proj"},h("div",{class:"h"},h("b",{},s.name),h("span",{class:"pill "+(done?"ok":"warn")},done?"完工 "+(s.done||""):"施工中")));
     if(S.siteAsk===k){const di=h("input",{type:"date",id:"f_done","aria-label":s.name+"完工日期"});di.value=today();

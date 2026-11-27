@@ -175,6 +175,12 @@ const ok = (c, msg) => { if (c) { pass++; console.log('ok', msg) } else { fail++
       const a = XLSX.utils.sheet_to_json(wb.Sheets['數量計算表'], { header: 1, defval: '' });
       return /結算資料_\d{8}\.xlsx$/.test(got.filename) && wb.SheetNames.join() === '數量計算表,明細,派工單' && a[3][0] === '契約項次' && a.length > 5 }), '結算資料在瀏覽器產生 Excel(三張分頁)'); }
 
+  // 16. 手動新增派工地點
+  { await ev(() => { S.pid = 'yanggong1'; S.view = 'set'; S.siteAddOpen = false; render() }); await wait(300);
+    await page.getByRole('button', { name: /手動新增派工地點/ }).click(); await wait(200);
+    await page.locator('input[placeholder^="例:金山北23"]').fill('臨時派工測試'); await page.getByRole('button', { name: '新增', exact: true }).click(); await wait(1500);
+    ok(await ev(() => (S.projects.find(p => p.id === 'yanggong1').siteInfo || []).some(x => x.name === '臨時派工測試') && /已新增派工地點/.test(document.querySelector('#main').innerText)), '手動新增派工地點'); }
+
   ok(!errors.length, '頁面沒有程式錯誤' + (errors.length ? ':' + errors.slice(0, 3).join(' | ') : ''));
   await browser.close(); srv.close();
   console.log(fail ? '有 ' + fail + ' 項失敗' : '全部通過(' + pass + ' 項)'); process.exit(fail ? 1 : 0);
